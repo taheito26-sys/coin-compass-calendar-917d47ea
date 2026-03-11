@@ -222,6 +222,15 @@ app.post('/batch', async (c) => {
   }, createdIds.length > 0 || skippedDuplicates.length > 0 ? 201 : 400);
 });
 
+/** DELETE /api/transactions/all — remove all transactions for the user */
+app.delete('/all', async (c) => {
+  const userId = c.get('userId');
+  const result = await c.env.DB.prepare(
+    'DELETE FROM transactions WHERE user_id = ?'
+  ).bind(userId).run();
+  return c.json({ ok: true, deleted: result.meta.changes ?? 0 });
+});
+
 /** DELETE /api/transactions/:id */
 app.delete('/:id', async (c) => {
   const userId = c.get('userId');

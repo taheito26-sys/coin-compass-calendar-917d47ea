@@ -132,9 +132,11 @@ export default function LedgerPage() {
     updateLedgerTransaction,
     deleteLedgerTransaction,
     commitImportedTransactions,
+    clearAllData,
   } = useLedgerMutations();
 
   const canWrite = writeStatus === "ready";
+  const [clearing, setClearing] = useState(false);
 
   // Tab
   const [tab, setTab] = useState<Tab>("journal");
@@ -525,7 +527,29 @@ export default function LedgerPage() {
         <div className="panel">
           <div className="panel-head">
             <h2>Transaction Journal</h2>
-            <span className="pill">{filteredTxs.length} entries</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="pill">{filteredTxs.length} entries</span>
+              {stats.total > 0 && (
+                <button
+                  className="btn secondary"
+                  disabled={!canWrite || clearing}
+                  onClick={async () => {
+                    if (!confirm(`⚠️ This will permanently delete ALL ${stats.total} transactions and ${importedFiles.length} imported file records. This cannot be undone.\n\nAre you sure?`)) return;
+                    setClearing(true);
+                    const result = await clearAllData();
+                    if (result.success) {
+                      toast("All tracker data cleared ✓", "good");
+                    } else {
+                      toast(result.error || "Clear failed", "bad");
+                    }
+                    setClearing(false);
+                  }}
+                  style={{ fontSize: 11, padding: "4px 10px", color: "var(--bad)", opacity: canWrite ? 1 : 0.5 }}
+                >
+                  {clearing ? "Clearing…" : "🗑 Clear All Data"}
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Filters */}
@@ -588,9 +612,8 @@ export default function LedgerPage() {
                               {TX_TYPES.map(tt => <option key={tt.value} value={tt.value}>{tt.label}</option>)}
                             </select>
                           </td>
-                          <td>
-                            <input className="inp" value={editAsset} onChange={e => setEditAsset(e.target.value.toUpperCase())}
-                              style={{ width: 80, padding: "2px 4px", fontSize: 11, fontWeight: 800, fontFamily: "var(--font-mono, monospace)" }} />
+                          <td style={{ minWidth: 100 }}>
+                            <CoinAutocomplete value={editAsset} onChange={(val) => setEditAsset(val.toUpperCase())} placeholder="BTC" />
                           </td>
                           <td>
                             <input className="inp" type="number" value={editQty} onChange={e => setEditQty(e.target.value)}

@@ -49,4 +49,13 @@ app.post('/', async (c) => {
   return c.json({ file: row }, 201);
 });
 
+/** DELETE /api/imported-files/all — clear all imported file records */
+app.delete('/all', async (c) => {
+  const userId = c.get('userId');
+  const result = await c.env.DB.prepare(
+    'DELETE FROM imported_files WHERE user_id = ?'
+  ).bind(userId).run();
+  return c.json({ ok: true, deleted: result.meta.changes ?? 0 });
+});
+
 export default app;
