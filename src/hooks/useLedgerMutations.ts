@@ -20,6 +20,8 @@ import {
   deleteTransaction,
   batchCreateTransactions,
   createImportedFile,
+  clearAllTransactions,
+  clearAllImportedFiles,
   type CreateTransactionInput,
   type BatchCreateResult,
 } from "@/lib/api";
