@@ -204,6 +204,23 @@ export function useLedgerMutations() {
     }
   }, [rehydrateFromBackend]);
 
+  /**
+   * Clear ALL tracker data (transactions + imported files). Backend-only.
+   */
+  const clearAllData = useCallback(async (): Promise<MutationResult> => {
+    try {
+      await ensureWriteReady();
+      const [txResult, fileResult] = await Promise.all([
+        clearAllTransactions(),
+        clearAllImportedFiles(),
+      ]);
+      await rehydrateFromBackend();
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || "Unknown error" };
+    }
+  }, [rehydrateFromBackend]);
+
   return {
     writeStatus,
     checkWriteStatus,
@@ -211,5 +228,6 @@ export function useLedgerMutations() {
     updateLedgerTransaction,
     deleteLedgerTransaction,
     commitImportedTransactions,
+    clearAllData,
   };
 }
