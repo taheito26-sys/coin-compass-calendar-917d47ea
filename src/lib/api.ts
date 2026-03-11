@@ -364,3 +364,17 @@ export async function saveUserPreferences(prefs: Record<string, string>): Promis
     body: JSON.stringify(prefs),
   });
 }
+
+// ─── Clear all data ───────────────────────────────────────
+
+export async function clearAllTransactions(): Promise<{ deleted: number }> {
+  return apiFetch<{ ok: boolean; deleted: number }>("/api/transactions/all", {
+    method: "DELETE",
+  });
+}
+
+export async function clearAllImportedFiles(): Promise<{ deleted: number }> {
+  return apiFetch<{ ok: boolean; deleted: number }>("/api/imported-files/all", {
+    method: "DELETE",
+  });
+}
