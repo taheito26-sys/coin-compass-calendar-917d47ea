@@ -527,7 +527,29 @@ export default function LedgerPage() {
         <div className="panel">
           <div className="panel-head">
             <h2>Transaction Journal</h2>
-            <span className="pill">{filteredTxs.length} entries</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="pill">{filteredTxs.length} entries</span>
+              {stats.total > 0 && (
+                <button
+                  className="btn secondary"
+                  disabled={!canWrite || clearing}
+                  onClick={async () => {
+                    if (!confirm(`⚠️ This will permanently delete ALL ${stats.total} transactions and ${importedFiles.length} imported file records. This cannot be undone.\n\nAre you sure?`)) return;
+                    setClearing(true);
+                    const result = await clearAllData();
+                    if (result.success) {
+                      toast("All tracker data cleared ✓", "good");
+                    } else {
+                      toast(result.error || "Clear failed", "bad");
+                    }
+                    setClearing(false);
+                  }}
+                  style={{ fontSize: 11, padding: "4px 10px", color: "var(--bad)", opacity: canWrite ? 1 : 0.5 }}
+                >
+                  {clearing ? "Clearing…" : "🗑 Clear All Data"}
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Filters */}
