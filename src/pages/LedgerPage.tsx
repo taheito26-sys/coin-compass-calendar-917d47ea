@@ -132,9 +132,11 @@ export default function LedgerPage() {
     updateLedgerTransaction,
     deleteLedgerTransaction,
     commitImportedTransactions,
+    clearAllData,
   } = useLedgerMutations();
 
   const canWrite = writeStatus === "ready";
+  const [clearing, setClearing] = useState(false);
 
   // Tab
   const [tab, setTab] = useState<Tab>("journal");
