@@ -590,9 +590,8 @@ export default function LedgerPage() {
                               {TX_TYPES.map(tt => <option key={tt.value} value={tt.value}>{tt.label}</option>)}
                             </select>
                           </td>
-                          <td>
-                            <input className="inp" value={editAsset} onChange={e => setEditAsset(e.target.value.toUpperCase())}
-                              style={{ width: 80, padding: "2px 4px", fontSize: 11, fontWeight: 800, fontFamily: "var(--font-mono, monospace)" }} />
+                          <td style={{ minWidth: 100 }}>
+                            <CoinAutocomplete value={editAsset} onChange={(val) => setEditAsset(val.toUpperCase())} placeholder="BTC" />
                           </td>
                           <td>
                             <input className="inp" type="number" value={editQty} onChange={e => setEditQty(e.target.value)}
