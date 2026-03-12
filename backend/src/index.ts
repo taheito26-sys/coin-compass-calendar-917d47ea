@@ -52,6 +52,13 @@ app.route("/api/merchant/messages", merchantMessagesRoute);
 app.route("/api/merchant/approvals", merchantApprovalsRoute);
 app.route("/api/merchant/audit", merchantAuditRoute);
 app.route("/api/merchant/notifications", merchantNotificationsRoute);
+app.route("/api/merchant/advances", merchantAdvancesRoute);
+app.route("/api/merchant/purchases", merchantPurchasesRoute);
+app.route("/api/merchant/profit-share", merchantProfitShareRoute);
+app.route("/api/merchant/pools", merchantPoolsRoute);
+app.route("/api/merchant/comments", merchantCommentsRoute);
+app.route("/api/merchant/adjustments", merchantAdjustmentsRoute);
+app.route("/api/merchant/terms", merchantTermsRoute);
 
 // Health check
 app.get("/api/status", async (c) => {
