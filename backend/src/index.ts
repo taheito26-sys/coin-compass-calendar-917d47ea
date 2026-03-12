@@ -19,6 +19,13 @@ import merchantMessagesRoute from "./routes/merchant-messages";
 import merchantApprovalsRoute from "./routes/merchant-approvals";
 import merchantAuditRoute from "./routes/merchant-audit";
 import merchantNotificationsRoute from "./routes/merchant-notifications";
+import merchantAdvancesRoute from "./routes/merchant-advances";
+import merchantPurchasesRoute from "./routes/merchant-purchases";
+import merchantProfitShareRoute from "./routes/merchant-profit-share";
+import merchantPoolsRoute from "./routes/merchant-pools";
+import merchantCommentsRoute from "./routes/merchant-comments";
+import merchantAdjustmentsRoute from "./routes/merchant-adjustments";
+import merchantTermsRoute from "./routes/merchant-terms";
 import { pollPrices } from "./cron/poll-prices";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -45,6 +52,13 @@ app.route("/api/merchant/messages", merchantMessagesRoute);
 app.route("/api/merchant/approvals", merchantApprovalsRoute);
 app.route("/api/merchant/audit", merchantAuditRoute);
 app.route("/api/merchant/notifications", merchantNotificationsRoute);
+app.route("/api/merchant/advances", merchantAdvancesRoute);
+app.route("/api/merchant/purchases", merchantPurchasesRoute);
+app.route("/api/merchant/profit-share", merchantProfitShareRoute);
+app.route("/api/merchant/pools", merchantPoolsRoute);
+app.route("/api/merchant/comments", merchantCommentsRoute);
+app.route("/api/merchant/adjustments", merchantAdjustmentsRoute);
+app.route("/api/merchant/terms", merchantTermsRoute);
 
 // Health check
 app.get("/api/status", async (c) => {
