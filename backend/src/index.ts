@@ -19,6 +19,13 @@ import merchantMessagesRoute from "./routes/merchant-messages";
 import merchantApprovalsRoute from "./routes/merchant-approvals";
 import merchantAuditRoute from "./routes/merchant-audit";
 import merchantNotificationsRoute from "./routes/merchant-notifications";
+import merchantAdvancesRoute from "./routes/merchant-advances";
+import merchantPurchasesRoute from "./routes/merchant-purchases";
+import merchantProfitShareRoute from "./routes/merchant-profit-share";
+import merchantPoolsRoute from "./routes/merchant-pools";
+import merchantCommentsRoute from "./routes/merchant-comments";
+import merchantAdjustmentsRoute from "./routes/merchant-adjustments";
+import merchantTermsRoute from "./routes/merchant-terms";
 import { pollPrices } from "./cron/poll-prices";
 
 const app = new Hono<{ Bindings: Env }>();
