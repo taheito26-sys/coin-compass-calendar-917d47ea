@@ -9,7 +9,7 @@ import CalendarPage from "@/pages/CalendarPage";
 import MarketsPage from "@/pages/MarketsPage";
 import SettingsPage from "@/pages/SettingsPage";
 import LedgerPage from "@/pages/LedgerPage";
-import MerchantPage from "@/pages/MerchantPage";
+
 
 
 const PAGE_TITLES: Record<string, [string, string]> = {
