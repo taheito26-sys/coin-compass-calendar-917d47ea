@@ -93,9 +93,9 @@ export default function BenchmarkChart({ compact }: { compact?: boolean } = {}) 
           ))}
         </div>
       </div>
-      <div className="panel-body" style={{ padding: 12 }}>
+      <div className="panel-body" style={{ padding: compact ? 8 : 12 }}>
         {totalMV > 0 ? (
-          <ComparisonChart series={series} />
+          <ComparisonChart series={series} compact={compact} />
         ) : (
           <div className="muted" style={{ padding: 20, textAlign: "center", fontSize: 11 }}>Add positions to see benchmark comparison</div>
         )}

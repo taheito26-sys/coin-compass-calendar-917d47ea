@@ -156,35 +156,39 @@ export default function PerAssetRiskBreakdown({ compact }: { compact?: boolean }
           {portfolioRisk.riskLevel} Risk
         </span>
       </div>
-      <div className="panel-body" style={{ padding: 0 }}>
+      <div className="panel-body" style={{ padding: 0, maxHeight: compact ? 280 : undefined, overflow: compact ? "auto" : undefined }}>
         {/* Summary metrics */}
         <div style={{
           display: "grid",
-          gridTemplateColumns: "repeat(5, 1fr)",
+          gridTemplateColumns: compact ? "repeat(3, 1fr)" : "repeat(5, 1fr)",
           gap: 1,
           background: "var(--line)",
           borderBottom: "1px solid var(--line)",
         }}>
-          <div style={{ background: "var(--card)", padding: "10px 8px", textAlign: "center" }}>
-            <div style={{ fontSize: 9, color: "var(--muted)", fontWeight: 600, marginBottom: 3 }}>AVG VOLATILITY</div>
-            <div style={{ fontSize: 14, fontWeight: 900 }}>{(portfolioRisk.avgVol * 100).toFixed(1)}%</div>
+          <div style={{ background: "var(--card)", padding: compact ? "6px 4px" : "10px 8px", textAlign: "center" }}>
+            <div style={{ fontSize: compact ? 8 : 9, color: "var(--muted)", fontWeight: 600, marginBottom: 2 }}>AVG VOL</div>
+            <div style={{ fontSize: compact ? 11 : 14, fontWeight: 900 }}>{(portfolioRisk.avgVol * 100).toFixed(1)}%</div>
           </div>
-          <div style={{ background: "var(--card)", padding: "10px 8px", textAlign: "center" }}>
-            <div style={{ fontSize: 9, color: "var(--muted)", fontWeight: 600, marginBottom: 3 }}>HHI</div>
-            <div style={{ fontSize: 14, fontWeight: 900 }}>{(portfolioRisk.hhi * 100).toFixed(1)}%</div>
+          <div style={{ background: "var(--card)", padding: compact ? "6px 4px" : "10px 8px", textAlign: "center" }}>
+            <div style={{ fontSize: compact ? 8 : 9, color: "var(--muted)", fontWeight: 600, marginBottom: 2 }}>VaR 95%</div>
+            <div style={{ fontSize: compact ? 11 : 14, fontWeight: 900, color: "var(--bad)" }}>{fmtTotal(portfolioRisk.totalVar)}</div>
           </div>
-          <div style={{ background: "var(--card)", padding: "10px 8px", textAlign: "center" }}>
-            <div style={{ fontSize: 9, color: "var(--muted)", fontWeight: 600, marginBottom: 3 }}>VaR 95% 1D</div>
-            <div style={{ fontSize: 14, fontWeight: 900, color: "var(--bad)" }}>{fmtTotal(portfolioRisk.totalVar)}</div>
+          <div style={{ background: "var(--card)", padding: compact ? "6px 4px" : "10px 8px", textAlign: "center" }}>
+            <div style={{ fontSize: compact ? 8 : 9, color: "var(--muted)", fontWeight: 600, marginBottom: 2 }}>HHI</div>
+            <div style={{ fontSize: compact ? 11 : 14, fontWeight: 900 }}>{(portfolioRisk.hhi * 100).toFixed(1)}%</div>
           </div>
-          <div style={{ background: "var(--card)", padding: "10px 8px", textAlign: "center" }}>
-            <div style={{ fontSize: 9, color: "var(--muted)", fontWeight: 600, marginBottom: 3 }}>CVaR 95% 1D</div>
-            <div style={{ fontSize: 14, fontWeight: 900, color: "var(--bad)" }}>{fmtTotal(portfolioRisk.totalCvar)}</div>
-          </div>
-          <div style={{ background: "var(--card)", padding: "10px 8px", textAlign: "center" }}>
-            <div style={{ fontSize: 9, color: "var(--muted)", fontWeight: 600, marginBottom: 3 }}>ASSETS</div>
-            <div style={{ fontSize: 14, fontWeight: 900 }}>{assetRisks.length}</div>
-          </div>
+          {!compact && (
+            <>
+              <div style={{ background: "var(--card)", padding: "10px 8px", textAlign: "center" }}>
+                <div style={{ fontSize: 9, color: "var(--muted)", fontWeight: 600, marginBottom: 3 }}>CVaR 95% 1D</div>
+                <div style={{ fontSize: 14, fontWeight: 900, color: "var(--bad)" }}>{fmtTotal(portfolioRisk.totalCvar)}</div>
+              </div>
+              <div style={{ background: "var(--card)", padding: "10px 8px", textAlign: "center" }}>
+                <div style={{ fontSize: 9, color: "var(--muted)", fontWeight: 600, marginBottom: 3 }}>ASSETS</div>
+                <div style={{ fontSize: 14, fontWeight: 900 }}>{assetRisks.length}</div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Asset table */}
