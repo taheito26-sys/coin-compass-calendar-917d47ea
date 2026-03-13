@@ -54,7 +54,7 @@ function ComparisonChart({ series, compact }: { series: { label: string; data: n
   );
 }
 
-export default function BenchmarkChart() {
+export default function BenchmarkChart({ compact }: { compact?: boolean } = {}) {
   const portfolio = useUnifiedPortfolio();
   const [seed, setSeed] = useState(() => Date.now());
   const [range, setRange] = useState("3m");
