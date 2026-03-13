@@ -193,59 +193,27 @@ export default function PerAssetRiskBreakdown({ compact }: { compact?: boolean }
 
         {/* Asset table */}
         <div className="tableWrap">
-          <table>
+          <table style={compact ? { fontSize: 10 } : undefined}>
             <thead>
               <tr>
                 <th>Asset</th>
-                <th style={{ textAlign: "right" }}>Weight</th>
-                <th style={{ textAlign: "right" }}>Volatility</th>
-                <th style={{ textAlign: "right" }}>VaR 95%</th>
-                <th style={{ textAlign: "right" }}>CVaR 95%</th>
+                <th style={{ textAlign: "right" }}>Wt%</th>
+                <th style={{ textAlign: "right" }}>Vol</th>
+                {!compact && <th style={{ textAlign: "right" }}>VaR 95%</th>}
+                {!compact && <th style={{ textAlign: "right" }}>CVaR 95%</th>}
                 <th style={{ textAlign: "center" }}>Risk</th>
-                <th style={{ textAlign: "center" }}>Conc.</th>
               </tr>
             </thead>
             <tbody>
-              {assetRisks.map(r => (
+              {assetRisks.slice(0, compact ? 6 : 10).map(r => (
                 <tr key={r.sym}>
                   <td className="mono" style={{ fontWeight: 900 }}>{r.sym}</td>
-                  <td className="mono" style={{ textAlign: "right" }}>
-                    {(r.weight * 100).toFixed(1)}%
-                  </td>
-                  <td className="mono" style={{ textAlign: "right" }}>
-                    {(r.volatility * 100).toFixed(0)}%
-                  </td>
-                  <td className="mono" style={{ textAlign: "right", color: "var(--bad)" }}>
-                    {fmtTotal(r.var95)}
-                  </td>
-                  <td className="mono" style={{ textAlign: "right", color: "var(--bad)" }}>
-                    {fmtTotal(r.cvar95)}
-                  </td>
+                  <td className="mono" style={{ textAlign: "right" }}>{(r.weight * 100).toFixed(1)}%</td>
+                  <td className="mono" style={{ textAlign: "right" }}>{(r.volatility * 100).toFixed(0)}%</td>
+                  {!compact && <td className="mono" style={{ textAlign: "right", color: "var(--bad)" }}>{fmtTotal(r.var95)}</td>}
+                  {!compact && <td className="mono" style={{ textAlign: "right", color: "var(--bad)" }}>{fmtTotal(r.cvar95)}</td>}
                   <td style={{ textAlign: "center" }}>
-                    <span
-                      className="pill"
-                      style={{
-                        fontSize: 9,
-                        background: RISK_COLORS[r.riskScore],
-                        color: "#fff",
-                        fontWeight: 700,
-                      }}
-                    >
-                      {r.riskScore}
-                    </span>
-                  </td>
-                  <td style={{ textAlign: "center" }}>
-                    <span
-                      className="pill"
-                      style={{
-                        fontSize: 9,
-                        background: CONC_COLORS[r.concentration],
-                        color: "#fff",
-                        fontWeight: 700,
-                      }}
-                    >
-                      {r.concentration}
-                    </span>
+                    <span className="pill" style={{ fontSize: 8, background: RISK_COLORS[r.riskScore], color: "#fff", fontWeight: 700 }}>{r.riskScore}</span>
                   </td>
                 </tr>
               ))}
