@@ -9,13 +9,13 @@ import CalendarPage from "@/pages/CalendarPage";
 import MarketsPage from "@/pages/MarketsPage";
 import SettingsPage from "@/pages/SettingsPage";
 import LedgerPage from "@/pages/LedgerPage";
-import MerchantPage from "@/pages/MerchantPage";
+
 
 
 const PAGE_TITLES: Record<string, [string, string]> = {
   dashboard: ["Dashboard", "KPIs, Allocation, Heatmap"],
   assets: ["Portfolio", "Holdings, Lots, Alerts"],
-  merchant: ["Merchant", "Deals, Collaboration, Approvals"],
+  
   ledger: ["Ledger", "Transactions, Import, Connect"],
   calendar: ["Calendar", "Daily P&L, Per Coin"],
   markets: ["Markets", "Live Prices, Watchlist"],
@@ -130,7 +130,7 @@ function AppShell({
           <div className="scroll">
             {page === "dashboard" && <DashboardPage onNav={setPage} />}
             {page === "assets" && <PortfolioPage />}
-            {page === "merchant" && <MerchantPage />}
+            
             {page === "ledger" && <LedgerPage />}
             {page === "calendar" && <CalendarPage />}
             {page === "markets" && <MarketsPage />}
