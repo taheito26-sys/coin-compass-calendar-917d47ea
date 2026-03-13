@@ -403,23 +403,22 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
                 {onNav && <button className="btn tiny secondary" onClick={() => onNav("assets")}>View All →</button>}
               </div>
             </div>
-            <div className="panel-body" style={{ padding: 0, overflow: "auto" }}>
+            <div className="panel-body" style={{ padding: 0, overflow: "auto", maxHeight: 260 }}>
               <div className="tableWrap">
-                <table>
-                  <thead><tr><th>Asset</th><th>Qty</th><th>Avg Cost</th><th>Price</th><th>MV</th><th>Unreal P&amp;L</th></tr></thead>
+                <table style={{ fontSize: 11 }}>
+                  <thead><tr><th>Asset</th><th>Qty</th><th>Price</th><th>MV</th><th>P&amp;L</th></tr></thead>
                   <tbody>
-                    {displayPositions.length > 0 ? displayPositions.slice(0, 10).map(r => (
+                    {displayPositions.length > 0 ? displayPositions.slice(0, 8).map(r => (
                       <tr key={r.sym}>
                         <td className="mono" style={{ fontWeight: 900 }}>{r.sym}</td>
                         <td className="mono">{fmtQty(r.qty)}</td>
-                        <td className="mono">{r.avg > 0 ? fmtPx(r.avg) : "—"}</td>
                         <td className="mono">{r.price === null ? "—" : fmtPx(r.price)}</td>
                         <td className="mono">{r.mv === null ? "—" : fmtTotal(r.mv)}</td>
                         <td className={`mono ${r.unreal === null ? "" : r.unreal >= 0 ? "good" : "bad"}`} style={{ fontWeight: 900 }}>
                           {r.unreal === null ? "—" : (r.unreal >= 0 ? "+" : "") + fmtTotal(r.unreal)}
                         </td>
                       </tr>
-                    )) : <tr><td colSpan={6} className="muted">No positions yet. Add transactions in the Ledger.</td></tr>}
+                    )) : <tr><td colSpan={5} className="muted">No positions yet.</td></tr>}
                   </tbody>
                 </table>
               </div>
