@@ -31,8 +31,8 @@ const ALL_CARDS: CardDef[] = [
   { id: "fearGreed", label: "Fear & Greed" },
   { id: "movers", label: "Top Movers" },
   { id: "watchlist", label: "Watchlist" },
-  { id: "benchmark", label: "Portfolio vs Benchmarks", colSpan: 2 },
-  { id: "riskBreakdown", label: "Per-Asset Risk", colSpan: 2 },
+  { id: "benchmark", label: "Portfolio vs Benchmarks" },
+  { id: "riskBreakdown", label: "Per-Asset Risk" },
   { id: "positions", label: "Top Positions", colSpan: 2 },
 ];
 
@@ -273,12 +273,18 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
     switch (id) {
       case "kpis":
         return (
-          <div className="kpis kpis-3">
+          <div className="kpis" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
             <div className="kpi-card">
               <div className="kpi-head"><span className={`kpi-badge`}>{totalPnl >= 0 ? "▲" : "▼"}</span></div>
               <div className="kpi-lbl">UNREALIZED P&amp;L</div>
               <div className={`kpi-val ${totalPnl >= 0 ? "good" : "bad"}`}>{(totalPnl >= 0 ? "+" : "") + fmtTotal(totalPnl)}</div>
               <div className="kpi-sub">{totalCost > 0 ? totalPnlPct.toFixed(2) + "%" : "-"}</div>
+            </div>
+            <div className="kpi-card">
+              <div className="kpi-head"><span className="kpi-badge" style={{ background: "var(--brand)" }}>Σ</span></div>
+              <div className="kpi-lbl">CURRENT TOTAL</div>
+              <div className="kpi-val">{fmtFiat(totalMV, base)}</div>
+              <div className="kpi-sub">Market value</div>
             </div>
             <div className="kpi-card">
               <div className="kpi-lbl">REALIZED P&amp;L</div>
@@ -325,8 +331,8 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
         );
 
       case "fearGreed": return <FearGreedGauge />;
-      case "riskBreakdown": return <PerAssetRiskBreakdown />;
-      case "benchmark": return <BenchmarkChart />;
+      case "riskBreakdown": return <PerAssetRiskBreakdown compact />;
+      case "benchmark": return <BenchmarkChart compact />;
 
       case "movers":
         return (
@@ -397,23 +403,22 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
                 {onNav && <button className="btn tiny secondary" onClick={() => onNav("assets")}>View All →</button>}
               </div>
             </div>
-            <div className="panel-body" style={{ padding: 0, overflow: "auto" }}>
+            <div className="panel-body" style={{ padding: 0, overflow: "auto", maxHeight: 260 }}>
               <div className="tableWrap">
-                <table>
-                  <thead><tr><th>Asset</th><th>Qty</th><th>Avg Cost</th><th>Price</th><th>MV</th><th>Unreal P&amp;L</th></tr></thead>
+                <table style={{ fontSize: 11 }}>
+                  <thead><tr><th>Asset</th><th>Qty</th><th>Price</th><th>MV</th><th>P&amp;L</th></tr></thead>
                   <tbody>
-                    {displayPositions.length > 0 ? displayPositions.slice(0, 10).map(r => (
+                    {displayPositions.length > 0 ? displayPositions.slice(0, 8).map(r => (
                       <tr key={r.sym}>
                         <td className="mono" style={{ fontWeight: 900 }}>{r.sym}</td>
                         <td className="mono">{fmtQty(r.qty)}</td>
-                        <td className="mono">{r.avg > 0 ? fmtPx(r.avg) : "—"}</td>
                         <td className="mono">{r.price === null ? "—" : fmtPx(r.price)}</td>
                         <td className="mono">{r.mv === null ? "—" : fmtTotal(r.mv)}</td>
                         <td className={`mono ${r.unreal === null ? "" : r.unreal >= 0 ? "good" : "bad"}`} style={{ fontWeight: 900 }}>
                           {r.unreal === null ? "—" : (r.unreal >= 0 ? "+" : "") + fmtTotal(r.unreal)}
                         </td>
                       </tr>
-                    )) : <tr><td colSpan={6} className="muted">No positions yet. Add transactions in the Ledger.</td></tr>}
+                    )) : <tr><td colSpan={5} className="muted">No positions yet.</td></tr>}
                   </tbody>
                 </table>
               </div>

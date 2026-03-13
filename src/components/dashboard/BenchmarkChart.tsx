@@ -29,8 +29,8 @@ function genBench(base: number, days: number, ret: number, vol: number, seed: nu
   return h;
 }
 
-function ComparisonChart({ series }: { series: { label: string; data: number[]; color: string }[] }) {
-  const w = 600, h = 180;
+function ComparisonChart({ series, compact }: { series: { label: string; data: number[]; color: string }[]; compact?: boolean }) {
+  const w = compact ? 400 : 600, h = compact ? 120 : 180;
   const normalized = series.map(s => { const base = s.data[0] || 1; return { ...s, data: s.data.map(v => ((v - base) / base) * 100) }; });
   const all = normalized.flatMap(s => s.data);
   const min = Math.min(...all, 0), max = Math.max(...all, 0), range = max - min || 1;
@@ -54,7 +54,7 @@ function ComparisonChart({ series }: { series: { label: string; data: number[]; 
   );
 }
 
-export default function BenchmarkChart() {
+export default function BenchmarkChart({ compact }: { compact?: boolean } = {}) {
   const portfolio = useUnifiedPortfolio();
   const [seed, setSeed] = useState(() => Date.now());
   const [range, setRange] = useState("3m");
@@ -93,9 +93,9 @@ export default function BenchmarkChart() {
           ))}
         </div>
       </div>
-      <div className="panel-body" style={{ padding: 12 }}>
+      <div className="panel-body" style={{ padding: compact ? 8 : 12 }}>
         {totalMV > 0 ? (
-          <ComparisonChart series={series} />
+          <ComparisonChart series={series} compact={compact} />
         ) : (
           <div className="muted" style={{ padding: 20, textAlign: "center", fontSize: 11 }}>Add positions to see benchmark comparison</div>
         )}

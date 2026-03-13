@@ -73,7 +73,7 @@ function getConcentration(weight: number): "Diversified" | "Moderate" | "Concent
   return "Concentrated";
 }
 
-export default function PerAssetRiskBreakdown() {
+export default function PerAssetRiskBreakdown({ compact }: { compact?: boolean } = {}) {
   const { positions, totalMV } = useUnifiedPortfolio();
   const { getPrice } = useLivePrices();
 
@@ -156,92 +156,64 @@ export default function PerAssetRiskBreakdown() {
           {portfolioRisk.riskLevel} Risk
         </span>
       </div>
-      <div className="panel-body" style={{ padding: 0 }}>
+      <div className="panel-body" style={{ padding: 0, maxHeight: compact ? 280 : undefined, overflow: compact ? "auto" : undefined }}>
         {/* Summary metrics */}
         <div style={{
           display: "grid",
-          gridTemplateColumns: "repeat(5, 1fr)",
+          gridTemplateColumns: compact ? "repeat(3, 1fr)" : "repeat(5, 1fr)",
           gap: 1,
           background: "var(--line)",
           borderBottom: "1px solid var(--line)",
         }}>
-          <div style={{ background: "var(--card)", padding: "10px 8px", textAlign: "center" }}>
-            <div style={{ fontSize: 9, color: "var(--muted)", fontWeight: 600, marginBottom: 3 }}>AVG VOLATILITY</div>
-            <div style={{ fontSize: 14, fontWeight: 900 }}>{(portfolioRisk.avgVol * 100).toFixed(1)}%</div>
+          <div style={{ background: "var(--card)", padding: compact ? "6px 4px" : "10px 8px", textAlign: "center" }}>
+            <div style={{ fontSize: compact ? 8 : 9, color: "var(--muted)", fontWeight: 600, marginBottom: 2 }}>AVG VOL</div>
+            <div style={{ fontSize: compact ? 11 : 14, fontWeight: 900 }}>{(portfolioRisk.avgVol * 100).toFixed(1)}%</div>
           </div>
-          <div style={{ background: "var(--card)", padding: "10px 8px", textAlign: "center" }}>
-            <div style={{ fontSize: 9, color: "var(--muted)", fontWeight: 600, marginBottom: 3 }}>HHI</div>
-            <div style={{ fontSize: 14, fontWeight: 900 }}>{(portfolioRisk.hhi * 100).toFixed(1)}%</div>
+          <div style={{ background: "var(--card)", padding: compact ? "6px 4px" : "10px 8px", textAlign: "center" }}>
+            <div style={{ fontSize: compact ? 8 : 9, color: "var(--muted)", fontWeight: 600, marginBottom: 2 }}>VaR 95%</div>
+            <div style={{ fontSize: compact ? 11 : 14, fontWeight: 900, color: "var(--bad)" }}>{fmtTotal(portfolioRisk.totalVar)}</div>
           </div>
-          <div style={{ background: "var(--card)", padding: "10px 8px", textAlign: "center" }}>
-            <div style={{ fontSize: 9, color: "var(--muted)", fontWeight: 600, marginBottom: 3 }}>VaR 95% 1D</div>
-            <div style={{ fontSize: 14, fontWeight: 900, color: "var(--bad)" }}>{fmtTotal(portfolioRisk.totalVar)}</div>
+          <div style={{ background: "var(--card)", padding: compact ? "6px 4px" : "10px 8px", textAlign: "center" }}>
+            <div style={{ fontSize: compact ? 8 : 9, color: "var(--muted)", fontWeight: 600, marginBottom: 2 }}>HHI</div>
+            <div style={{ fontSize: compact ? 11 : 14, fontWeight: 900 }}>{(portfolioRisk.hhi * 100).toFixed(1)}%</div>
           </div>
-          <div style={{ background: "var(--card)", padding: "10px 8px", textAlign: "center" }}>
-            <div style={{ fontSize: 9, color: "var(--muted)", fontWeight: 600, marginBottom: 3 }}>CVaR 95% 1D</div>
-            <div style={{ fontSize: 14, fontWeight: 900, color: "var(--bad)" }}>{fmtTotal(portfolioRisk.totalCvar)}</div>
-          </div>
-          <div style={{ background: "var(--card)", padding: "10px 8px", textAlign: "center" }}>
-            <div style={{ fontSize: 9, color: "var(--muted)", fontWeight: 600, marginBottom: 3 }}>ASSETS</div>
-            <div style={{ fontSize: 14, fontWeight: 900 }}>{assetRisks.length}</div>
-          </div>
+          {!compact && (
+            <>
+              <div style={{ background: "var(--card)", padding: "10px 8px", textAlign: "center" }}>
+                <div style={{ fontSize: 9, color: "var(--muted)", fontWeight: 600, marginBottom: 3 }}>CVaR 95% 1D</div>
+                <div style={{ fontSize: 14, fontWeight: 900, color: "var(--bad)" }}>{fmtTotal(portfolioRisk.totalCvar)}</div>
+              </div>
+              <div style={{ background: "var(--card)", padding: "10px 8px", textAlign: "center" }}>
+                <div style={{ fontSize: 9, color: "var(--muted)", fontWeight: 600, marginBottom: 3 }}>ASSETS</div>
+                <div style={{ fontSize: 14, fontWeight: 900 }}>{assetRisks.length}</div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Asset table */}
         <div className="tableWrap">
-          <table>
+          <table style={compact ? { fontSize: 10 } : undefined}>
             <thead>
               <tr>
                 <th>Asset</th>
-                <th style={{ textAlign: "right" }}>Weight</th>
-                <th style={{ textAlign: "right" }}>Volatility</th>
-                <th style={{ textAlign: "right" }}>VaR 95%</th>
-                <th style={{ textAlign: "right" }}>CVaR 95%</th>
+                <th style={{ textAlign: "right" }}>Wt%</th>
+                <th style={{ textAlign: "right" }}>Vol</th>
+                {!compact && <th style={{ textAlign: "right" }}>VaR 95%</th>}
+                {!compact && <th style={{ textAlign: "right" }}>CVaR 95%</th>}
                 <th style={{ textAlign: "center" }}>Risk</th>
-                <th style={{ textAlign: "center" }}>Conc.</th>
               </tr>
             </thead>
             <tbody>
-              {assetRisks.map(r => (
+              {assetRisks.slice(0, compact ? 6 : 10).map(r => (
                 <tr key={r.sym}>
                   <td className="mono" style={{ fontWeight: 900 }}>{r.sym}</td>
-                  <td className="mono" style={{ textAlign: "right" }}>
-                    {(r.weight * 100).toFixed(1)}%
-                  </td>
-                  <td className="mono" style={{ textAlign: "right" }}>
-                    {(r.volatility * 100).toFixed(0)}%
-                  </td>
-                  <td className="mono" style={{ textAlign: "right", color: "var(--bad)" }}>
-                    {fmtTotal(r.var95)}
-                  </td>
-                  <td className="mono" style={{ textAlign: "right", color: "var(--bad)" }}>
-                    {fmtTotal(r.cvar95)}
-                  </td>
+                  <td className="mono" style={{ textAlign: "right" }}>{(r.weight * 100).toFixed(1)}%</td>
+                  <td className="mono" style={{ textAlign: "right" }}>{(r.volatility * 100).toFixed(0)}%</td>
+                  {!compact && <td className="mono" style={{ textAlign: "right", color: "var(--bad)" }}>{fmtTotal(r.var95)}</td>}
+                  {!compact && <td className="mono" style={{ textAlign: "right", color: "var(--bad)" }}>{fmtTotal(r.cvar95)}</td>}
                   <td style={{ textAlign: "center" }}>
-                    <span
-                      className="pill"
-                      style={{
-                        fontSize: 9,
-                        background: RISK_COLORS[r.riskScore],
-                        color: "#fff",
-                        fontWeight: 700,
-                      }}
-                    >
-                      {r.riskScore}
-                    </span>
-                  </td>
-                  <td style={{ textAlign: "center" }}>
-                    <span
-                      className="pill"
-                      style={{
-                        fontSize: 9,
-                        background: CONC_COLORS[r.concentration],
-                        color: "#fff",
-                        fontWeight: 700,
-                      }}
-                    >
-                      {r.concentration}
-                    </span>
+                    <span className="pill" style={{ fontSize: 8, background: RISK_COLORS[r.riskScore], color: "#fff", fontWeight: 700 }}>{r.riskScore}</span>
                   </td>
                 </tr>
               ))}
