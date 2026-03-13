@@ -31,8 +31,8 @@ const ALL_CARDS: CardDef[] = [
   { id: "fearGreed", label: "Fear & Greed" },
   { id: "movers", label: "Top Movers" },
   { id: "watchlist", label: "Watchlist" },
-  { id: "benchmark", label: "Portfolio vs Benchmarks", colSpan: 2 },
-  { id: "riskBreakdown", label: "Per-Asset Risk", colSpan: 2 },
+  { id: "benchmark", label: "Portfolio vs Benchmarks" },
+  { id: "riskBreakdown", label: "Per-Asset Risk" },
   { id: "positions", label: "Top Positions", colSpan: 2 },
 ];
 
