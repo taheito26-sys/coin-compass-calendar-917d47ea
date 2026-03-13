@@ -273,12 +273,18 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
     switch (id) {
       case "kpis":
         return (
-          <div className="kpis kpis-3">
+          <div className="kpis" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
             <div className="kpi-card">
               <div className="kpi-head"><span className={`kpi-badge`}>{totalPnl >= 0 ? "▲" : "▼"}</span></div>
               <div className="kpi-lbl">UNREALIZED P&amp;L</div>
               <div className={`kpi-val ${totalPnl >= 0 ? "good" : "bad"}`}>{(totalPnl >= 0 ? "+" : "") + fmtTotal(totalPnl)}</div>
               <div className="kpi-sub">{totalCost > 0 ? totalPnlPct.toFixed(2) + "%" : "-"}</div>
+            </div>
+            <div className="kpi-card">
+              <div className="kpi-head"><span className="kpi-badge" style={{ background: "var(--brand)" }}>Σ</span></div>
+              <div className="kpi-lbl">CURRENT TOTAL</div>
+              <div className="kpi-val">{fmtFiat(totalMV, base)}</div>
+              <div className="kpi-sub">Market value</div>
             </div>
             <div className="kpi-card">
               <div className="kpi-lbl">REALIZED P&amp;L</div>
