@@ -73,7 +73,7 @@ function getConcentration(weight: number): "Diversified" | "Moderate" | "Concent
   return "Concentrated";
 }
 
-export default function PerAssetRiskBreakdown() {
+export default function PerAssetRiskBreakdown({ compact }: { compact?: boolean } = {}) {
   const { positions, totalMV } = useUnifiedPortfolio();
   const { getPrice } = useLivePrices();
 
