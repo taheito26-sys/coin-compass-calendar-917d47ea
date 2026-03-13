@@ -331,8 +331,8 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
         );
 
       case "fearGreed": return <FearGreedGauge />;
-      case "riskBreakdown": return <PerAssetRiskBreakdown />;
-      case "benchmark": return <BenchmarkChart />;
+      case "riskBreakdown": return <PerAssetRiskBreakdown compact />;
+      case "benchmark": return <BenchmarkChart compact />;
 
       case "movers":
         return (
