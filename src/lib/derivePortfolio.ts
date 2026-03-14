@@ -146,13 +146,71 @@ export function derivePortfolio(
   const { lotsMap, realizedByAsset, txCountByAsset } = runFifo(sorted);
 
   const positions: DerivedPosition[] = [];
+  const closedPositions: ClosedPosition[] = [];
+
+  // Pre-compute per-asset buy/sell stats for closed positions
+  const assetBuyStats = new Map<string, { totalBought: number; totalCost: number; firstTs: number; lastTs: number }>();
+  const assetSellStats = new Map<string, { totalSold: number; totalProceeds: number }>();
+
+  for (const tx of sorted) {
+    const sym = normalizeSymbol(tx.asset || "");
+    if (!sym) continue;
+    const type = String(tx.type || "").toLowerCase();
+    const q = Math.abs(Number(tx.qty || 0));
+    if (!(q > 0)) continue;
+    const ts = tx.ts;
+
+    if (IN_TYPES.has(type) || (type === "adjustment" && Number(tx.qty || 0) >= 0)) {
+      const prev = assetBuyStats.get(sym) || { totalBought: 0, totalCost: 0, firstTs: ts, lastTs: ts };
+      const price = Number(tx.price || 0);
+      const fee = Number(tx.fee || 0);
+      const cost = type === "buy" ? (q * price) + fee : q * Math.max(price, 0);
+      prev.totalBought += q;
+      prev.totalCost += cost;
+      prev.firstTs = Math.min(prev.firstTs, ts);
+      prev.lastTs = Math.max(prev.lastTs, ts);
+      assetBuyStats.set(sym, prev);
+    }
+
+    if (type === "sell") {
+      const prev = assetSellStats.get(sym) || { totalSold: 0, totalProceeds: 0 };
+      prev.totalSold += q;
+      prev.totalProceeds += (q * Number(tx.price || 0)) - Number(tx.fee || 0);
+      assetSellStats.set(sym, prev);
+      // update lastTs
+      const buyStats = assetBuyStats.get(sym);
+      if (buyStats) buyStats.lastTs = Math.max(buyStats.lastTs, ts);
+    }
+  }
 
   for (const [sym, lots] of lotsMap) {
     const openLots = lots.filter((l) => l.qtyRem > 1e-10);
     const totalQty = openLots.reduce((s, l) => s + l.qtyRem, 0);
     const totalCost = openLots.reduce((s, l) => s + l.qtyRem * l.unitCost, 0);
 
-    if (totalQty <= 1e-10) continue;
+    if (totalQty <= 1e-10) {
+      // Closed position - only include if there was activity
+      const realized = realizedByAsset.get(sym) || 0;
+      const txCount = txCountByAsset.get(sym) || 0;
+      if (txCount > 0) {
+        const buyStats = assetBuyStats.get(sym) || { totalBought: 0, totalCost: 0, firstTs: 0, lastTs: 0 };
+        const sellStats = assetSellStats.get(sym) || { totalSold: 0, totalProceeds: 0 };
+        closedPositions.push({
+          sym,
+          totalBought: buyStats.totalBought,
+          totalSold: sellStats.totalSold,
+          totalCost: buyStats.totalCost,
+          totalProceeds: sellStats.totalProceeds,
+          realizedPnl: realized,
+          avgBuy: buyStats.totalBought > 0 ? buyStats.totalCost / buyStats.totalBought : 0,
+          avgSell: sellStats.totalSold > 0 ? sellStats.totalProceeds / sellStats.totalSold : 0,
+          txCount,
+          firstTx: buyStats.firstTs,
+          lastTx: buyStats.lastTs,
+        });
+      }
+      continue;
+    }
 
     const price = getPrice(sym);
     const mv = price !== null ? price * totalQty : null;
@@ -174,15 +232,18 @@ export function derivePortfolio(
   }
 
   positions.sort((a, b) => (b.mv ?? 0) - (a.mv ?? 0));
+  closedPositions.sort((a, b) => b.lastTx - a.lastTx);
 
   const totalMV = positions.reduce((s, p) => s + (p.mv ?? 0), 0);
   const totalCost = positions.reduce((s, p) => s + p.cost, 0);
   const totalPnl = totalMV - totalCost;
   const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
-  const realizedPnl = positions.reduce((s, p) => s + p.realizedPnl, 0);
+  const realizedPnl = positions.reduce((s, p) => s + p.realizedPnl, 0)
+    + closedPositions.reduce((s, p) => s + p.realizedPnl, 0);
 
   return {
     positions,
+    closedPositions,
     totalMV,
     totalCost,
     totalPnl,
