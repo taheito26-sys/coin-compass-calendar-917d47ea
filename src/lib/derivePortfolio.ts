@@ -24,8 +24,23 @@ export interface DerivedPosition {
   txCount: number;
 }
 
+export interface ClosedPosition {
+  sym: string;
+  totalBought: number;
+  totalSold: number;
+  totalCost: number;
+  totalProceeds: number;
+  realizedPnl: number;
+  avgBuy: number;
+  avgSell: number;
+  txCount: number;
+  firstTx: number; // timestamp
+  lastTx: number;  // timestamp
+}
+
 export interface PortfolioSummary {
   positions: DerivedPosition[];
+  closedPositions: ClosedPosition[];
   totalMV: number;
   totalCost: number;
   totalPnl: number;
