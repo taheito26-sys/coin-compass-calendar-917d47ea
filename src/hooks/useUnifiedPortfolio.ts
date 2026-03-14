@@ -1,17 +1,9 @@
-/**
- * useUnifiedPortfolio.ts
- *
- * Single hook for all portfolio data across Dashboard, Assets, and Drilldown.
- * Reads from useCrypto().state.txs as the ONLY source of truth.
- * Applies live prices uniformly.
- */
-
 import { useMemo } from "react";
 import { useCrypto } from "@/lib/cryptoContext";
-import { derivePortfolio, type PortfolioSummary, type DerivedPosition } from "@/lib/derivePortfolio";
+import { derivePortfolio, type PortfolioSummary, type DerivedPosition, type ClosedPosition } from "@/lib/derivePortfolio";
 import { usePortfolioPriceGetter } from "@/hooks/usePortfolioPriceGetter";
 
-export type { PortfolioSummary, DerivedPosition };
+export type { PortfolioSummary, DerivedPosition, ClosedPosition };
 
 export function useUnifiedPortfolio(): PortfolioSummary & {
   base: string;
