@@ -10,6 +10,8 @@ import { useUnifiedPortfolio } from "@/hooks/useUnifiedPortfolio";
 import { useLedgerMutations } from "@/hooks/useLedgerMutations";
 import { useState, useMemo, useEffect } from "react";
 import type { DerivedLot, ClosedPosition } from "@/lib/derivePortfolio";
+import { deriveRealizedByTx } from "@/lib/derivePortfolio";
+import { normalizeSymbol } from "@/lib/symbolAliases";
 
 // ── View mode ──────────────────────────────────────────────────────────────
 
