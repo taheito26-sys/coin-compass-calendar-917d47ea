@@ -475,8 +475,14 @@ export default function PortfolioPage() {
           </div>
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
             <button
-              className="btn secondary"
-              style={{ padding: "4px 8px", fontSize: 10, fontWeight: 700 }}
+              style={{
+                padding: "5px 12px", fontSize: 11, fontWeight: 800, letterSpacing: "0.02em",
+                background: "var(--bad)", color: "#fff", border: "none", borderRadius: 6,
+                cursor: "pointer", textTransform: "uppercase", boxShadow: "0 2px 8px rgba(239,68,68,0.25)",
+                transition: "opacity 0.15s", whiteSpace: "nowrap",
+              }}
+              onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
+              onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
               onClick={(e) => { e.stopPropagation(); setSellPos(pos); }}
             >
               Sell
@@ -1042,8 +1048,14 @@ export default function PortfolioPage() {
                               actions: (
                                 <td key="actions" style={{ textAlign: "center" }}>
                                   <button
-                                    className="btn secondary"
-                                    style={{ padding: "3px 10px", fontSize: 10, fontWeight: 700 }}
+                                    style={{
+                                      padding: "5px 14px", fontSize: 11, fontWeight: 800, letterSpacing: "0.02em",
+                                      background: "var(--bad)", color: "#fff", border: "none", borderRadius: 6,
+                                      cursor: "pointer", textTransform: "uppercase", boxShadow: "0 2px 8px rgba(239,68,68,0.25)",
+                                      transition: "opacity 0.15s",
+                                    }}
+                                    onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
+                                    onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
                                     onClick={e => { e.stopPropagation(); setSellPos(pos); }}
                                   >
                                     Sell
