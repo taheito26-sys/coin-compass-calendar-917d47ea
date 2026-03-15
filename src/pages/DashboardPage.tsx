@@ -177,7 +177,8 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
   const totalPnl    = portfolio.totalPnl;
   const totalPnlPct = portfolio.totalPnlPct;
   const txCount     = state.txs.length;
-  const realizedPnl = useMemo(() => positions.reduce((s, p) => s + p.realizedPnl, 0), [positions]);
+  const realizedPnl = portfolio.realizedPnl;
+  const totalPnlCombined = totalPnl + realizedPnl;
 
   const [cardOrder, setCardOrder] = useState<string[]>(loadLayout);
   const [editing, setEditing] = useState(false);
