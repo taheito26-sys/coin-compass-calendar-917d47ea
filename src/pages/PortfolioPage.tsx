@@ -107,11 +107,14 @@ interface DisplayRow {
   lots: DerivedLot[];
 }
 
-// ── Sell Dialog ────────────────────────────────────────────────────────────
+// ── Sell Dialog with Confirmation ──────────────────────────────────────────
+
+type SellStep = "form" | "confirm";
 
 function SellDialog({ pos, base, onClose }: { pos: DisplayRow; base: string; onClose: () => void }) {
   const { toast } = useCrypto();
   const { createManualTransaction, writeStatus } = useLedgerMutations();
+  const [step, setStep] = useState<SellStep>("form");
   const [qty, setQty] = useState(String(pos.qty));
   const [price, setPrice] = useState(pos.price !== null ? String(pos.price) : "");
   const [fee, setFee] = useState("0");
@@ -119,15 +122,28 @@ function SellDialog({ pos, base, onClose }: { pos: DisplayRow; base: string; onC
 
   const qtyNum = Math.abs(Number(qty) || 0);
   const priceNum = Number(price) || 0;
-  const feeNum = Number(fee) || 0;
+  const feeNum = Math.abs(Number(fee) || 0);
   const proceeds = qtyNum * priceNum - feeNum;
-  const estPnl = proceeds - (pos.avg * qtyNum);
-  const isFullClose = Math.abs(qtyNum - pos.qty) < 1e-10;
+  const costBasis = pos.avg * qtyNum;
+  const estPnl = proceeds - costBasis;
+  const isFullClose = qtyNum > 0 && Math.abs(qtyNum - pos.qty) < 1e-10;
+  const isPartial = qtyNum > 0 && qtyNum < pos.qty - 1e-10;
 
-  const handleSell = async () => {
-    if (qtyNum <= 0 || priceNum <= 0) { toast("Enter valid quantity and price", "error"); return; }
-    if (qtyNum > pos.qty * 1.001) { toast("Cannot sell more than held", "error"); return; }
+  const validationError = (() => {
+    if (qtyNum <= 0) return "Quantity must be greater than zero";
+    if (priceNum <= 0) return "Price must be greater than zero";
+    if (qtyNum > pos.qty * 1.001) return `Cannot sell more than ${fmtQty(pos.qty)} ${pos.sym}`;
+    if (feeNum < 0) return "Fee cannot be negative";
+    return null;
+  })();
+
+  const handleReview = () => {
+    if (validationError) { toast(validationError, "error"); return; }
     if (writeStatus !== "ready") { toast("Backend unavailable", "error"); return; }
+    setStep("confirm");
+  };
+
+  const handleConfirmSell = async () => {
     setSaving(true);
     const result = await createManualTransaction({
       asset: pos.sym, type: "sell", qty: qtyNum, price: priceNum, fee: feeNum,
@@ -149,82 +165,158 @@ function SellDialog({ pos, base, onClose }: { pos: DisplayRow; base: string; onC
     }} onClick={onClose}>
       <div style={{
         background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 12,
-        padding: 24, width: 380, maxWidth: "90vw",
+        padding: 24, width: 400, maxWidth: "92vw",
       }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>
-            Sell {pos.sym}
+            {step === "form" ? `Sell ${pos.sym}` : "Confirm Sale"}
           </h3>
           <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 18 }}>✕</button>
         </div>
 
-        <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 12 }}>
-          Holding: <span className="mono" style={{ fontWeight: 700, color: "var(--fg)" }}>{fmtQty(pos.qty)} {pos.sym}</span>
-          {pos.price !== null && <> · Current: <span className="mono">${fmtPx(pos.price)}</span></>}
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <div>
-            <label style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase" }}>Quantity</label>
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <input className="input" type="number" step="any" value={qty} onChange={e => setQty(e.target.value)}
-                style={{ flex: 1, padding: "8px 10px", fontSize: 13 }} />
-              <button className="btn secondary" style={{ padding: "6px 10px", fontSize: 10 }}
-                onClick={() => setQty(String(pos.qty))}>MAX</button>
+        {step === "form" ? (
+          <>
+            <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 12 }}>
+              Holding: <span className="mono" style={{ fontWeight: 700, color: "var(--fg)" }}>{fmtQty(pos.qty)} {pos.sym}</span>
+              {pos.price !== null && <> · Current: <span className="mono">${fmtPx(pos.price)}</span></>}
             </div>
-          </div>
-          <div>
-            <label style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase" }}>Sell Price (USD)</label>
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <input className="input" type="number" step="any" value={price} onChange={e => setPrice(e.target.value)}
-                style={{ flex: 1, padding: "8px 10px", fontSize: 13 }} />
-              {pos.price !== null && (
-                <button className="btn secondary" style={{ padding: "6px 10px", fontSize: 10 }}
-                  onClick={() => setPrice(String(pos.price))}>MARKET</button>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div>
+                <label style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase" }}>Quantity</label>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input className="input" type="number" step="any" min="0" value={qty} onChange={e => setQty(e.target.value)}
+                    style={{ flex: 1, padding: "8px 10px", fontSize: 13 }} />
+                  <button className="btn secondary" style={{ padding: "6px 10px", fontSize: 10 }}
+                    onClick={() => setQty(String(pos.qty))}>MAX</button>
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase" }}>Sell Price (USD)</label>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input className="input" type="number" step="any" min="0" value={price} onChange={e => setPrice(e.target.value)}
+                    style={{ flex: 1, padding: "8px 10px", fontSize: 13 }} />
+                  {pos.price !== null && (
+                    <button className="btn secondary" style={{ padding: "6px 10px", fontSize: 10 }}
+                      onClick={() => setPrice(String(pos.price))}>MARKET</button>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase" }}>Fee</label>
+                <input className="input" type="number" step="any" min="0" value={fee} onChange={e => setFee(e.target.value)}
+                  style={{ padding: "8px 10px", fontSize: 13 }} />
+              </div>
+            </div>
+
+            {/* Live preview */}
+            <div style={{
+              marginTop: 14, padding: 10, background: "var(--panel2)", borderRadius: 8,
+              border: "1px solid var(--line)", fontSize: 11,
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                <span className="muted">Proceeds</span>
+                <span className="mono" style={{ fontWeight: 700 }}>${fmtFiat(Math.max(proceeds, 0))}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                <span className="muted">Cost Basis</span>
+                <span className="mono">${fmtFiat(costBasis)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span className="muted">Est. Realized P&L</span>
+                <span className="mono" style={{ fontWeight: 800, color: estPnl >= 0 ? "var(--good)" : "var(--bad)" }}>
+                  {(estPnl >= 0 ? "+" : "") + "$" + fmtFiat(Math.abs(estPnl))}
+                </span>
+              </div>
+              {isFullClose && (
+                <div style={{ marginTop: 6, padding: "4px 8px", background: "var(--brand3)", borderRadius: 4, fontSize: 10, color: "var(--brand)", fontWeight: 700, textAlign: "center" }}>
+                  ⚡ Full position close — asset moves to History
+                </div>
+              )}
+              {isPartial && (
+                <div style={{ marginTop: 6, padding: "4px 8px", background: "var(--panel)", borderRadius: 4, fontSize: 10, color: "var(--muted)", textAlign: "center" }}>
+                  Partial sell — {fmtQty(pos.qty - qtyNum)} {pos.sym} remains
+                </div>
               )}
             </div>
-          </div>
-          <div>
-            <label style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase" }}>Fee</label>
-            <input className="input" type="number" step="any" value={fee} onChange={e => setFee(e.target.value)}
-              style={{ padding: "8px 10px", fontSize: 13 }} />
-          </div>
-        </div>
 
-        {/* Summary */}
-        <div style={{
-          marginTop: 14, padding: 10, background: "var(--panel2)", borderRadius: 8,
-          border: "1px solid var(--line)", fontSize: 11,
-        }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-            <span className="muted">Proceeds</span>
-            <span className="mono" style={{ fontWeight: 700 }}>${fmtFiat(proceeds)}</span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-            <span className="muted">Cost Basis</span>
-            <span className="mono">${fmtFiat(pos.avg * qtyNum)}</span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <span className="muted">Est. Realized P&L</span>
-            <span className="mono" style={{ fontWeight: 800, color: estPnl >= 0 ? "var(--good)" : "var(--bad)" }}>
-              {(estPnl >= 0 ? "+" : "") + "$" + fmtFiat(Math.abs(estPnl))}
-            </span>
-          </div>
-          {isFullClose && (
-            <div style={{ marginTop: 6, padding: "4px 8px", background: "var(--brand3)", borderRadius: 4, fontSize: 10, color: "var(--brand)", fontWeight: 700, textAlign: "center" }}>
-              ⚡ Full position close — asset moves to History
+            {validationError && (
+              <div style={{ marginTop: 8, fontSize: 11, color: "var(--bad)", fontWeight: 600 }}>⚠ {validationError}</div>
+            )}
+
+            <button
+              className="btn primary"
+              disabled={!!validationError || writeStatus !== "ready"}
+              onClick={handleReview}
+              style={{ width: "100%", marginTop: 14, padding: "10px 16px", fontSize: 13, fontWeight: 800 }}
+            >
+              Review Sale →
+            </button>
+          </>
+        ) : (
+          /* ── Confirmation Step ── */
+          <>
+            <div style={{
+              padding: 14, background: "var(--panel2)", borderRadius: 8,
+              border: "1px solid var(--line)", fontSize: 12, marginBottom: 14,
+            }}>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--muted)", marginBottom: 10 }}>
+                Transaction Summary
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px" }}>
+                <div><span className="muted">Asset</span></div>
+                <div className="mono" style={{ fontWeight: 800, textAlign: "right" }}>{pos.sym}</div>
+                <div><span className="muted">Sell Quantity</span></div>
+                <div className="mono" style={{ fontWeight: 700, textAlign: "right" }}>{fmtQty(qtyNum)}</div>
+                <div><span className="muted">Sell Price</span></div>
+                <div className="mono" style={{ fontWeight: 700, textAlign: "right" }}>${fmtPx(priceNum)}</div>
+                {feeNum > 0 && <>
+                  <div><span className="muted">Fee</span></div>
+                  <div className="mono" style={{ textAlign: "right" }}>${fmtFiat(feeNum)}</div>
+                </>}
+                <div style={{ gridColumn: "1 / -1", borderTop: "1px solid var(--line)", margin: "4px 0" }} />
+                <div><span className="muted">Proceeds</span></div>
+                <div className="mono" style={{ fontWeight: 700, textAlign: "right" }}>${fmtFiat(proceeds)}</div>
+                <div><span className="muted">Cost Basis</span></div>
+                <div className="mono" style={{ textAlign: "right" }}>${fmtFiat(costBasis)}</div>
+                <div><span style={{ fontWeight: 700 }}>Realized P&L</span></div>
+                <div className="mono" style={{ fontWeight: 900, textAlign: "right", color: estPnl >= 0 ? "var(--good)" : "var(--bad)" }}>
+                  {(estPnl >= 0 ? "+" : "") + "$" + fmtFiat(Math.abs(estPnl))}
+                </div>
+              </div>
+
+              <div style={{
+                marginTop: 10, padding: "6px 10px", borderRadius: 6, fontSize: 11, fontWeight: 700, textAlign: "center",
+                background: isFullClose ? "var(--brand3)" : "var(--panel)",
+                color: isFullClose ? "var(--brand)" : "var(--muted)",
+                border: `1px solid ${isFullClose ? "var(--brand)" : "var(--line)"}`,
+              }}>
+                {isFullClose ? "⚡ FULL CLOSE — Position will move to History" : `PARTIAL SELL — ${fmtQty(pos.qty - qtyNum)} ${pos.sym} remains`}
+              </div>
             </div>
-          )}
-        </div>
 
-        <button
-          className="btn primary"
-          disabled={saving || qtyNum <= 0 || priceNum <= 0 || writeStatus !== "ready"}
-          onClick={handleSell}
-          style={{ width: "100%", marginTop: 14, padding: "10px 16px", fontSize: 13, fontWeight: 800 }}
-        >
-          {saving ? "Selling…" : isFullClose ? `Close Position — Sell All ${pos.sym}` : `Sell ${fmtQty(qtyNum)} ${pos.sym}`}
-        </button>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                className="btn secondary"
+                onClick={() => setStep("form")}
+                style={{ flex: 1, padding: "10px 16px", fontSize: 13, fontWeight: 700 }}
+              >
+                ← Back
+              </button>
+              <button
+                className="btn primary"
+                disabled={saving}
+                onClick={handleConfirmSell}
+                style={{
+                  flex: 2, padding: "10px 16px", fontSize: 13, fontWeight: 800,
+                  background: isFullClose ? "var(--bad)" : undefined,
+                }}
+              >
+                {saving ? "Executing…" : isFullClose ? `Confirm Close ${pos.sym}` : `Confirm Sell ${fmtQty(qtyNum)} ${pos.sym}`}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
