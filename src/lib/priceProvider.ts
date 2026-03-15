@@ -328,22 +328,57 @@ export function getWsPrices(): Record<string, SpotPrice> {
 // ─── CoinGecko History (for charts/calendar) ───────────────
 
 export async function getDailyHistory(
-  coingeckoId: string,
+  sym: string,
   days = 90,
 ): Promise<{ day: string; price: number }[]> {
-  const key = `hist_${coingeckoId}_${days}`;
+  const key = `hist_${sym.toUpperCase()}_${days}`;
   const cached = _cache[key];
   if (cached && Date.now() - cached.ts < HIST_TTL_MS) return cached.data;
 
+  const formatDate = (ts: number) => {
+    if (days === 1) return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (days === 7) return new Date(ts).toLocaleDateString([], { weekday: 'short', hour: '2-digit' });
+    return new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric', year: days > 90 ? '2-digit' : undefined });
+  };
+
+  // Try Binance
+  const binancePair = BINANCE_SYMBOLS[sym.toUpperCase()];
+  if (binancePair) {
+    let interval = "1d", limit = days;
+    if (days === 1) { interval = "15m"; limit = 96; }
+    else if (days === 7) { interval = "2h"; limit = 84; }
+    else if (days === 30) { interval = "12h"; limit = 60; }
+    try {
+      const url = `${BINANCE_REST}/klines?symbol=${binancePair}&interval=${interval}&limit=${limit}`;
+      const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      if (r.ok) {
+         const json = await r.json();
+         const points = json.map((k: any) => ({
+           day: formatDate(k[0]),
+           price: parseFloat(k[4]) // close price
+         }));
+         _cache[key] = { data: points, ts: Date.now() };
+         return points;
+      }
+    } catch(e) {
+      console.warn("[priceProvider] Binance klines failed for", sym, e);
+    }
+  }
+
+  // Fallback to CoinGecko Proxy
+  const coingeckoId = KNOWN_IDS[sym.toUpperCase()] || sym.toLowerCase();
   try {
     const r = await fetch(
-      `${COINGECKO_BASE}/coins/${coingeckoId}/market_chart?vs_currency=usd&days=${days}&interval=daily`,
+      `${COINGECKO_BASE}/coins/${coingeckoId}/market_chart?vs_currency=usd&days=${days}`,
       { signal: AbortSignal.timeout(15000) }
     );
     if (!r.ok) return [];
     const json = await r.json();
-    const points = (json.prices || []).map(([ts, price]: [number, number]) => ({
-      day: new Date(ts).toISOString().split("T")[0],
+    const pricesList = json.prices || [];
+    // Throttle data points to max 100 for SVG performance
+    const step = Math.ceil(pricesList.length / 100);
+    const points = pricesList.filter((_: any, i: number) => i % step === 0).map(([ts, price]: [number, number]) => ({
+      day: formatDate(ts),
       price,
     }));
     _cache[key] = { data: points, ts: Date.now() };

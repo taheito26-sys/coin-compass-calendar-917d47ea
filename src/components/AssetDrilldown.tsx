@@ -17,8 +17,7 @@ function PriceChart({ sym }: { sym: string }) {
 
   useEffect(() => {
     setLoading(true);
-    const cgId = KNOWN_IDS[sym] || sym.toLowerCase();
-    getDailyHistory(cgId, days).then(d => {
+    getDailyHistory(sym, days).then(d => {
       setData(d);
       setLoading(false);
     });
@@ -73,7 +72,7 @@ function PriceChart({ sym }: { sym: string }) {
         </h4>
         <div style={{ flex: 1 }} />
         <div className="seg" style={{ gap: 0 }}>
-          {[7, 30, 90, 365].map(d => (
+          {[1, 7, 30, 90, 365].map(d => (
             <button
               key={d}
               className={days === d ? "active" : ""}
