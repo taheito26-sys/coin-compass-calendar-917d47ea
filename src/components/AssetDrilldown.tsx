@@ -152,7 +152,7 @@ export default function AssetDrilldown({ sym, onClose }: Props) {
         </div>
         <div className="modalBody">
           {/* KPI Row */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8, marginBottom: 16 }}>
             <div className="cal-stat">
               <div className="kpi-lbl">Holdings</div>
               <div className="kpi-val" style={{ fontSize: 16 }}>{fmtQty(qty)}</div>
@@ -175,7 +175,7 @@ export default function AssetDrilldown({ sym, onClose }: Props) {
           <PriceChart sym={sym} />
 
           {/* P&L Summary */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8, marginBottom: 16 }}>
             <div className="cal-stat">
               <div className="kpi-lbl">Cost Basis</div>
               <div className="kpi-val" style={{ fontSize: 14 }}>{fmtFiat(totalCost, base)}</div>
@@ -201,7 +201,7 @@ export default function AssetDrilldown({ sym, onClose }: Props) {
               <h4 style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".5px", textTransform: "uppercase", color: "var(--muted)", marginBottom: 6 }}>
                 Open Lots ({lots.length})
               </h4>
-              <div className="tableWrap" style={{ marginBottom: 16 }}>
+              <div className="tableWrap" style={{ marginBottom: 16, margin: "0 -14px", borderRadius: 0, borderLeft: "none", borderRight: "none" }}>
                 <table>
                   <thead>
                     <tr><th>Date</th><th>Qty</th><th>Remaining</th><th>Unit Cost</th><th>Cost Basis</th></tr>
@@ -226,7 +226,7 @@ export default function AssetDrilldown({ sym, onClose }: Props) {
           <h4 style={{ fontSize: 11, fontWeight: 900, letterSpacing: ".5px", textTransform: "uppercase", color: "var(--muted)", marginBottom: 6 }}>
             Transaction History ({txs.length})
           </h4>
-          <div className="tableWrap">
+          <div className="tableWrap" style={{ margin: "0 -14px", borderRadius: 0, borderLeft: "none", borderRight: "none" }}>
             <table>
               <thead>
                 <tr><th>Date</th><th>Type</th><th>Qty</th><th>Price</th><th>Value</th><th>Fee</th></tr>

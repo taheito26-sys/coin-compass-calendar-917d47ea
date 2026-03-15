@@ -1,4 +1,4 @@
-﻿.app,
+.app,
 .mainWrap,
 .scroll,
 .panel,
@@ -42,7 +42,7 @@
 }
 
 .tableWrap table {
-  min-width: 720px;
+  min-width: 100%;
 }
 
 .dashboard-two-col {
@@ -86,6 +86,6 @@
   }
 
   .tableWrap table {
-    min-width: 640px;
+    min-width: 100%;
   }
 }

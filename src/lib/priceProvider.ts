@@ -10,7 +10,7 @@
  */
 
 const BINANCE_REST = "https://api.binance.com/api/v3";
-const COINGECKO_BASE = "https://api.coingecko.com/api/v3";
+const COINGECKO_BASE = "/api/coingecko";
 const HIST_TTL_MS = 60 * 60 * 1000;
 const SEARCH_TTL_MS = 30 * 60 * 1000;
 
