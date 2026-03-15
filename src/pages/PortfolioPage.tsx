@@ -10,6 +10,8 @@ import { useUnifiedPortfolio } from "@/hooks/useUnifiedPortfolio";
 import { useLedgerMutations } from "@/hooks/useLedgerMutations";
 import { useState, useMemo, useEffect } from "react";
 import type { DerivedLot, ClosedPosition } from "@/lib/derivePortfolio";
+import { deriveRealizedByTx } from "@/lib/derivePortfolio";
+import { normalizeSymbol } from "@/lib/symbolAliases";
 
 // ── View mode ──────────────────────────────────────────────────────────────
 
@@ -107,11 +109,14 @@ interface DisplayRow {
   lots: DerivedLot[];
 }
 
-// ── Sell Dialog ────────────────────────────────────────────────────────────
+// ── Sell Dialog with Confirmation ──────────────────────────────────────────
+
+type SellStep = "form" | "confirm";
 
 function SellDialog({ pos, base, onClose }: { pos: DisplayRow; base: string; onClose: () => void }) {
   const { toast } = useCrypto();
   const { createManualTransaction, writeStatus } = useLedgerMutations();
+  const [step, setStep] = useState<SellStep>("form");
   const [qty, setQty] = useState(String(pos.qty));
   const [price, setPrice] = useState(pos.price !== null ? String(pos.price) : "");
   const [fee, setFee] = useState("0");
@@ -119,15 +124,28 @@ function SellDialog({ pos, base, onClose }: { pos: DisplayRow; base: string; onC
 
   const qtyNum = Math.abs(Number(qty) || 0);
   const priceNum = Number(price) || 0;
-  const feeNum = Number(fee) || 0;
+  const feeNum = Math.abs(Number(fee) || 0);
   const proceeds = qtyNum * priceNum - feeNum;
-  const estPnl = proceeds - (pos.avg * qtyNum);
-  const isFullClose = Math.abs(qtyNum - pos.qty) < 1e-10;
+  const costBasis = pos.avg * qtyNum;
+  const estPnl = proceeds - costBasis;
+  const isFullClose = qtyNum > 0 && Math.abs(qtyNum - pos.qty) < 1e-10;
+  const isPartial = qtyNum > 0 && qtyNum < pos.qty - 1e-10;
 
-  const handleSell = async () => {
-    if (qtyNum <= 0 || priceNum <= 0) { toast("Enter valid quantity and price", "error"); return; }
-    if (qtyNum > pos.qty * 1.001) { toast("Cannot sell more than held", "error"); return; }
+  const validationError = (() => {
+    if (qtyNum <= 0) return "Quantity must be greater than zero";
+    if (priceNum <= 0) return "Price must be greater than zero";
+    if (qtyNum > pos.qty * 1.001) return `Cannot sell more than ${fmtQty(pos.qty)} ${pos.sym}`;
+    if (feeNum < 0) return "Fee cannot be negative";
+    return null;
+  })();
+
+  const handleReview = () => {
+    if (validationError) { toast(validationError, "error"); return; }
     if (writeStatus !== "ready") { toast("Backend unavailable", "error"); return; }
+    setStep("confirm");
+  };
+
+  const handleConfirmSell = async () => {
     setSaving(true);
     const result = await createManualTransaction({
       asset: pos.sym, type: "sell", qty: qtyNum, price: priceNum, fee: feeNum,
@@ -149,82 +167,158 @@ function SellDialog({ pos, base, onClose }: { pos: DisplayRow; base: string; onC
     }} onClick={onClose}>
       <div style={{
         background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 12,
-        padding: 24, width: 380, maxWidth: "90vw",
+        padding: 24, width: 400, maxWidth: "92vw",
       }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>
-            Sell {pos.sym}
+            {step === "form" ? `Sell ${pos.sym}` : "Confirm Sale"}
           </h3>
           <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 18 }}>✕</button>
         </div>
 
-        <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 12 }}>
-          Holding: <span className="mono" style={{ fontWeight: 700, color: "var(--fg)" }}>{fmtQty(pos.qty)} {pos.sym}</span>
-          {pos.price !== null && <> · Current: <span className="mono">${fmtPx(pos.price)}</span></>}
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <div>
-            <label style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase" }}>Quantity</label>
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <input className="input" type="number" step="any" value={qty} onChange={e => setQty(e.target.value)}
-                style={{ flex: 1, padding: "8px 10px", fontSize: 13 }} />
-              <button className="btn secondary" style={{ padding: "6px 10px", fontSize: 10 }}
-                onClick={() => setQty(String(pos.qty))}>MAX</button>
+        {step === "form" ? (
+          <>
+            <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 12 }}>
+              Holding: <span className="mono" style={{ fontWeight: 700, color: "var(--fg)" }}>{fmtQty(pos.qty)} {pos.sym}</span>
+              {pos.price !== null && <> · Current: <span className="mono">${fmtPx(pos.price)}</span></>}
             </div>
-          </div>
-          <div>
-            <label style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase" }}>Sell Price (USD)</label>
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <input className="input" type="number" step="any" value={price} onChange={e => setPrice(e.target.value)}
-                style={{ flex: 1, padding: "8px 10px", fontSize: 13 }} />
-              {pos.price !== null && (
-                <button className="btn secondary" style={{ padding: "6px 10px", fontSize: 10 }}
-                  onClick={() => setPrice(String(pos.price))}>MARKET</button>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div>
+                <label style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase" }}>Quantity</label>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input className="input" type="number" step="any" min="0" value={qty} onChange={e => setQty(e.target.value)}
+                    style={{ flex: 1, padding: "8px 10px", fontSize: 13 }} />
+                  <button className="btn secondary" style={{ padding: "6px 10px", fontSize: 10 }}
+                    onClick={() => setQty(String(pos.qty))}>MAX</button>
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase" }}>Sell Price (USD)</label>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input className="input" type="number" step="any" min="0" value={price} onChange={e => setPrice(e.target.value)}
+                    style={{ flex: 1, padding: "8px 10px", fontSize: 13 }} />
+                  {pos.price !== null && (
+                    <button className="btn secondary" style={{ padding: "6px 10px", fontSize: 10 }}
+                      onClick={() => setPrice(String(pos.price))}>MARKET</button>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase" }}>Fee</label>
+                <input className="input" type="number" step="any" min="0" value={fee} onChange={e => setFee(e.target.value)}
+                  style={{ padding: "8px 10px", fontSize: 13 }} />
+              </div>
+            </div>
+
+            {/* Live preview */}
+            <div style={{
+              marginTop: 14, padding: 10, background: "var(--panel2)", borderRadius: 8,
+              border: "1px solid var(--line)", fontSize: 11,
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                <span className="muted">Proceeds</span>
+                <span className="mono" style={{ fontWeight: 700 }}>${fmtFiat(Math.max(proceeds, 0))}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                <span className="muted">Cost Basis</span>
+                <span className="mono">${fmtFiat(costBasis)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span className="muted">Est. Realized P&L</span>
+                <span className="mono" style={{ fontWeight: 800, color: estPnl >= 0 ? "var(--good)" : "var(--bad)" }}>
+                  {(estPnl >= 0 ? "+" : "") + "$" + fmtFiat(Math.abs(estPnl))}
+                </span>
+              </div>
+              {isFullClose && (
+                <div style={{ marginTop: 6, padding: "4px 8px", background: "var(--brand3)", borderRadius: 4, fontSize: 10, color: "var(--brand)", fontWeight: 700, textAlign: "center" }}>
+                  ⚡ Full position close — asset moves to History
+                </div>
+              )}
+              {isPartial && (
+                <div style={{ marginTop: 6, padding: "4px 8px", background: "var(--panel)", borderRadius: 4, fontSize: 10, color: "var(--muted)", textAlign: "center" }}>
+                  Partial sell — {fmtQty(pos.qty - qtyNum)} {pos.sym} remains
+                </div>
               )}
             </div>
-          </div>
-          <div>
-            <label style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase" }}>Fee</label>
-            <input className="input" type="number" step="any" value={fee} onChange={e => setFee(e.target.value)}
-              style={{ padding: "8px 10px", fontSize: 13 }} />
-          </div>
-        </div>
 
-        {/* Summary */}
-        <div style={{
-          marginTop: 14, padding: 10, background: "var(--panel2)", borderRadius: 8,
-          border: "1px solid var(--line)", fontSize: 11,
-        }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-            <span className="muted">Proceeds</span>
-            <span className="mono" style={{ fontWeight: 700 }}>${fmtFiat(proceeds)}</span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-            <span className="muted">Cost Basis</span>
-            <span className="mono">${fmtFiat(pos.avg * qtyNum)}</span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <span className="muted">Est. Realized P&L</span>
-            <span className="mono" style={{ fontWeight: 800, color: estPnl >= 0 ? "var(--good)" : "var(--bad)" }}>
-              {(estPnl >= 0 ? "+" : "") + "$" + fmtFiat(Math.abs(estPnl))}
-            </span>
-          </div>
-          {isFullClose && (
-            <div style={{ marginTop: 6, padding: "4px 8px", background: "var(--brand3)", borderRadius: 4, fontSize: 10, color: "var(--brand)", fontWeight: 700, textAlign: "center" }}>
-              ⚡ Full position close — asset moves to History
+            {validationError && (
+              <div style={{ marginTop: 8, fontSize: 11, color: "var(--bad)", fontWeight: 600 }}>⚠ {validationError}</div>
+            )}
+
+            <button
+              className="btn primary"
+              disabled={!!validationError || writeStatus !== "ready"}
+              onClick={handleReview}
+              style={{ width: "100%", marginTop: 14, padding: "10px 16px", fontSize: 13, fontWeight: 800 }}
+            >
+              Review Sale →
+            </button>
+          </>
+        ) : (
+          /* ── Confirmation Step ── */
+          <>
+            <div style={{
+              padding: 14, background: "var(--panel2)", borderRadius: 8,
+              border: "1px solid var(--line)", fontSize: 12, marginBottom: 14,
+            }}>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--muted)", marginBottom: 10 }}>
+                Transaction Summary
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px" }}>
+                <div><span className="muted">Asset</span></div>
+                <div className="mono" style={{ fontWeight: 800, textAlign: "right" }}>{pos.sym}</div>
+                <div><span className="muted">Sell Quantity</span></div>
+                <div className="mono" style={{ fontWeight: 700, textAlign: "right" }}>{fmtQty(qtyNum)}</div>
+                <div><span className="muted">Sell Price</span></div>
+                <div className="mono" style={{ fontWeight: 700, textAlign: "right" }}>${fmtPx(priceNum)}</div>
+                {feeNum > 0 && <>
+                  <div><span className="muted">Fee</span></div>
+                  <div className="mono" style={{ textAlign: "right" }}>${fmtFiat(feeNum)}</div>
+                </>}
+                <div style={{ gridColumn: "1 / -1", borderTop: "1px solid var(--line)", margin: "4px 0" }} />
+                <div><span className="muted">Proceeds</span></div>
+                <div className="mono" style={{ fontWeight: 700, textAlign: "right" }}>${fmtFiat(proceeds)}</div>
+                <div><span className="muted">Cost Basis</span></div>
+                <div className="mono" style={{ textAlign: "right" }}>${fmtFiat(costBasis)}</div>
+                <div><span style={{ fontWeight: 700 }}>Realized P&L</span></div>
+                <div className="mono" style={{ fontWeight: 900, textAlign: "right", color: estPnl >= 0 ? "var(--good)" : "var(--bad)" }}>
+                  {(estPnl >= 0 ? "+" : "") + "$" + fmtFiat(Math.abs(estPnl))}
+                </div>
+              </div>
+
+              <div style={{
+                marginTop: 10, padding: "6px 10px", borderRadius: 6, fontSize: 11, fontWeight: 700, textAlign: "center",
+                background: isFullClose ? "var(--brand3)" : "var(--panel)",
+                color: isFullClose ? "var(--brand)" : "var(--muted)",
+                border: `1px solid ${isFullClose ? "var(--brand)" : "var(--line)"}`,
+              }}>
+                {isFullClose ? "⚡ FULL CLOSE — Position will move to History" : `PARTIAL SELL — ${fmtQty(pos.qty - qtyNum)} ${pos.sym} remains`}
+              </div>
             </div>
-          )}
-        </div>
 
-        <button
-          className="btn primary"
-          disabled={saving || qtyNum <= 0 || priceNum <= 0 || writeStatus !== "ready"}
-          onClick={handleSell}
-          style={{ width: "100%", marginTop: 14, padding: "10px 16px", fontSize: 13, fontWeight: 800 }}
-        >
-          {saving ? "Selling…" : isFullClose ? `Close Position — Sell All ${pos.sym}` : `Sell ${fmtQty(qtyNum)} ${pos.sym}`}
-        </button>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                className="btn secondary"
+                onClick={() => setStep("form")}
+                style={{ flex: 1, padding: "10px 16px", fontSize: 13, fontWeight: 700 }}
+              >
+                ← Back
+              </button>
+              <button
+                className="btn primary"
+                disabled={saving}
+                onClick={handleConfirmSell}
+                style={{
+                  flex: 2, padding: "10px 16px", fontSize: 13, fontWeight: 800,
+                  background: isFullClose ? "var(--bad)" : undefined,
+                }}
+              >
+                {saving ? "Executing…" : isFullClose ? `Confirm Close ${pos.sym}` : `Confirm Sell ${fmtQty(qtyNum)} ${pos.sym}`}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -444,11 +538,48 @@ export default function PortfolioPage() {
 
   // ── History Tab ──────────────────────────────────────────────────────────
 
+  type HistoryView = "closed" | "sells";
+  const [historyView, setHistoryView] = useState<HistoryView>("closed");
+
+  // Derive sell events from transactions with per-tx realized P&L
+  const sellEvents = useMemo(() => {
+    const realizedMap = deriveRealizedByTx(state.txs);
+    return state.txs
+      .filter(tx => String(tx.type || "").toLowerCase() === "sell")
+      .map(tx => {
+        const sym = normalizeSymbol(tx.asset || "") || tx.asset;
+        const qty = Math.abs(Number(tx.qty || 0));
+        const price = Number(tx.price || 0);
+        const fee = Number(tx.fee || 0);
+        const proceeds = qty * price - fee;
+        const realized = realizedMap.get(tx.id) ?? 0;
+        // Check if this sell fully closed the position at the time
+        const isPositionOpen = portfolio.positions.some(p => p.sym === sym);
+        const isInClosed = closedPositions.some(cp => cp.sym === sym);
+        return {
+          id: tx.id,
+          sym,
+          qty,
+          price,
+          fee,
+          proceeds,
+          realizedPnl: realized,
+          ts: tx.ts,
+          note: tx.note || "",
+          status: isInClosed ? "closed" as const : (isPositionOpen ? "partial" as const : "closed" as const),
+        };
+      })
+      .sort((a, b) => b.ts - a.ts);
+  }, [state.txs, portfolio.positions, closedPositions]);
+
   function HistoryTab() {
-    if (closedPositions.length === 0) {
+    const hasSells = sellEvents.length > 0;
+    const hasClosed = closedPositions.length > 0;
+
+    if (!hasSells && !hasClosed) {
       return (
         <div className="muted" style={{ textAlign: "center", padding: 48, fontSize: 13 }}>
-          No closed positions yet. Sell all holdings of an asset to close the position.
+          No sell transactions or closed positions yet.
         </div>
       );
     }
@@ -456,131 +587,234 @@ export default function PortfolioPage() {
     const totalClosedPnl = closedPositions.reduce((s, p) => s + p.realizedPnl, 0);
     const totalClosedProceeds = closedPositions.reduce((s, p) => s + p.totalProceeds, 0);
     const totalClosedCost = closedPositions.reduce((s, p) => s + p.totalCost, 0);
-
-    if (isMobile) {
-      return (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <div style={{ display: "flex", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
-            <div style={{ background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: "var(--lt-radius-sm)", padding: "7px 12px" }}>
-              <div style={{ fontSize: 8, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase" }}>Closed P&L</div>
-              <div className={`mono ${totalClosedPnl >= 0 ? "good" : "bad"}`} style={{ fontSize: 14, fontWeight: 900 }}>
-                {(totalClosedPnl >= 0 ? "+" : "") + "$" + fmtFiat(Math.abs(totalClosedPnl))}
-              </div>
-            </div>
-            <div style={{ background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: "var(--lt-radius-sm)", padding: "7px 12px" }}>
-              <div style={{ fontSize: 8, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase" }}>Positions</div>
-              <div className="mono" style={{ fontSize: 14, fontWeight: 900 }}>{closedPositions.length}</div>
-            </div>
-          </div>
-          {closedPositions.map(cp => (
-            <div key={cp.sym} style={{
-              background: "var(--panel2)", border: "1px solid var(--line)",
-              borderRadius: "var(--lt-radius)", padding: 12,
-            }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                <span className="mono" style={{ fontWeight: 900, fontSize: 15 }}>{cp.sym}</span>
-                <span className="mono" style={{ fontWeight: 800, color: cp.realizedPnl >= 0 ? "var(--good)" : "var(--bad)" }}>
-                  {(cp.realizedPnl >= 0 ? "+" : "") + "$" + fmtFiat(Math.abs(cp.realizedPnl))}
-                </span>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, fontSize: 11 }}>
-                <div><span className="muted">Bought </span><span className="mono">{fmtQty(cp.totalBought)}</span></div>
-                <div><span className="muted">Sold </span><span className="mono">{fmtQty(cp.totalSold)}</span></div>
-                <div><span className="muted">Avg Buy </span><span className="mono">${fmtPx(cp.avgBuy)}</span></div>
-                <div><span className="muted">Avg Sell </span><span className="mono">${fmtPx(cp.avgSell)}</span></div>
-                <div><span className="muted">Cost </span><span className="mono">${fmtFiat(cp.totalCost)}</span></div>
-                <div><span className="muted">Proceeds </span><span className="mono">${fmtFiat(cp.totalProceeds)}</span></div>
-              </div>
-              <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 6 }}>
-                {new Date(cp.firstTx).toLocaleDateString()} → {new Date(cp.lastTx).toLocaleDateString()} · {cp.txCount} txs
-              </div>
-            </div>
-          ))}
-        </div>
-      );
-    }
+    const totalSellPnl = sellEvents.reduce((s, e) => s + e.realizedPnl, 0);
 
     return (
       <div>
+        {/* KPI summary */}
         <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
           <div style={{ background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: "var(--lt-radius-sm)", padding: "7px 12px" }}>
             <div style={{ fontSize: 8, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase" }}>Total Realized P&L</div>
-            <div className={`mono ${totalClosedPnl >= 0 ? "good" : "bad"}`} style={{ fontSize: 14, fontWeight: 900 }}>
-              {(totalClosedPnl >= 0 ? "+" : "") + "$" + fmtFiat(Math.abs(totalClosedPnl))}
+            <div className={`mono ${totalRealizedPnl >= 0 ? "good" : "bad"}`} style={{ fontSize: 14, fontWeight: 900 }}>
+              {(totalRealizedPnl >= 0 ? "+" : "") + "$" + fmtFiat(Math.abs(totalRealizedPnl))}
             </div>
           </div>
+          {hasClosed && (
+            <div style={{ background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: "var(--lt-radius-sm)", padding: "7px 12px" }}>
+              <div style={{ fontSize: 8, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase" }}>Closed Positions</div>
+              <div className="mono" style={{ fontSize: 14, fontWeight: 900 }}>{closedPositions.length}</div>
+            </div>
+          )}
           <div style={{ background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: "var(--lt-radius-sm)", padding: "7px 12px" }}>
-            <div style={{ fontSize: 8, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase" }}>Total Invested</div>
-            <div className="mono" style={{ fontSize: 14, fontWeight: 900 }}>${fmtFiat(totalClosedCost)}</div>
+            <div style={{ fontSize: 8, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase" }}>Sell Events</div>
+            <div className="mono" style={{ fontSize: 14, fontWeight: 900 }}>{sellEvents.length}</div>
           </div>
-          <div style={{ background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: "var(--lt-radius-sm)", padding: "7px 12px" }}>
-            <div style={{ fontSize: 8, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase" }}>Total Proceeds</div>
-            <div className="mono" style={{ fontSize: 14, fontWeight: 900 }}>${fmtFiat(totalClosedProceeds)}</div>
-          </div>
-          <div style={{ background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: "var(--lt-radius-sm)", padding: "7px 12px" }}>
-            <div style={{ fontSize: 8, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase" }}>Closed Positions</div>
-            <div className="mono" style={{ fontSize: 14, fontWeight: 900 }}>{closedPositions.length}</div>
-          </div>
+          {hasClosed && (
+            <>
+              <div style={{ background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: "var(--lt-radius-sm)", padding: "7px 12px" }}>
+                <div style={{ fontSize: 8, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase" }}>Total Invested</div>
+                <div className="mono" style={{ fontSize: 14, fontWeight: 900 }}>${fmtFiat(totalClosedCost)}</div>
+              </div>
+              <div style={{ background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: "var(--lt-radius-sm)", padding: "7px 12px" }}>
+                <div style={{ fontSize: 8, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase" }}>Total Proceeds</div>
+                <div className="mono" style={{ fontSize: 14, fontWeight: 900 }}>${fmtFiat(totalClosedProceeds)}</div>
+              </div>
+            </>
+          )}
         </div>
 
-        <div className="panel" style={{ flex: 1 }}>
-          <div className="panel-head">
-            <h2>Closed Positions</h2>
-          </div>
-          <div className="panel-body" style={{ padding: 0, overflow: "auto" }}>
-            <div className="tableWrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Asset</th>
-                    <th>Qty Bought</th>
-                    <th>Qty Sold</th>
-                    <th>Avg Buy</th>
-                    <th>Avg Sell</th>
-                    <th>Cost Basis</th>
-                    <th>Proceeds</th>
-                    <th>Realized P&L</th>
-                    <th>Return %</th>
-                    <th>Period</th>
-                    <th>Txs</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {closedPositions.map((cp, i) => {
-                    const returnPct = cp.totalCost > 0 ? ((cp.totalProceeds - cp.totalCost) / cp.totalCost) * 100 : 0;
-                    return (
-                      <tr key={cp.sym}>
-                        <td className="mono muted">{i + 1}</td>
-                        <td><span className="mono" style={{ fontWeight: 900 }}>{cp.sym}</span></td>
-                        <td className="mono">{fmtQty(cp.totalBought)}</td>
-                        <td className="mono">{fmtQty(cp.totalSold)}</td>
-                        <td className="mono">${fmtPx(cp.avgBuy)}</td>
-                        <td className="mono">${fmtPx(cp.avgSell)}</td>
-                        <td className="mono">${fmtFiat(cp.totalCost)}</td>
-                        <td className="mono">${fmtFiat(cp.totalProceeds)}</td>
-                        <td className="mono" style={{ fontWeight: 800, color: cp.realizedPnl >= 0 ? "var(--good)" : "var(--bad)" }}>
-                          {(cp.realizedPnl >= 0 ? "+" : "") + "$" + fmtFiat(Math.abs(cp.realizedPnl))}
-                        </td>
-                        <td>
-                          <span className={`mono ${returnPct >= 0 ? "good" : "bad"}`} style={{ fontWeight: 700, fontSize: 11 }}>
-                            {returnPct >= 0 ? "▲" : "▼"} {Math.abs(returnPct).toFixed(2)}%
-                          </span>
-                        </td>
-                        <td className="mono muted" style={{ fontSize: 10 }}>
-                          {new Date(cp.firstTx).toLocaleDateString(undefined, { month: "short", year: "2-digit" })}
-                          {" → "}
-                          {new Date(cp.lastTx).toLocaleDateString(undefined, { month: "short", year: "2-digit" })}
-                        </td>
-                        <td className="mono muted">{cp.txCount}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
+        {/* Sub-tabs */}
+        <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
+          <button
+            className={`btn ${historyView === "closed" ? "primary" : "secondary"}`}
+            onClick={() => setHistoryView("closed")}
+            style={{ padding: "5px 12px", fontSize: 11, fontWeight: 700 }}
+          >
+            Closed Positions {hasClosed && `(${closedPositions.length})`}
+          </button>
+          <button
+            className={`btn ${historyView === "sells" ? "primary" : "secondary"}`}
+            onClick={() => setHistoryView("sells")}
+            style={{ padding: "5px 12px", fontSize: 11, fontWeight: 700 }}
+          >
+            Sell Events {hasSells && `(${sellEvents.length})`}
+          </button>
         </div>
+
+        {historyView === "closed" ? (
+          hasClosed ? (
+            isMobile ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {closedPositions.map(cp => (
+                  <div key={cp.sym} style={{
+                    background: "var(--panel2)", border: "1px solid var(--line)",
+                    borderRadius: "var(--lt-radius)", padding: 12,
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                      <span className="mono" style={{ fontWeight: 900, fontSize: 15 }}>{cp.sym}</span>
+                      <span className="mono" style={{ fontWeight: 800, color: cp.realizedPnl >= 0 ? "var(--good)" : "var(--bad)" }}>
+                        {(cp.realizedPnl >= 0 ? "+" : "") + "$" + fmtFiat(Math.abs(cp.realizedPnl))}
+                      </span>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, fontSize: 11 }}>
+                      <div><span className="muted">Bought </span><span className="mono">{fmtQty(cp.totalBought)}</span></div>
+                      <div><span className="muted">Sold </span><span className="mono">{fmtQty(cp.totalSold)}</span></div>
+                      <div><span className="muted">Avg Buy </span><span className="mono">${fmtPx(cp.avgBuy)}</span></div>
+                      <div><span className="muted">Avg Sell </span><span className="mono">${fmtPx(cp.avgSell)}</span></div>
+                      <div><span className="muted">Cost </span><span className="mono">${fmtFiat(cp.totalCost)}</span></div>
+                      <div><span className="muted">Proceeds </span><span className="mono">${fmtFiat(cp.totalProceeds)}</span></div>
+                    </div>
+                    <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 6 }}>
+                      {new Date(cp.firstTx).toLocaleDateString()} → {new Date(cp.lastTx).toLocaleDateString()} · {cp.txCount} txs
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="panel">
+                <div className="panel-head"><h2>Closed Positions</h2></div>
+                <div className="panel-body" style={{ padding: 0, overflow: "auto" }}>
+                  <div className="tableWrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>#</th><th>Asset</th><th>Qty Bought</th><th>Qty Sold</th>
+                          <th>Avg Buy</th><th>Avg Sell</th><th>Cost Basis</th><th>Proceeds</th>
+                          <th>Realized P&L</th><th>Return %</th><th>Period</th><th>Txs</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {closedPositions.map((cp, i) => {
+                          const returnPct = cp.totalCost > 0 ? ((cp.totalProceeds - cp.totalCost) / cp.totalCost) * 100 : 0;
+                          return (
+                            <tr key={cp.sym}>
+                              <td className="mono muted">{i + 1}</td>
+                              <td><span className="mono" style={{ fontWeight: 900 }}>{cp.sym}</span></td>
+                              <td className="mono">{fmtQty(cp.totalBought)}</td>
+                              <td className="mono">{fmtQty(cp.totalSold)}</td>
+                              <td className="mono">${fmtPx(cp.avgBuy)}</td>
+                              <td className="mono">${fmtPx(cp.avgSell)}</td>
+                              <td className="mono">${fmtFiat(cp.totalCost)}</td>
+                              <td className="mono">${fmtFiat(cp.totalProceeds)}</td>
+                              <td className="mono" style={{ fontWeight: 800, color: cp.realizedPnl >= 0 ? "var(--good)" : "var(--bad)" }}>
+                                {(cp.realizedPnl >= 0 ? "+" : "") + "$" + fmtFiat(Math.abs(cp.realizedPnl))}
+                              </td>
+                              <td>
+                                <span className={`mono ${returnPct >= 0 ? "good" : "bad"}`} style={{ fontWeight: 700, fontSize: 11 }}>
+                                  {returnPct >= 0 ? "▲" : "▼"} {Math.abs(returnPct).toFixed(2)}%
+                                </span>
+                              </td>
+                              <td className="mono muted" style={{ fontSize: 10 }}>
+                                {new Date(cp.firstTx).toLocaleDateString(undefined, { month: "short", year: "2-digit" })}
+                                {" → "}
+                                {new Date(cp.lastTx).toLocaleDateString(undefined, { month: "short", year: "2-digit" })}
+                              </td>
+                              <td className="mono muted">{cp.txCount}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )
+          ) : (
+            <div className="muted" style={{ textAlign: "center", padding: 32, fontSize: 13 }}>
+              No fully closed positions yet. Sell all of an asset's holdings to close it.
+            </div>
+          )
+        ) : (
+          /* Sell Events view */
+          hasSells ? (
+            isMobile ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {sellEvents.map(ev => (
+                  <div key={ev.id} style={{
+                    background: "var(--panel2)", border: "1px solid var(--line)",
+                    borderRadius: "var(--lt-radius)", padding: 12,
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                      <div>
+                        <span className="mono" style={{ fontWeight: 900, fontSize: 14 }}>{ev.sym}</span>
+                        <span style={{
+                          marginLeft: 6, fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4,
+                          background: ev.status === "closed" ? "var(--bad)" : "var(--brand3)",
+                          color: ev.status === "closed" ? "#fff" : "var(--brand)",
+                        }}>
+                          {ev.status === "closed" ? "CLOSED" : "PARTIAL"}
+                        </span>
+                      </div>
+                      <span className="mono" style={{ fontWeight: 800, color: ev.realizedPnl >= 0 ? "var(--good)" : "var(--bad)" }}>
+                        {(ev.realizedPnl >= 0 ? "+" : "") + "$" + fmtFiat(Math.abs(ev.realizedPnl))}
+                      </span>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, fontSize: 11 }}>
+                      <div><span className="muted">Qty </span><span className="mono">{fmtQty(ev.qty)}</span></div>
+                      <div><span className="muted">Price </span><span className="mono">${fmtPx(ev.price)}</span></div>
+                      <div><span className="muted">Proceeds </span><span className="mono">${fmtFiat(ev.proceeds)}</span></div>
+                      {ev.fee > 0 && <div><span className="muted">Fee </span><span className="mono">${fmtFiat(ev.fee)}</span></div>}
+                    </div>
+                    <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4 }}>
+                      {new Date(ev.ts).toLocaleString()}
+                      {ev.note && <> · {ev.note}</>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="panel">
+                <div className="panel-head"><h2>Sell Events</h2><span className="pill">{sellEvents.length} sells</span></div>
+                <div className="panel-body" style={{ padding: 0, overflow: "auto" }}>
+                  <div className="tableWrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>#</th><th>Date</th><th>Asset</th><th>Type</th><th>Qty</th>
+                          <th>Price</th><th>Fee</th><th>Proceeds</th><th>Realized P&L</th><th>Note</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sellEvents.map((ev, i) => (
+                          <tr key={ev.id}>
+                            <td className="mono muted">{i + 1}</td>
+                            <td className="mono" style={{ fontSize: 11 }}>
+                              {new Date(ev.ts).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "2-digit" })}
+                            </td>
+                            <td><span className="mono" style={{ fontWeight: 900 }}>{ev.sym}</span></td>
+                            <td>
+                              <span style={{
+                                fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4,
+                                background: ev.status === "closed" ? "var(--bad)" : "var(--brand3)",
+                                color: ev.status === "closed" ? "#fff" : "var(--brand)",
+                              }}>
+                                {ev.status === "closed" ? "CLOSE" : "PARTIAL"}
+                              </span>
+                            </td>
+                            <td className="mono">{fmtQty(ev.qty)}</td>
+                            <td className="mono">${fmtPx(ev.price)}</td>
+                            <td className="mono muted">{ev.fee > 0 ? "$" + fmtFiat(ev.fee) : "—"}</td>
+                            <td className="mono">${fmtFiat(ev.proceeds)}</td>
+                            <td className="mono" style={{ fontWeight: 800, color: ev.realizedPnl >= 0 ? "var(--good)" : "var(--bad)" }}>
+                              {(ev.realizedPnl >= 0 ? "+" : "") + "$" + fmtFiat(Math.abs(ev.realizedPnl))}
+                            </td>
+                            <td className="muted" style={{ fontSize: 10, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis" }}>
+                              {ev.note || "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )
+          ) : (
+            <div className="muted" style={{ textAlign: "center", padding: 32, fontSize: 13 }}>
+              No sell events recorded yet.
+            </div>
+          )
+        )}
       </div>
     );
   }
