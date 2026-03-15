@@ -368,6 +368,7 @@ export default function PortfolioPage() {
   }, []);
 
   const toggleCol = (key: string) => {
+    if (key === "actions") return; // actions column cannot be hidden
     setVisibleCols(prev => {
       const next = new Set(prev);
       next.has(key) ? next.delete(key) : next.add(key);
