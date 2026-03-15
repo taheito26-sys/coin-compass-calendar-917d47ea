@@ -353,10 +353,17 @@ export default function PortfolioPage() {
   useEffect(() => { localStorage.setItem(STORAGE_KEY,   JSON.stringify([...visibleCols])); }, [visibleCols]);
   useEffect(() => { localStorage.setItem(COL_ORDER_KEY, JSON.stringify(colOrder)); },        [colOrder]);
 
-  // Ensure actions column is in colOrder
+  // Ensure actions column is always in colOrder and visibleCols
   useEffect(() => {
     if (!colOrder.includes("actions")) {
       setColOrder(prev => [...prev, "actions"]);
+    }
+    if (!visibleCols.has("actions")) {
+      setVisibleCols(prev => {
+        const next = new Set(prev);
+        next.add("actions");
+        return next;
+      });
     }
   }, []);
 
