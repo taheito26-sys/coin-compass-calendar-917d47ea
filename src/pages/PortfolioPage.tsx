@@ -47,7 +47,7 @@ const ALL_COLUMNS = [
   { key: "realizedPnl",label: "Realized P/L", default: false },
   { key: "marketCap",  label: "Market Cap",   default: false },
   { key: "volume",     label: "Volume 24h",   default: false },
-  { key: "actions",    label: "",              default: true  },
+  { key: "actions",    label: "Sell",         default: true  },
 ];
 
 const STORAGE_KEY  = "portfolio_visible_cols";
@@ -353,14 +353,22 @@ export default function PortfolioPage() {
   useEffect(() => { localStorage.setItem(STORAGE_KEY,   JSON.stringify([...visibleCols])); }, [visibleCols]);
   useEffect(() => { localStorage.setItem(COL_ORDER_KEY, JSON.stringify(colOrder)); },        [colOrder]);
 
-  // Ensure actions column is in colOrder
+  // Ensure actions column is always in colOrder and visibleCols
   useEffect(() => {
     if (!colOrder.includes("actions")) {
       setColOrder(prev => [...prev, "actions"]);
     }
+    if (!visibleCols.has("actions")) {
+      setVisibleCols(prev => {
+        const next = new Set(prev);
+        next.add("actions");
+        return next;
+      });
+    }
   }, []);
 
   const toggleCol = (key: string) => {
+    if (key === "actions") return; // actions column cannot be hidden
     setVisibleCols(prev => {
       const next = new Set(prev);
       next.has(key) ? next.delete(key) : next.add(key);
