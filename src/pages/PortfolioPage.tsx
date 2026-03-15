@@ -47,7 +47,7 @@ const ALL_COLUMNS = [
   { key: "realizedPnl",label: "Realized P/L", default: false },
   { key: "marketCap",  label: "Market Cap",   default: false },
   { key: "volume",     label: "Volume 24h",   default: false },
-  { key: "actions",    label: "",              default: true  },
+  { key: "actions",    label: "Sell",         default: true  },
 ];
 
 const STORAGE_KEY  = "portfolio_visible_cols";
