@@ -399,7 +399,8 @@ export default function LedgerPage() {
             assetId = result.assetId;
             symbol = result.symbol;
             autoCreated.push(symbol);
-          } catch {
+          } catch (err: any) {
+            console.error("[ledger] mapping fail:", row.assetSymbol, err?.message);
             counts.rejected++;
             continue;
           }

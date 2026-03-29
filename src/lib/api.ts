@@ -338,11 +338,26 @@ export async function batchCreateTransactions(
         .single();
 
       if (error) {
-        if (error.message.includes("duplicate") || error.message.includes("unique")) {
+        // Code 23505 is the Postgres standard for unique_violation
+        const isDupe = error.code === "23505" || 
+                       error.message.toLowerCase().includes("duplicate") || 
+                       error.message.toLowerCase().includes("unique") ||
+                       error.message.toLowerCase().includes("already exists");
+
+        if (isDupe) {
           skippedDuplicates++;
+          // Still record the fingerprint audit log if it's missing (failsafe)
+          if (input.fingerprint_hash) {
+            await supabase.from("import_row_fingerprints").upsert({
+              user_id: user.id,
+              fingerprint_hash: input.fingerprint_hash,
+              native_id: input.external_id || null,
+              source_exchange: input.venue || null,
+            }, { onConflict: "user_id,fingerprint_hash" });
+          }
         } else {
           errors++;
-          errorDetails.push({ index: i, reason: error.message });
+          errorDetails.push({ index: i, reason: `${error.code ? `[${error.code}] ` : ""}${error.message}` });
         }
       } else if (data) {
         created++;
