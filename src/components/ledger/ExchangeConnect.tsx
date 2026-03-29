@@ -92,21 +92,30 @@ interface Connection {
 const AUTO_SYNC_KEY = "exchange_auto_sync";
 const AUTO_SYNC_INTERVAL_KEY = "exchange_auto_sync_interval";
 
-const FUNCTION_URL = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/exchange-sync`;
-
 async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error("Not authenticated");
-
-  return fetch(`${FUNCTION_URL}${path}`, {
-    ...options,
-    headers: {
-      ...options.headers as Record<string, string>,
-      "Authorization": `Bearer ${session.access_token}`,
-      "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-      "Content-Type": "application/json",
-    },
+  // Use the official Supabase functions.invoke helper.
+  // This automatically handles the base URL, auth headers, and apikey.
+  const { data, error } = await supabase.functions.invoke(`exchange-sync${path}`, {
+    method: options.method as any || "GET",
+    body: options.body ? JSON.parse(options.body as string) : undefined,
+    headers: options.headers as Record<string, string>,
   });
+
+  if (error) {
+    console.error("[ExchangeConnect] Function error:", error);
+    // Return a fake Response object that matches what the callers expect
+    return {
+      ok: false,
+      status: (error as any).status || 500,
+      json: async () => ({ error: error.message || "Function call failed" }),
+    } as Response;
+  }
+
+  return {
+    ok: true,
+    status: 200,
+    json: async () => data,
+  } as Response;
 }
 
 export default function ExchangeConnect() {
