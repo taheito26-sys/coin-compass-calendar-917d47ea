@@ -4,7 +4,7 @@
  *       Capital Pools, Settlements, Approvals, Notifications, Audit, Settings
  */
 import { useState, useEffect, useCallback } from "react";
-import { useAuth } from "@clerk/react";
+import { useAuth } from "@/lib/supabaseAuth";
 import * as api from "@/lib/merchantApi";
 
 type MerchantTab = "overview" | "directory" | "invites" | "relationships" | "advances" | "sales" | "profit_share" | "pools" | "settlements" | "approvals" | "notifications" | "audit" | "settings";
@@ -892,11 +892,11 @@ function NotificationsTab() {
 
   const markRead = async (id: string) => {
     await api.markNotificationRead(id);
-    setNotifs(n => n.map(x => x.id === id ? { ...x, read_at: new Date().toISOString() } : x));
+    setNotifs(n => n.map(x => x.id === id ? { ...x, read: 1 } : x));
   };
   const markAll = async () => {
     await api.markAllRead();
-    setNotifs(n => n.map(x => ({ ...x, read_at: x.read_at || new Date().toISOString() })));
+    setNotifs(n => n.map(x => ({ ...x, read: 1 })));
   };
 
   return (
@@ -906,17 +906,17 @@ function NotificationsTab() {
       </div>
       {notifs.length === 0 && <Empty text="No notifications" />}
       {notifs.map(n => (
-        <div key={n.id} onClick={() => !n.read_at && markRead(n.id)} style={{
-          background: n.read_at ? "var(--panel)" : "rgba(59,130,246,0.06)",
-          border: `1px solid ${n.read_at ? "var(--line)" : "rgba(59,130,246,0.2)"}`,
-          borderRadius: 8, padding: 12, marginBottom: 6, cursor: n.read_at ? "default" : "pointer",
+        <div key={n.id} onClick={() => !n.read && markRead(n.id)} style={{
+          background: n.read ? "var(--panel)" : "rgba(59,130,246,0.06)",
+          border: `1px solid ${n.read ? "var(--line)" : "rgba(59,130,246,0.2)"}`,
+          borderRadius: 8, padding: 12, marginBottom: 6, cursor: n.read ? "default" : "pointer",
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
             <span style={{ fontWeight: 600, color: "var(--text)" }}>{n.title}</span>
             <span style={{ color: "var(--muted2)" }}>{new Date(n.created_at).toLocaleString()}</span>
           </div>
           {n.body && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>{n.body}</div>}
-          <span style={{ fontSize: 9, color: "var(--muted2)", textTransform: "uppercase" }}>{n.category}</span>
+          <span style={{ fontSize: 9, color: "var(--muted2)", textTransform: "uppercase" }}>{n.type}</span>
         </div>
       ))}
     </div>
@@ -1158,11 +1158,11 @@ export default function MerchantPage() {
       setProfile(p);
       if (p) {
         const [rels, d, n, adv] = await Promise.all([
-          api.fetchRelationships(), api.fetchDeals(), api.fetchUnreadCount(), api.fetchAdvances(),
+          api.fetchRelationships(), api.fetchDeals(), api.unreadCount(), api.fetchAdvances(),
         ]);
         setRelationships(rels.relationships);
         setDeals(d.deals);
-        setUnreadCount(n.unread);
+        setUnreadCount(n.count);
         setAdvances(adv.advances);
       }
     } catch {}
@@ -1174,7 +1174,7 @@ export default function MerchantPage() {
   useEffect(() => {
     if (!profile) return;
     const iv = setInterval(() => {
-      api.fetchUnreadCount().then(r => setUnreadCount(r.unread)).catch(() => {});
+      api.unreadCount().then(r => setUnreadCount(r.count)).catch(() => {});
     }, 15000);
     return () => clearInterval(iv);
   }, [profile]);

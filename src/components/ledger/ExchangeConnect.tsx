@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { isWorkerConfigured } from "@/lib/api";
 import { useCrypto } from "@/lib/cryptoContext";
-
-const WORKER_BASE = (import.meta.env.VITE_WORKER_API_URL || "https://cryptotracker-api.taheito26.workers.dev").replace(/\/$/, "");
+import { supabase } from "@/integrations/supabase/client";
 
 interface ExchangeDef {
   id: string;
@@ -94,24 +92,8 @@ interface Connection {
 const AUTO_SYNC_KEY = "exchange_auto_sync";
 const AUTO_SYNC_INTERVAL_KEY = "exchange_auto_sync_interval";
 
-async function apiFetch(path: string, options: RequestInit = {}) {
-  let token = "";
-  try {
-    const w = window as any;
-    if (w.Clerk?.session) {
-      token = await w.Clerk.session.getToken();
-    }
-  } catch {}
-
-  const res = await fetch(`${WORKER_BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(options.headers || {}),
-    },
-  });
-  return res;
+async function apiFetch(_path: string, _options: RequestInit = {}): Promise<Response> {
+  throw new Error("Exchange sync backend not yet migrated to Supabase");
 }
 
 export default function ExchangeConnect() {
@@ -141,7 +123,8 @@ export default function ExchangeConnect() {
   const [nextAutoSync, setNextAutoSync] = useState<Date | null>(null);
 
   const loadConnections = useCallback(async () => {
-    if (!isWorkerConfigured()) { setLoading(false); return; }
+    // Exchange sync not yet migrated to Supabase
+    setLoading(false); return;
     try {
       const res = await apiFetch("/api/exchange-sync");
       if (res.ok) {
@@ -301,14 +284,15 @@ export default function ExchangeConnect() {
     } catch {}
   };
 
-  if (!isWorkerConfigured()) {
+  // Exchange sync not yet migrated to Supabase
+  if (true) {
     return (
       <div className="panel">
         <div className="panel-body" style={{ textAlign: "center", padding: 40 }}>
           <div style={{ fontSize: 28, marginBottom: 8 }}>🔗</div>
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>Backend Required</div>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>Coming Soon</div>
           <div className="muted" style={{ fontSize: 12 }}>
-            Exchange API connections require the Cloudflare Worker backend to be deployed and configured.
+            Exchange API connections are being migrated to Supabase and will be available soon.
           </div>
         </div>
       </div>

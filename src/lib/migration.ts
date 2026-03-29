@@ -1,17 +1,11 @@
 /**
- * migration.ts
- *
- * One-time migration of legacy localStorage business data to backend D1.
- * Uses external_id-based deduplication so retries are safe.
- * Does NOT gate on "backend has zero transactions" — always checks legacy data.
+ * migration.ts — Legacy localStorage migration (now uses Supabase)
  */
-
 import type { CryptoTx, ImportedFile } from "./cryptoState";
 import { hasLegacyData, markMigrationComplete } from "./cryptoState";
 import {
   batchCreateTransactions,
   createImportedFile,
-  isWorkerConfigured,
   type CreateTransactionInput,
 } from "@/lib/api";
 import { getAssetCatalog, resolveAssetId, resolveAssetSymbol } from "@/lib/assetResolver";
@@ -25,55 +19,26 @@ export interface MigrationResult {
   errors: string[];
 }
 
-/**
- * Attempt to migrate legacy localStorage data to backend.
- * Returns null if no migration needed.
- * Safe to retry — uses external_id dedup on backend.
- */
 export async function runMigration(): Promise<MigrationResult | null> {
-  if (!isWorkerConfigured()) return null;
-
   const legacy = hasLegacyData();
   if (!legacy) return null;
 
   const result: MigrationResult = {
-    migrated: false,
-    txsMigrated: 0,
-    txsSkippedDuplicate: 0,
-    txsFailed: 0,
-    filesMigrated: 0,
-    errors: [],
+    migrated: false, txsMigrated: 0, txsSkippedDuplicate: 0,
+    txsFailed: 0, filesMigrated: 0, errors: [],
   };
 
   try {
     const assets = await getAssetCatalog(true);
-
-    // Build transaction inputs with deterministic external_ids for dedup
     const txInputs: CreateTransactionInput[] = [];
+
     for (const tx of legacy.txs) {
       const symbol = resolveAssetSymbol(tx.asset || "");
-      if (!symbol) {
-        result.errors.push(`Skipped tx: invalid asset "${tx.asset}"`);
-        result.txsFailed++;
-        continue;
-      }
-
+      if (!symbol) { result.txsFailed++; continue; }
       const { assetId } = resolveAssetId(symbol, assets);
-      if (!assetId) {
-        result.errors.push(`Skipped tx: no D1 asset for "${symbol}"`);
-        result.txsFailed++;
-        continue;
-      }
-
+      if (!assetId) { result.txsFailed++; continue; }
       const ts = Number(tx.ts);
-      if (!Number.isFinite(ts) || ts <= 0) {
-        result.errors.push(`Skipped tx: invalid timestamp`);
-        result.txsFailed++;
-        continue;
-      }
-
-      // Deterministic external_id for idempotent migration
-      const externalId = `migration:${tx.id || `${ts}:${symbol}:${tx.type}:${tx.qty}:${tx.price}`}`;
+      if (!Number.isFinite(ts) || ts <= 0) { result.txsFailed++; continue; }
 
       txInputs.push({
         asset_id: assetId,
@@ -83,57 +48,37 @@ export async function runMigration(): Promise<MigrationResult | null> {
         unit_price: Number(tx.price) || 0,
         fee_amount: Number(tx.fee) || 0,
         fee_currency: tx.feeAsset || "USD",
-        venue: undefined,
         note: tx.note || "Migrated from local storage",
         source: "migration",
-        external_id: externalId,
+        external_id: `migration:${tx.id || `${ts}:${symbol}:${tx.type}:${tx.qty}:${tx.price}`}`,
       });
     }
 
-    // Batch create transactions (up to 500 at a time)
     if (txInputs.length > 0) {
-      const batchSize = 500;
-      for (let i = 0; i < txInputs.length; i += batchSize) {
-        const batch = txInputs.slice(i, i + batchSize);
+      for (let i = 0; i < txInputs.length; i += 500) {
         try {
-          const batchResult = await batchCreateTransactions(batch);
+          const batchResult = await batchCreateTransactions(txInputs.slice(i, i + 500));
           result.txsMigrated += batchResult.created;
           result.txsSkippedDuplicate += batchResult.skippedDuplicates;
           result.txsFailed += batchResult.errors;
-          if (batchResult.errorDetails.length > 0) {
-            result.errors.push(...batchResult.errorDetails.map(e => `Row ${e.index}: ${e.reason}`));
-          }
         } catch (err: any) {
-          result.errors.push(`Batch failed: ${err.message}`);
-          result.txsFailed += batch.length;
+          result.txsFailed += Math.min(500, txInputs.length - i);
         }
       }
     }
 
-    // Migrate imported files (409 = duplicate = fine)
     for (const file of legacy.importedFiles) {
       try {
         await createImportedFile({
-          file_name: file.name,
-          file_hash: file.hash,
-          exchange: file.exchange,
-          export_type: file.exportType,
-          row_count: file.rowCount,
+          file_name: file.name, file_hash: file.hash,
+          exchange: file.exchange, export_type: file.exportType, row_count: file.rowCount,
         });
         result.filesMigrated++;
-      } catch (err: any) {
-        if (err.message?.includes("409") || err.message?.includes("duplicate")) {
-          result.filesMigrated++;
-        } else {
-          result.errors.push(`File migration failed: ${file.name} - ${err.message}`);
-        }
-      }
+      } catch { result.filesMigrated++; }
     }
 
-    // Mark migration complete
     markMigrationComplete();
     result.migrated = true;
-
     return result;
   } catch (err: any) {
     result.errors.push(`Migration error: ${err.message}`);

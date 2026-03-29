@@ -5,12 +5,7 @@
  * - Binance REST bootstrap on mount
  * - Binance WebSocket for live tick updates
  * - Falls back to CoinGecko for coins not on Binance
- * - Also keeps CoinGecko market data for Markets page (bubbles/table)
- *
- * The hook exposes both:
- *   1. `spotPrices` — Record<symbol, SpotPrice> from Binance WS (for portfolio/dashboard)
- *   2. `coins` — LiveCoin[] from CoinGecko (for Markets page bubbles/table)
- *   3. `getPrice(sym)` — merged getter: WS price first, then CoinGecko, then null
+ * - Multi-source market data (CoinGecko direct, CoinCap, Binance ticker)
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
@@ -40,12 +35,6 @@ export interface LiveCoin {
 }
 
 // ─── Multi-source market data with cascading fallback ──────
-// Priority: Worker Proxy (server-side, no CORS) → Direct browser requests
-// The Worker proxy itself cascades: CoinGecko → CoinCap → CoinPaprika → CryptoCompare → Binance
-
-import { isWorkerConfigured } from "@/lib/api";
-
-const WORKER_BASE = (import.meta.env.VITE_WORKER_API_URL || "https://cryptotracker-api.taheito26.workers.dev").replace(/\/$/, "");
 
 let _marketCache: LiveCoin[] = [];
 let _marketCacheTs = 0;
@@ -60,16 +49,6 @@ function notifyListeners() {
   _marketListeners.forEach(cb => cb());
 }
 
-// ── Primary: Worker proxy (server-side fetch, no CORS issues) ──
-async function fetchViaWorkerProxy(signal: AbortSignal): Promise<{ coins: LiveCoin[]; source: string }> {
-  const r = await fetch(`${WORKER_BASE}/api/market-data`, { signal });
-  if (!r.ok) throw new Error(`Worker proxy ${r.status}`);
-  const data = await r.json();
-  if (!data.coins?.length) throw new Error("Worker proxy empty");
-  return { coins: data.coins, source: `Proxy:${data.source || "unknown"}` };
-}
-
-// ── Fallback: Direct browser requests ──────────────────────
 async function fetchCoinGeckoDirect(signal: AbortSignal): Promise<LiveCoin[]> {
   const url = (page: number) =>
     `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=${page}&sparkline=false&price_change_percentage=1h,24h,7d`;
@@ -133,24 +112,7 @@ async function doMarketFetch() {
   if (_marketFetching) return;
   _marketFetching = true;
   try {
-    // 1. Try Worker proxy first (server-side, no CORS/rate-limit issues)
-    if (isWorkerConfigured()) {
-      try {
-        const { coins, source } = await fetchViaWorkerProxy(AbortSignal.timeout(15000));
-        if (coins.length > 0) {
-          _marketCache = coins;
-          _marketCacheTs = Date.now();
-          _lastSource = source;
-          console.log(`[Prices] Loaded ${coins.length} coins via ${source}`);
-          notifyListeners();
-          return;
-        }
-      } catch (err) {
-        console.warn("[Prices] Worker proxy failed:", err instanceof Error ? err.message : err);
-      }
-    }
-
-    // 2. Fallback: direct browser requests
+    // Direct browser requests — no Worker proxy needed
     const directSources: { name: string; fn: (s: AbortSignal) => Promise<LiveCoin[]> }[] = [
       { name: "CoinGecko", fn: fetchCoinGeckoDirect },
       { name: "CoinCap", fn: fetchCoinCapDirect },
@@ -164,12 +126,12 @@ async function doMarketFetch() {
           _marketCache = coins;
           _marketCacheTs = Date.now();
           _lastSource = `Direct:${source.name}`;
-          console.log(`[Prices] Loaded ${coins.length} coins direct from ${source.name}`);
+          console.log(`[Prices] Loaded ${coins.length} coins from ${source.name}`);
           notifyListeners();
           return;
         }
       } catch (err) {
-        console.warn(`[Prices] Direct ${source.name} failed:`, err instanceof Error ? err.message : err);
+        console.warn(`[Prices] ${source.name} failed:`, err instanceof Error ? err.message : err);
         continue;
       }
     }
@@ -180,7 +142,6 @@ async function doMarketFetch() {
   }
 }
 
-// Persist to localStorage for resilience across reloads
 const LS_CACHE_KEY = "lt_market_cache";
 function persistCache() {
   try {
@@ -220,30 +181,25 @@ function ensureMarketPolling() {
 export function useLivePrices() {
   const { state } = useCrypto();
 
-  // Market data (multi-source with fallback)
   const [marketCoins, setMarketCoins] = useState<LiveCoin[]>(_marketCache);
   const [marketLoading, setMarketLoading] = useState(_marketCache.length === 0);
 
-  // Binance spot prices (for portfolio pricing)
   const [spotPrices, setSpotPrices] = useState<Record<string, SpotPrice>>({});
   const [wsRevision, setWsRevision] = useState(0);
   const bootstrapDoneRef = useRef(false);
 
-  // Derive unique asset symbols from transactions
   const assetSymbols = useMemo(() => {
     const set = new Set<string>();
     for (const tx of state.txs) {
       const sym = normalizeSymbol(tx.asset || "");
       if (sym) set.add(sym);
     }
-    // Also include watchlist
     for (const w of state.watch || []) {
       set.add(w.toUpperCase());
     }
     return [...set];
   }, [state.txs, state.watch]);
 
-  // 1. Multi-source market data polling
   useEffect(() => {
     const update = () => {
       setMarketCoins(_marketCache);
@@ -255,7 +211,6 @@ export function useLivePrices() {
     return () => { _marketListeners.delete(update); };
   }, []);
 
-  // 2. Binance REST bootstrap when asset list changes
   useEffect(() => {
     if (assetSymbols.length === 0) return;
 
@@ -275,18 +230,14 @@ export function useLivePrices() {
     return () => { cancelled = true; };
   }, [assetSymbols.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 3. Binance WebSocket subscription
   useEffect(() => {
     if (assetSymbols.length === 0) return;
-
     const unsub = subscribeLivePrices(assetSymbols, () => {
       setWsRevision(r => r + 1);
     });
-
     return unsub;
   }, [assetSymbols.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Build market price map for quick lookup
   const cgPriceMap = useRef(new Map<string, LiveCoin>());
   useEffect(() => {
     const m = new Map<string, LiveCoin>();
@@ -294,17 +245,15 @@ export function useLivePrices() {
     cgPriceMap.current = m;
   }, [marketCoins]);
 
-  // Merge WS prices with REST bootstrap
   const mergedPrices = useMemo(() => {
     const ws = getWsPrices();
     const merged = { ...spotPrices };
     for (const [sym, p] of Object.entries(ws)) {
-      merged[sym] = p; // WS always overrides REST
+      merged[sym] = p;
     }
     return merged;
   }, [spotPrices, wsRevision]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Unified price getter: WS/Binance → market data → null
   const getPrice = useCallback((sym: string): LiveCoin | null => {
     const key = sym.toUpperCase();
     const cg = cgPriceMap.current.get(key);

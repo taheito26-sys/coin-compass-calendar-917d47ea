@@ -50,6 +50,146 @@ export type Database = {
         }
         Relationships: []
       }
+      import_batches: {
+        Row: {
+          accepted_new_count: number | null
+          already_imported_count: number | null
+          conflict_count: number | null
+          created_at: string | null
+          failed_count: number | null
+          file_hash: string
+          file_name: string
+          id: string
+          invalid_count: number | null
+          parsed_count: number | null
+          persisted_count: number | null
+          source_exchange: string | null
+          source_export_type: string | null
+          user_id: string
+          warning_count: number | null
+        }
+        Insert: {
+          accepted_new_count?: number | null
+          already_imported_count?: number | null
+          conflict_count?: number | null
+          created_at?: string | null
+          failed_count?: number | null
+          file_hash: string
+          file_name: string
+          id?: string
+          invalid_count?: number | null
+          parsed_count?: number | null
+          persisted_count?: number | null
+          source_exchange?: string | null
+          source_export_type?: string | null
+          user_id: string
+          warning_count?: number | null
+        }
+        Update: {
+          accepted_new_count?: number | null
+          already_imported_count?: number | null
+          conflict_count?: number | null
+          created_at?: string | null
+          failed_count?: number | null
+          file_hash?: string
+          file_name?: string
+          id?: string
+          invalid_count?: number | null
+          parsed_count?: number | null
+          persisted_count?: number | null
+          source_exchange?: string | null
+          source_export_type?: string | null
+          user_id?: string
+          warning_count?: number | null
+        }
+        Relationships: []
+      }
+      import_row_fingerprints: {
+        Row: {
+          canonical_json: string | null
+          created_at: string | null
+          fingerprint_hash: string
+          id: string
+          native_id: string | null
+          source_exchange: string | null
+          source_export_type: string | null
+          transaction_id: string | null
+          user_id: string
+        }
+        Insert: {
+          canonical_json?: string | null
+          created_at?: string | null
+          fingerprint_hash: string
+          id?: string
+          native_id?: string | null
+          source_exchange?: string | null
+          source_export_type?: string | null
+          transaction_id?: string | null
+          user_id: string
+        }
+        Update: {
+          canonical_json?: string | null
+          created_at?: string | null
+          fingerprint_hash?: string
+          id?: string
+          native_id?: string | null
+          source_exchange?: string | null
+          source_export_type?: string | null
+          transaction_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      import_rows: {
+        Row: {
+          batch_id: string
+          canonical_json: string | null
+          created_at: string | null
+          fingerprint_hash: string | null
+          id: string
+          message: string | null
+          native_id: string | null
+          source_row_index: number
+          status: string
+          transaction_id: string | null
+          user_id: string
+        }
+        Insert: {
+          batch_id: string
+          canonical_json?: string | null
+          created_at?: string | null
+          fingerprint_hash?: string | null
+          id?: string
+          message?: string | null
+          native_id?: string | null
+          source_row_index: number
+          status: string
+          transaction_id?: string | null
+          user_id: string
+        }
+        Update: {
+          batch_id?: string
+          canonical_json?: string | null
+          created_at?: string | null
+          fingerprint_hash?: string | null
+          id?: string
+          message?: string | null
+          native_id?: string | null
+          source_row_index?: number
+          status?: string
+          transaction_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_rows_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "import_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       imported_files: {
         Row: {
           exchange: string
@@ -220,6 +360,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_preferences: {
+        Row: {
+          id: string
+          key: string
+          user_id: string
+          value: string
+        }
+        Insert: {
+          id?: string
+          key: string
+          user_id: string
+          value: string
+        }
+        Update: {
+          id?: string
+          key?: string
+          user_id?: string
+          value?: string
+        }
+        Relationships: []
       }
     }
     Views: {
