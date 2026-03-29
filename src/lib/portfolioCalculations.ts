@@ -75,7 +75,7 @@ export function calculateFIFOLots(
   let realizedPnL = 0;
 
   for (const tx of assetTxs) {
-    if (tx.type === 'buy' || tx.type === 'transfer_in' || tx.type === 'reward') {
+    if (tx.type === 'buy') {
       const totalCost = tx.qty * tx.unit_price + tx.fee_amount;
       const unitCost = tx.qty > 0 ? totalCost / tx.qty : 0;
 
@@ -91,7 +91,7 @@ export function calculateFIFOLots(
         venue: tx.venue,
         note: tx.note,
       });
-    } else if (tx.type === 'sell' || tx.type === 'transfer_out') {
+    } else if (tx.type === 'sell') {
       let qtyToConsume = tx.qty;
       let costBasisConsumed = 0;
 
@@ -107,10 +107,8 @@ export function calculateFIFOLots(
         costBasisConsumed += consumeCost;
       }
 
-      if (tx.type === 'sell') {
-        const saleProceeds = tx.qty * tx.unit_price - tx.fee_amount;
-        realizedPnL += saleProceeds - costBasisConsumed;
-      }
+      const saleProceeds = tx.qty * tx.unit_price - tx.fee_amount;
+      realizedPnL += saleProceeds - costBasisConsumed;
     }
   }
 
@@ -133,11 +131,11 @@ export function calculateDCAPosition(
   let realizedPnL = 0;
 
   for (const tx of assetTxs) {
-    if (tx.type === 'buy' || tx.type === 'transfer_in' || tx.type === 'reward') {
+    if (tx.type === 'buy') {
       const buyCost = tx.qty * tx.unit_price + tx.fee_amount;
       totalQty += tx.qty;
       totalCostBasis += buyCost;
-    } else if (tx.type === 'sell' || tx.type === 'transfer_out') {
+    } else if (tx.type === 'sell') {
       if (totalQty > 0) {
         const avgCostPerUnit = totalCostBasis / totalQty;
         const costBasisConsumed = tx.qty * avgCostPerUnit;
@@ -145,10 +143,8 @@ export function calculateDCAPosition(
         totalQty -= tx.qty;
         totalCostBasis -= costBasisConsumed;
 
-        if (tx.type === 'sell') {
-          const saleProceeds = tx.qty * tx.unit_price - tx.fee_amount;
-          realizedPnL += saleProceeds - costBasisConsumed;
-        }
+        const saleProceeds = tx.qty * tx.unit_price - tx.fee_amount;
+        realizedPnL += saleProceeds - costBasisConsumed;
       }
     } else if (tx.type === 'fee') {
       totalCostBasis += tx.fee_amount;

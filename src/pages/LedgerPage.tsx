@@ -40,19 +40,11 @@ const EXCHANGE_LABELS: Record<string, string> = {
 const TX_TYPES = [
   { value: "buy",          label: "Buy",          color: "var(--good)" },
   { value: "sell",         label: "Sell",         color: "var(--bad)" },
-  { value: "transfer_in",  label: "Transfer In",  color: "var(--brand)" },
-  { value: "transfer_out", label: "Transfer Out", color: "var(--muted)" },
-  { value: "reward",       label: "Reward",       color: "#f59e0b" },
-  { value: "adjustment",   label: "Adjustment",   color: "#8b5cf6" },
 ];
 
 const TYPE_META: Record<string, { label: string; color: string; icon: string }> = {
   buy:          { label: "BUY",    color: "var(--good)",  icon: "↑" },
   sell:         { label: "SELL",   color: "var(--bad)",   icon: "↓" },
-  transfer_in:  { label: "IN",     color: "var(--brand)", icon: "→" },
-  transfer_out: { label: "OUT",    color: "var(--muted)", icon: "←" },
-  reward:       { label: "REWARD", color: "#f59e0b",      icon: "★" },
-  adjustment:   { label: "ADJ",    color: "#8b5cf6",      icon: "~" },
 };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -155,6 +147,9 @@ export default function LedgerPage() {
   // Journal search/filter
   const [searchQ, setSearchQ] = useState("");
   const [filterType, setFilterType] = useState("");
+  const [filterAsset, setFilterAsset] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
   // Inline edit
   const [editId, setEditId] = useState<string | null>(null);
@@ -193,14 +188,65 @@ export default function LedgerPage() {
   // ── Filtered txs for Journal ───────────────────────────────────────────────
 
   const filteredTxs = useMemo(() => {
-    let txs = [...state.txs].sort((a, b) => b.ts - a.ts).slice(0, 500);
+    let txs = [...state.txs].sort((a, b) => b.ts - a.ts);
+    
     if (filterType) txs = txs.filter(t => t.type === filterType);
+    if (filterAsset) txs = txs.filter(t => t.asset.toUpperCase() === filterAsset.toUpperCase());
+    
+    if (fromDate) {
+      const start = new Date(fromDate).getTime();
+      txs = txs.filter(t => t.ts >= start);
+    }
+    if (toDate) {
+      const end = new Date(toDate).getTime() + 86400000; // end of day
+      txs = txs.filter(t => t.ts < end);
+    }
+    
     if (searchQ) {
       const q = searchQ.toLowerCase();
       txs = txs.filter(t => t.asset.toLowerCase().includes(q) || (t.note || "").toLowerCase().includes(q));
     }
-    return txs;
-  }, [state.txs, filterType, searchQ]);
+    
+    return txs.slice(0, 500);
+  }, [state.txs, filterType, filterAsset, fromDate, toDate, searchQ]);
+
+  const uniqueAssets = useMemo(() => {
+    const assets = new Set<string>();
+    state.txs.forEach(t => assets.add(t.asset.toUpperCase()));
+    return Array.from(assets).sort();
+  }, [state.txs]);
+
+  const clearFilters = () => {
+    setSearchQ("");
+    setFilterType("");
+    setFilterAsset("");
+    setFromDate("");
+    setToDate("");
+  };
+
+  const exportToCsv = () => {
+    if (filteredTxs.length === 0) {
+      toast("No transactions to export", "bad");
+      return;
+    }
+    const header = "Date,Type,Asset,Quantity,Price,Total,Fee,Venue,Note\n";
+    const rows = filteredTxs.map(t => {
+      const date = new Date(t.ts).toISOString().split("T")[0];
+      const total = t.qty * t.price;
+      const note = (t.note || "").replace(/"/g, '""');
+      const venue = ((t as any).venue || "").replace(/"/g, '""');
+      return `${date},${t.type.toUpperCase()},${t.asset},${t.qty},${t.price},${total},${t.fee},"${venue}","${note}"`;
+    }).join("\n");
+
+    const blob = new Blob([header + rows], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `ledger-export-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast("Ledger exported ✓", "good");
+  };
 
   // ── Save manual transaction (BACKEND-ONLY) ────────────────────────────────
 
@@ -572,28 +618,77 @@ export default function LedgerPage() {
             </div>
           </div>
 
-          {/* Filters */}
-          <div style={{ padding: "10px 16px", display: "flex", gap: 8, flexWrap: "wrap", borderBottom: "1px solid var(--line)" }}>
-            <input
-              className="inp"
-              placeholder="Search asset, note…"
-              value={searchQ}
-              onChange={e => setSearchQ(e.target.value)}
-              style={{ width: 180, padding: "5px 10px", fontSize: 12 }}
-            />
-            <select
-              className="inp"
-              value={filterType}
-              onChange={e => setFilterType(e.target.value)}
-              style={{ width: 140, padding: "5px 8px", fontSize: 12 }}
-            >
-              <option value="">All Types</option>
-              {TX_TYPES.map(tt => <option key={tt.value} value={tt.value}>{tt.label}</option>)}
-            </select>
-            {(searchQ || filterType) && (
-              <button className="btn secondary" onClick={() => { setSearchQ(""); setFilterType(""); }}
-                style={{ padding: "5px 10px", fontSize: 11 }}>Clear</button>
-            )}
+          {/* Filters Row */}
+          <div style={{ padding: "12px 16px", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", borderBottom: "1px solid var(--line)", background: "var(--panel2)33" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: "0.05em" }}>SEARCH</label>
+              <input
+                className="inp"
+                placeholder="Note, venue…"
+                value={searchQ}
+                onChange={e => setSearchQ(e.target.value)}
+                style={{ width: 140, padding: "6px 10px", fontSize: 12 }}
+              />
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: "0.05em" }}>TYPE</label>
+              <select
+                className="inp"
+                value={filterType}
+                onChange={e => setFilterType(e.target.value)}
+                style={{ width: 100, padding: "6px 8px", fontSize: 12 }}
+              >
+                <option value="">All Types</option>
+                {TX_TYPES.map(tt => <option key={tt.value} value={tt.value}>{tt.label}</option>)}
+              </select>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: "0.05em" }}>ASSET</label>
+              <select
+                className="inp"
+                value={filterAsset}
+                onChange={e => setFilterAsset(e.target.value)}
+                style={{ width: 110, padding: "6px 8px", fontSize: 12 }}
+              >
+                <option value="">All Assets</option>
+                {uniqueAssets.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: "0.05em" }}>FROM</label>
+              <input
+                type="date"
+                className="inp"
+                value={fromDate}
+                onChange={e => setFromDate(e.target.value)}
+                style={{ width: 130, padding: "5px 10px", fontSize: 12 }}
+              />
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: "0.05em" }}>TO</label>
+              <input
+                type="date"
+                className="inp"
+                value={toDate}
+                onChange={e => setToDate(e.target.value)}
+                style={{ width: 130, padding: "5px 10px", fontSize: 12 }}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
+              {(searchQ || filterType || filterAsset || fromDate || toDate) && (
+                <button className="btn secondary" onClick={clearFilters}
+                  style={{ padding: "6px 14px", fontSize: 12, fontWeight: 700 }}>Clear</button>
+              )}
+              <button className="btn secondary" onClick={exportToCsv}
+                style={{ padding: "6px 14px", fontSize: 12, fontWeight: 700, color: "var(--brand)" }}>
+                Export CSV
+              </button>
+            </div>
           </div>
 
           {/* Table */}

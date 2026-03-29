@@ -37,8 +37,8 @@ function computeTaxLots(txs: CryptoTx[], method: AccountingMethod, year: number)
     const q = Math.abs(tx.qty || 0);
     if (q <= 0) continue;
 
-    if (type === "buy" || type === "reward" || type === "deposit" || type === "transfer_in") {
-      const fee = type === "buy" ? (tx.fee || 0) : 0;
+    if (type === "buy") {
+      const fee = tx.fee || 0;
       const totalCost = (q * (tx.price || 0)) + fee;
       lots.push({ ts: tx.ts, qty: q, qtyRem: q, unitCost: totalCost / q });
     } else if (type === "sell") {

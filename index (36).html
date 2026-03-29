@@ -1570,8 +1570,8 @@ function derivePortfolio(txs, priceGetter){
     const pos = positions[tx.asset];
     pos.txCount++;
 
-    const isIn = ["buy","reward","transfer_in","adjustment"].includes(tx.type) && tx.qty > 0;
-    const isOut = ["sell","transfer_out","fee"].includes(tx.type) || (tx.type === "adjustment" && tx.qty < 0);
+    const isIn = ["buy"].includes(tx.type) && tx.qty > 0;
+    const isOut = ["sell","fee"].includes(tx.type);
 
     if(isIn){
       const unitCost = tx.type==="buy" && tx.fee > 0 ? (tx.qty * tx.price + tx.fee) / tx.qty : tx.price;
@@ -2665,7 +2665,7 @@ function renderLedger(){
         <div class="hdr">➕ Manual Entry</div>
         <div class="inner">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-            <div class="field"><div class="label">Type</div><select id="txType" class="input"><option value="buy">Buy</option><option value="sell">Sell</option><option value="transfer_in">Transfer In</option><option value="transfer_out">Transfer Out</option><option value="reward">Reward</option><option value="adjustment">Adjustment</option></select></div>
+            <div class="field"><div class="label">Type</div><select id="txType" class="input"><option value="buy">Buy</option><option value="sell">Sell</option></select></div>
             <div class="field"><div class="label">Asset</div><div class="coinAutoWrap" id="txAssetAuto"><input id="txAsset" class="input" placeholder="BTC" autocomplete="off"/><div class="coinAutoDropdown" id="txAssetDropdown" hidden></div></div></div>
 
           </div>
@@ -2702,7 +2702,7 @@ function renderLedger(){
       <div class="panel-head">
         <h2>Transaction Ledger</h2>
         <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
-          ${["all","buy","sell","transfer_in","transfer_out","reward","adjustment"].map(t=>`<button class="btn ${_ledgerTypeFilter===t?"":"secondary"}" style="padding:2px 8px;font-size:10px;" onclick="window.setLedgerFilter('${t}')">${t==="all"?"All":t.replace("_"," ")}</button>`).join("")}
+          ${["all","buy","sell"].map(t=>`<button class="btn ${_ledgerTypeFilter===t?"":"secondary"}" style="padding:2px 8px;font-size:10px;" onclick="window.setLedgerFilter('${t}')">${t==="all"?"All":t.replace("_"," ")}</button>`).join("")}
           <span class="pill">${filtered.length} records</span>
         </div>
       </div>

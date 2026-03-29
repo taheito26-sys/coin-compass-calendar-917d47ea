@@ -57,8 +57,8 @@ interface FifoState {
   txCountByAsset: Map<string, number>;
 }
 
-const IN_TYPES = new Set(["buy", "reward", "transfer_in", "deposit"]);
-const OUT_TYPES = new Set(["sell", "transfer_out", "withdrawal", "fee"]);
+const IN_TYPES = new Set(["buy"]);
+const OUT_TYPES = new Set(["sell"]);
 
 function runFifo(txs: CryptoTx[]): FifoState {
   const sorted = [...txs].sort((a, b) => a.ts - b.ts);
@@ -84,9 +84,8 @@ function runFifo(txs: CryptoTx[]): FifoState {
 
     if (!(q > 0)) continue;
 
-    const isAdjustment = type === "adjustment";
-    const isIn = IN_TYPES.has(type) || (isAdjustment && rawQty >= 0);
-    const isOut = OUT_TYPES.has(type) || (isAdjustment && rawQty < 0);
+    const isIn = IN_TYPES.has(type);
+    const isOut = OUT_TYPES.has(type);
 
     if (isIn) {
       const buyLike = type === "buy";
@@ -160,7 +159,7 @@ export function derivePortfolio(
     if (!(q > 0)) continue;
     const ts = tx.ts;
 
-    if (IN_TYPES.has(type) || (type === "adjustment" && Number(tx.qty || 0) >= 0)) {
+    if (IN_TYPES.has(type)) {
       const prev = assetBuyStats.get(sym) || { totalBought: 0, totalCost: 0, firstTs: ts, lastTs: ts };
       const price = Number(tx.price || 0);
       const fee = Number(tx.fee || 0);
