@@ -316,8 +316,8 @@ export async function batchCreateTransactions(
   for (let i = 0; i < transactions.length; i++) {
     const input = transactions[i];
     try {
-      const { data, error } = await supabase
-        .from("transactions")
+      const { data, error } = await (supabase
+        .from("transactions") as any)
         .insert({
           user_id: user.id,
           asset_id: input.asset_id,
@@ -546,8 +546,8 @@ export async function lookupImportRows(input: { fingerprint_hashes: string[]; na
 /** Check if this specific file content was already successfully imported. */
 export async function checkFileImported(contentHash: string): Promise<boolean> {
   if (!contentHash) return false;
-  const { data } = await supabase
-    .from("import_batches")
+  const { data } = await (supabase
+    .from("import_batches") as any)
     .select("id")
     .eq("content_hash", contentHash)
     .maybeSingle();

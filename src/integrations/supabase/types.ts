@@ -136,6 +136,7 @@ export type Database = {
           accepted_new_count: number | null
           already_imported_count: number | null
           conflict_count: number | null
+          content_hash: string | null
           created_at: string | null
           failed_count: number | null
           file_hash: string
@@ -153,6 +154,7 @@ export type Database = {
           accepted_new_count?: number | null
           already_imported_count?: number | null
           conflict_count?: number | null
+          content_hash?: string | null
           created_at?: string | null
           failed_count?: number | null
           file_hash: string
@@ -170,6 +172,7 @@ export type Database = {
           accepted_new_count?: number | null
           already_imported_count?: number | null
           conflict_count?: number | null
+          content_hash?: string | null
           created_at?: string | null
           failed_count?: number | null
           file_hash?: string
@@ -219,7 +222,15 @@ export type Database = {
           transaction_id?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "import_row_fingerprints_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       import_rows: {
         Row: {
@@ -384,6 +395,7 @@ export type Database = {
           external_id: string | null
           fee_amount: number
           fee_currency: string | null
+          fingerprint_hash: string | null
           id: string
           note: string | null
           qty: number
@@ -402,6 +414,7 @@ export type Database = {
           external_id?: string | null
           fee_amount?: number
           fee_currency?: string | null
+          fingerprint_hash?: string | null
           id?: string
           note?: string | null
           qty: number
@@ -420,6 +433,7 @@ export type Database = {
           external_id?: string | null
           fee_amount?: number
           fee_currency?: string | null
+          fingerprint_hash?: string | null
           id?: string
           note?: string | null
           qty?: number
