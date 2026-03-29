@@ -161,6 +161,7 @@ export function useLedgerMutations() {
       let totalCreated = 0;
       let totalSkipped = 0;
       let totalFailed = 0;
+      let firstErrorStr = "";
 
       // Batch in chunks of 500
       for (let i = 0; i < params.batchPayload.length; i += 500) {
@@ -168,6 +169,9 @@ export function useLedgerMutations() {
         totalCreated += result.created;
         totalSkipped += result.skippedDuplicates;
         totalFailed += result.errors;
+        if (result.firstError && !firstErrorStr) {
+          firstErrorStr = result.firstError;
+        }
       }
 
       // Record imported file metadata (409 = duplicate = fine if we use upsert or handle error)
@@ -197,7 +201,7 @@ export function useLedgerMutations() {
         persisted: totalCreated,
         skippedDuplicates: totalSkipped,
         failed: totalFailed,
-        error: totalFailed > 0 && totalCreated === 0 ? "All rows failed" : undefined,
+        error: totalFailed > 0 && totalCreated === 0 ? `All rows failed${firstErrorStr ? `: ${firstErrorStr}` : ""}` : undefined,
       };
     } catch (err: any) {
       return {

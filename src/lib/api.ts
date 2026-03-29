@@ -286,6 +286,13 @@ export async function updateTransaction(
 }
 
 export async function deleteTransaction(transactionId: string): Promise<void> {
+  // Pre-emptively clear fingerprints linked to this transaction to avoid dangling references
+  // if ON DELETE CASCADE is not available or not yet applied in migrations
+  await supabase
+    .from("import_row_fingerprints")
+    .delete()
+    .eq("transaction_id", transactionId);
+
   const { error } = await supabase
     .from("transactions")
     .delete()
@@ -299,6 +306,7 @@ export interface BatchCreateResult {
   errors: number;
   errorDetails: Array<{ index: number; reason: string }>;
   transactions: ApiTransaction[];
+  firstError?: string;
 }
 
 export async function batchCreateTransactions(
@@ -312,6 +320,7 @@ export async function batchCreateTransactions(
   let errors = 0;
   const errorDetails: Array<{ index: number; reason: string }> = [];
   const createdTxs: ApiTransaction[] = [];
+  let firstError: string | undefined;
 
   for (let i = 0; i < transactions.length; i++) {
     const input = transactions[i];
@@ -358,6 +367,9 @@ export async function batchCreateTransactions(
         } else {
           errors++;
           errorDetails.push({ index: i, reason: `${error.code ? `[${error.code}] ` : ""}${error.message}` });
+          if (!firstError) {
+            firstError = error.message;
+          }
         }
       } else if (data) {
         created++;
@@ -392,10 +404,20 @@ export async function batchCreateTransactions(
     } catch (err: any) {
       errors++;
       errorDetails.push({ index: i, reason: err?.message || "Unknown" });
+      if (!firstError) {
+        firstError = err?.message;
+      }
     }
   }
 
-  return { created, skippedDuplicates, errors, errorDetails, transactions: createdTxs };
+  return {
+    created,
+    skippedDuplicates,
+    errors,
+    errorDetails,
+    transactions: createdTxs,
+    firstError,
+  };
 }
 
 // ─── Price operations ──────────────────────────────────────
