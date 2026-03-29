@@ -614,6 +614,13 @@ export async function clearAllTransactions(): Promise<{ deleted: number }> {
     .select("id");
 
   if (error) throw new Error(`clearAllTransactions: ${error.message}`);
+  
+  // Handled by CASCADE if Postgres triggers work, but we ensure here for safety
+  await supabase
+    .from("import_row_fingerprints")
+    .delete()
+    .eq("user_id", user.id);
+
   return { deleted: data?.length ?? 0 };
 }
 
@@ -628,5 +635,12 @@ export async function clearAllImportedFiles(): Promise<{ deleted: number }> {
     .select("id");
 
   if (error) throw new Error(`clearAllImportedFiles: ${error.message}`);
+  
+  // Clear related import status tracking
+  await supabase
+    .from("import_batches")
+    .delete()
+    .eq("user_id", user.id);
+
   return { deleted: data?.length ?? 0 };
 }
