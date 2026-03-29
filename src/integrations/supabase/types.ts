@@ -95,6 +95,42 @@ export type Database = {
         }
         Relationships: []
       }
+      exchange_sync_logs: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          exchange: string
+          id: string
+          skipped_count: number
+          status: string
+          synced_count: number
+          trigger: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          exchange: string
+          id?: string
+          skipped_count?: number
+          status?: string
+          synced_count?: number
+          trigger?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          exchange?: string
+          id?: string
+          skipped_count?: number
+          status?: string
+          synced_count?: number
+          trigger?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       import_batches: {
         Row: {
           accepted_new_count: number | null
