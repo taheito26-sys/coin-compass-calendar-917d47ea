@@ -316,8 +316,8 @@ export async function batchCreateTransactions(
   for (let i = 0; i < transactions.length; i++) {
     const input = transactions[i];
     try {
-      const { data, error } = await supabase
-        .from("transactions")
+      const { data, error } = await (supabase
+        .from("transactions") as any)
         .insert({
           user_id: user.id,
           asset_id: input.asset_id,
