@@ -125,7 +125,8 @@ export default function ExchangeConnect() {
   const [nextAutoSync, setNextAutoSync] = useState<Date | null>(null);
 
   const loadConnections = useCallback(async () => {
-    if (!isWorkerConfigured()) { setLoading(false); return; }
+    // Exchange sync not yet migrated to Supabase
+    setLoading(false); return;
     try {
       const res = await apiFetch("/api/exchange-sync");
       if (res.ok) {
@@ -285,14 +286,15 @@ export default function ExchangeConnect() {
     } catch {}
   };
 
-  if (!isWorkerConfigured()) {
+  // Exchange sync not yet migrated to Supabase
+  if (true) {
     return (
       <div className="panel">
         <div className="panel-body" style={{ textAlign: "center", padding: 40 }}>
           <div style={{ fontSize: 28, marginBottom: 8 }}>🔗</div>
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>Backend Required</div>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>Coming Soon</div>
           <div className="muted" style={{ fontSize: 12 }}>
-            Exchange API connections require the Cloudflare Worker backend to be deployed and configured.
+            Exchange API connections are being migrated to Supabase and will be available soon.
           </div>
         </div>
       </div>
