@@ -188,10 +188,11 @@ async function testExchangeConnection(
     case "bybit": {
       const ts = Date.now();
       const recvWindow = "5000";
-      const payload = `${ts}${apiKey}${recvWindow}`;
+      const query = "accountType=UNIFIED";
+      const payload = `${ts}${apiKey}${recvWindow}${query}`;
       const sig = await hmacSign(apiSecret, payload);
       const res = await fetch(
-        "https://api.bybit.com/v5/account/wallet-balance?accountType=UNIFIED",
+        `https://api.bybit.com/v5/account/wallet-balance?${query}`,
         {
           headers: {
             "X-BAPI-API-KEY": apiKey,
