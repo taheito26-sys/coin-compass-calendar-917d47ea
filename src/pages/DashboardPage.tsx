@@ -3,7 +3,9 @@ import { fmtFiat, fmtQty, fmtPx, fmtTotal } from "@/lib/cryptoState";
 import { useLivePrices } from "@/hooks/useLivePrices";
 import { useUnifiedPortfolio } from "@/hooks/useUnifiedPortfolio";
 import { useMemo, useState } from "react";
-import FearGreedGauge from "@/components/dashboard/FearGreedGauge";
+import MarketSentiment from "@/components/dashboard/MarketSentiment";
+import TrendingSectors from "@/components/dashboard/TrendingSectors";
+import NewlyListed from "@/components/dashboard/NewlyListed";
 import PerAssetRiskBreakdown from "@/components/dashboard/PerAssetRiskBreakdown";
 import BenchmarkChart from "@/components/dashboard/BenchmarkChart";
 
@@ -28,11 +30,13 @@ const ALL_CARDS: CardDef[] = [
   { id: "kpis", label: "KPI Summary", colSpan: 2 },
   { id: "allocation", label: "Coin Allocation" },
   { id: "heatmap", label: "Heatmap" },
-  { id: "fearGreed", label: "Fear & Greed" },
-  { id: "movers", label: "Top Movers" },
-  { id: "watchlist", label: "Watchlist" },
-  { id: "benchmark", label: "Portfolio vs Benchmarks" },
+  { id: "marketSentiment", label: "Market Sentiment" },
+  { id: "trendingSectors", label: "Trending Sectors" },
+  { id: "newlyListed", label: "Newly Listed" },
   { id: "riskBreakdown", label: "Per-Asset Risk" },
+  { id: "movers", label: "Top Movers" },
+  { id: "benchmark", label: "Portfolio vs Benchmarks" },
+  { id: "watchlist", label: "Watchlist" },
   { id: "positions", label: "Top Positions", colSpan: 2 },
 ];
 
@@ -337,7 +341,9 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
           </div>
         );
 
-      case "fearGreed": return <FearGreedGauge />;
+      case "marketSentiment": return <MarketSentiment />;
+      case "trendingSectors": return <TrendingSectors />;
+      case "newlyListed": return <NewlyListed />;
       case "riskBreakdown": return <PerAssetRiskBreakdown compact />;
       case "benchmark": return <BenchmarkChart compact />;
 
