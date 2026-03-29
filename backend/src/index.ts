@@ -26,6 +26,7 @@ import merchantPoolsRoute from "./routes/merchant-pools";
 import merchantCommentsRoute from "./routes/merchant-comments";
 import merchantAdjustmentsRoute from "./routes/merchant-adjustments";
 import merchantTermsRoute from "./routes/merchant-terms";
+import coingeckoRoute from "./routes/coingecko";
 import { pollPrices } from "./cron/poll-prices";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -59,6 +60,7 @@ app.route("/api/merchant/pools", merchantPoolsRoute);
 app.route("/api/merchant/comments", merchantCommentsRoute);
 app.route("/api/merchant/adjustments", merchantAdjustmentsRoute);
 app.route("/api/merchant/terms", merchantTermsRoute);
+app.route("/api/coingecko", coingeckoRoute);
 
 // Health check
 app.get("/api/status", async (c) => {
