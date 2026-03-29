@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { isWorkerConfigured } from "@/lib/api";
 import { useCrypto } from "@/lib/cryptoContext";
-
-const WORKER_BASE = (import.meta.env.VITE_WORKER_API_URL || "https://cryptotracker-api.taheito26.workers.dev").replace(/\/$/, "");
+import { supabase } from "@/integrations/supabase/client";
 
 interface ExchangeDef {
   id: string;
@@ -94,24 +92,10 @@ interface Connection {
 const AUTO_SYNC_KEY = "exchange_auto_sync";
 const AUTO_SYNC_INTERVAL_KEY = "exchange_auto_sync_interval";
 
-async function apiFetch(path: string, options: RequestInit = {}) {
-  let token = "";
-  try {
-    const w = window as any;
-    if (w.Clerk?.session) {
-      token = await w.Clerk.session.getToken();
-    }
-  } catch {}
-
-  const res = await fetch(`${WORKER_BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(options.headers || {}),
-    },
-  });
-  return res;
+// Exchange Connect requires backend migration to Supabase Edge Functions
+// For now, show a placeholder message
+async function apiFetch(_path: string, _options: RequestInit = {}) {
+  throw new Error("Exchange sync backend not yet migrated to Supabase");
 }
 
 export default function ExchangeConnect() {
