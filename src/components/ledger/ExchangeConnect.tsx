@@ -92,9 +92,7 @@ interface Connection {
 const AUTO_SYNC_KEY = "exchange_auto_sync";
 const AUTO_SYNC_INTERVAL_KEY = "exchange_auto_sync_interval";
 
-// Exchange Connect requires backend migration to Supabase Edge Functions
-// For now, show a placeholder message
-async function apiFetch(_path: string, _options: RequestInit = {}) {
+async function apiFetch(_path: string, _options: RequestInit = {}): Promise<Response> {
   throw new Error("Exchange sync backend not yet migrated to Supabase");
 }
 
