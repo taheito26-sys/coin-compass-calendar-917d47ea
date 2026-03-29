@@ -546,8 +546,8 @@ export async function lookupImportRows(input: { fingerprint_hashes: string[]; na
 /** Check if this specific file content was already successfully imported. */
 export async function checkFileImported(contentHash: string): Promise<boolean> {
   if (!contentHash) return false;
-  const { data } = await supabase
-    .from("import_batches")
+  const { data } = await (supabase
+    .from("import_batches") as any)
     .select("id")
     .eq("content_hash", contentHash)
     .maybeSingle();
