@@ -30,7 +30,7 @@ const FAQ_DATA: FAQItem[] = [
   { category: "Tools", q: "What's the Market Cap Calculator for?", a: "It answers 'What if [coin] reached [price]?' by calculating the implied market cap, or vice versa. Useful for evaluating price targets against realistic market cap levels." },
 
   // Data & Settings
-  { category: "Data", q: "Where is my data stored?", a: "Your transactions and portfolio data are stored in a secure cloud database (Cloudflare D1) linked to your account. Theme preferences and layout settings are cached locally in your browser." },
+  { category: "Data", q: "Where is my data stored?", a: "Your transactions and portfolio data are stored in a secure Supabase Postgres database linked to your account. Theme preferences and layout settings are cached locally in your browser." },
   { category: "Data", q: "How do I back up my data?", a: "Go to Settings → Data Management and click 'Export Backup'. This downloads a JSON file with your full app state. You can also take named snapshots in the Vault section of Settings for quick restore points." },
   { category: "Data", q: "Can I import data from another portfolio tracker?", a: "Currently, CSV import from major exchanges is supported. For other trackers, export your data as CSV in a compatible format. The system expects standard trade history fields (date, pair, side, quantity, price)." },
   { category: "Data", q: "How do I change the base currency?", a: "Go to Settings and look for the Base Currency section. Choose from USD, EUR, GBP, or QAR. Note: prices are fetched in USD and converted where applicable." },
