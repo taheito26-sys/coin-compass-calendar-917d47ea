@@ -501,7 +501,7 @@ export default function ExchangeConnect() {
 
               {connected && (
                 <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 6 }}>
-                  {conn?.last_sync ? `Last sync: ${new Date(conn.last_sync + 'Z').toLocaleDateString()}` : "Never synced"}
+                  {conn?.last_sync ? `Last sync: ${new Date(conn.last_sync).toLocaleDateString()}` : "Never synced"}
                   {conn?.sync_count ? ` · ${conn.sync_count} trades` : ""}
                 </div>
               )}

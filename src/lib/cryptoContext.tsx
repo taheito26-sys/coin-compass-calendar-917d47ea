@@ -61,6 +61,7 @@ function mapTransactions(
         feeAsset: tx.fee_currency || "USD",
         accountId: "acc_main",
         note: tx.note || "",
+        venue: tx.venue || "",
         lots: "",
       };
     })

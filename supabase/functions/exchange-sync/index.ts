@@ -413,29 +413,38 @@ async function fetchBinanceTrades(apiKey: string, apiSecret: string): Promise<No
   const assets = balances.map((b: any) => b.asset as string);
 
   const allTrades: NormalizedTrade[] = [];
+  const quotes = ["USDT", "USDC", "BUSD", "TUSD", "FDUSD", "DAI", "BTC", "ETH", "BNB"];
+
   for (const asset of assets) {
-    if (["USDT", "USDC", "BUSD", "USD"].includes(asset)) continue;
-    const symbol = `${asset}USDT`;
-    const ts2 = Date.now();
-    const q = `symbol=${symbol}&limit=1000&timestamp=${ts2}`;
-    const s = await hmacSign(apiSecret, q);
-    const res = await fetch(
-      `https://api.binance.com/api/v3/myTrades?${q}&signature=${s}`,
-      { headers: { "X-MBX-APIKEY": apiKey } }
-    );
-    if (!res.ok) continue;
-    const trades = await res.json();
-    for (const t of trades) {
-      allTrades.push({
-        id: String(t.id),
-        symbol: asset,
-        side: t.isBuyer ? "buy" : "sell",
-        qty: parseFloat(t.qty),
-        price: parseFloat(t.price),
-        fee: parseFloat(t.commission || 0),
-        feeCurrency: t.commissionAsset || "USDT",
-        timestamp: new Date(t.time).toISOString(),
-      });
+    if (quotes.includes(asset)) continue;
+    
+    // Try common quote currencies for this asset
+    const possibleSymbols = quotes.map(q => `${asset}${q}`);
+    
+    for (const symbol of possibleSymbols) {
+      const ts2 = Date.now();
+      const q = `symbol=${symbol}&limit=1000&timestamp=${ts2}`;
+      const s = await hmacSign(apiSecret, q);
+      const res = await fetch(
+        `https://api.binance.com/api/v3/myTrades?${q}&signature=${s}`,
+        { headers: { "X-MBX-APIKEY": apiKey } }
+      );
+      if (!res.ok) continue;
+      const trades = await res.json();
+      if (!Array.isArray(trades)) continue;
+
+      for (const t of trades) {
+        allTrades.push({
+          id: String(t.id),
+          symbol: asset,
+          side: t.isBuyer ? "buy" : "sell",
+          qty: parseFloat(t.qty),
+          price: parseFloat(t.price),
+          fee: parseFloat(t.commission || 0),
+          feeCurrency: t.commissionAsset || "USDT",
+          timestamp: new Date(t.time).toISOString(),
+        });
+      }
     }
   }
   return allTrades;
@@ -463,7 +472,17 @@ async function fetchBybitTrades(apiKey: string, apiSecret: string): Promise<Norm
   if (data.retCode !== 0) throw new Error(data.retMsg);
 
   return (data.result?.list || []).map((t: any) => {
-    const baseAsset = (t.symbol || "").replace(/USDT$/, "");
+    // Better base asset extraction (handles BTCUSDT, ETHUSDC, etc.)
+    const rawSymbol = (t.symbol || "").toUpperCase();
+    let baseAsset = rawSymbol;
+    const quotes = ["USDT", "USDC", "USDD", "USDE", "BUSD", "BTC", "ETH", "EUR", "GBP", "USD", "DAI"];
+    for (const q of quotes) {
+      if (rawSymbol.length > q.length && rawSymbol.endsWith(q)) {
+        baseAsset = rawSymbol.slice(0, -q.length);
+        break;
+      }
+    }
+
     return {
       id: t.execId || t.orderId || String(Date.now()),
       symbol: baseAsset,
