@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAuth } from "@clerk/react";
+import { useAuth } from "@/lib/supabaseAuth";
 import {
   fetchAssets,
   fetchPrices,
   fetchTransactions,
-  isWorkerAvailable,
-  setAuthTokenProvider,
   type ApiAsset,
   type ApiPriceEntry,
   type ApiTransaction,
@@ -132,23 +130,15 @@ function buildPositions(
 const PRICE_POLL_MS = 120000;
 
 export function usePortfolio(): PortfolioData {
-  const { isLoaded, isSignedIn, getToken } = useAuth();
+  const { isLoaded, isSignedIn } = useAuth();
   const [positions, setPositions] = useState<Position[]>([]);
   const [txCount, setTxCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [priceTs, setPriceTs] = useState(0);
-  const [workerOnline, setWorkerOnline] = useState(false);
 
   const assetsRef = useRef<ApiAsset[]>([]);
   const txsRef = useRef<ApiTransaction[]>([]);
-
-  useEffect(() => {
-    setAuthTokenProvider(async () => {
-      if (!isSignedIn) return null;
-      return getToken();
-    });
-  }, [getToken, isSignedIn]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -158,18 +148,6 @@ export function usePortfolio(): PortfolioData {
       if (!isSignedIn) {
         assetsRef.current = [];
         txsRef.current = [];
-        setPositions([]);
-        setTxCount(0);
-        setPriceTs(0);
-        setWorkerOnline(false);
-        setLoading(false);
-        return;
-      }
-
-      // Check if worker URL is configured before attempting API calls
-      const online = await isWorkerAvailable();
-      if (!online) {
-        setWorkerOnline(false);
         setPositions([]);
         setTxCount(0);
         setPriceTs(0);
@@ -185,7 +163,6 @@ export function usePortfolio(): PortfolioData {
 
       assetsRef.current = assets;
       txsRef.current = txs;
-      setWorkerOnline(true);
       setTxCount(txs.length);
       setPriceTs(priceData.ts);
       setPositions(buildPositions(assets, txs, priceData.prices));
@@ -198,18 +175,14 @@ export function usePortfolio(): PortfolioData {
     }
   }, [isSignedIn]);
 
-  const refreshPrices = useCallback(async () => {
-    if (!isSignedIn || assetsRef.current.length === 0) {
-      return;
-    }
-
+  const refreshPricesOnly = useCallback(async () => {
+    if (!isSignedIn || assetsRef.current.length === 0) return;
     try {
       const priceData = await fetchPrices();
       setPriceTs(priceData.ts);
       setPositions(buildPositions(assetsRef.current, txsRef.current, priceData.prices));
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Price refresh failed";
-      console.warn("Price refresh failed:", message);
+      console.warn("Price refresh failed:", err instanceof Error ? err.message : err);
     }
   }, [isSignedIn]);
 
@@ -219,17 +192,13 @@ export function usePortfolio(): PortfolioData {
 
   useEffect(() => {
     if (!isSignedIn) return undefined;
-
-    const timer = window.setInterval(() => {
-      void refreshPrices();
-    }, PRICE_POLL_MS);
-
+    const timer = window.setInterval(() => void refreshPricesOnly(), PRICE_POLL_MS);
     return () => clearInterval(timer);
-  }, [isSignedIn, refreshPrices]);
+  }, [isSignedIn, refreshPricesOnly]);
 
   const derived = useMemo(() => {
-    const totalMV = positions.reduce((sum, position) => sum + (position.mv ?? 0), 0);
-    const totalCost = positions.reduce((sum, position) => sum + position.cost, 0);
+    const totalMV = positions.reduce((sum, p) => sum + (p.mv ?? 0), 0);
+    const totalCost = positions.reduce((sum, p) => sum + p.cost, 0);
     const totalPnl = totalMV - totalCost;
     const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
 
@@ -251,7 +220,7 @@ export function usePortfolio(): PortfolioData {
     loading: !isLoaded || loading,
     error,
     authenticated: Boolean(isSignedIn),
-    workerOnline,
+    workerOnline: true, // Always true with Supabase
     refresh: loadData,
   };
 }

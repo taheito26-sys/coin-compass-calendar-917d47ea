@@ -1,149 +1,31 @@
-// Worker API base URL — STRICT: require explicit configuration
-// No dangerous fallback to a hardcoded production URL
-
-function resolveWorkerBase(raw: string | undefined): string {
-  const candidate = (raw || "").trim();
-  if (!candidate) return ""; // No fallback — must be explicitly configured
-
-  try {
-    const parsed = new URL(candidate);
-    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-      return candidate.replace(/\/$/, "");
-    }
-  } catch {
-    // Invalid URL
-  }
-
-  return "";
-}
-
-const WORKER_BASE = resolveWorkerBase(import.meta.env.VITE_WORKER_API_URL);
-
-let tokenProvider: null | (() => Promise<string | null>) = null;
-
-// Cache for health check results (5 second TTL)
-let _healthCache: { available: boolean; ts: number } | null = null;
-const HEALTH_TTL = 5000;
-
 /**
- * Whether the Worker URL environment variable is configured.
- * This does NOT mean the worker is reachable.
+ * api.ts — Supabase-backed data layer
+ * Replaces all Cloudflare Worker API calls with direct Supabase client operations.
+ * RLS enforces ownership — no manual user_id filtering needed on reads.
  */
+
+import { supabase } from "@/integrations/supabase/client";
+
+// ─── Compatibility flags ───────────────────────────────────
+// These exist so callers that used to check Worker status still compile.
+
 export function isWorkerConfigured(): boolean {
-  return Boolean(WORKER_BASE);
+  return true; // Always "configured" — Supabase is always available
 }
 
-/**
- * Check if the Worker is actually reachable (health endpoint).
- * Caches result for 5 seconds to avoid spamming.
- */
 export async function isWorkerAvailable(): Promise<boolean> {
-  if (!WORKER_BASE) return false;
-
-  // Use cache if fresh
-  if (_healthCache && Date.now() - _healthCache.ts < HEALTH_TTL) {
-    return _healthCache.available;
-  }
-
-  try {
-    const response = await fetch(`${WORKER_BASE}/api/status`, {
-      signal: AbortSignal.timeout(5000),
-    });
-    const available = response.ok;
-    _healthCache = { available, ts: Date.now() };
-    return available;
-  } catch {
-    _healthCache = { available: false, ts: Date.now() };
-    return false;
-  }
+  return true;
 }
 
-/**
- * Ensure the backend is ready for write operations.
- * Throws with a user-friendly message if not.
- */
 export async function ensureWriteReady(): Promise<void> {
-  if (!WORKER_BASE) {
-    throw new Error(
-      "Backend not configured. Set VITE_WORKER_API_URL to enable data persistence."
-    );
-  }
-
-  const token = await getAuthToken();
-  if (!token) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
     throw new Error("Not authenticated. Please sign in to save data.");
   }
-
-  const available = await isWorkerAvailable();
-  if (!available) {
-    throw new Error(
-      "Backend unavailable. Your data was NOT saved. Please try again later."
-    );
-  }
 }
 
-export function setAuthTokenProvider(provider: () => Promise<string | null>) {
-  tokenProvider = provider;
-}
-
-async function getAuthToken(): Promise<string | null> {
-  if (tokenProvider) return tokenProvider();
-
-  if (typeof window !== "undefined") {
-    const maybeClerk = (window as Window & {
-      Clerk?: { session?: { getToken?: () => Promise<string | null> } };
-    }).Clerk;
-    if (maybeClerk?.session?.getToken) {
-      try {
-        return await maybeClerk.session.getToken();
-      } catch {
-        return null;
-      }
-    }
-  }
-
-  return null;
-}
-
-async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  if (!WORKER_BASE) {
-    throw new Error("Backend not configured (missing VITE_WORKER_API_URL)");
-  }
-
-  const token = await getAuthToken();
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-
-  const url = `${WORKER_BASE}${path}`;
-
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      ...options,
-      headers: {
-        ...headers,
-        ...((options?.headers as Record<string, string>) || {}),
-      },
-      signal: options?.signal ?? AbortSignal.timeout(15000),
-    });
-  } catch (err: any) {
-    throw new Error(
-      `Network error calling Worker API (${url}). Check Worker URL, deployment, and CORS ALLOWED_ORIGINS. Root: ${err?.message || "Failed to fetch"}`,
-    );
-  }
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => `HTTP ${response.status}`);
-    const hint = response.status === 404
-      ? " (route missing — check VITE_WORKER_API_URL points to the correct backend + latest deploy)"
-      : "";
-    throw new Error(`Worker API ${response.status} for ${url}: ${text}${hint}`);
-  }
-
-  return response.json() as Promise<T>;
-}
+// Deprecated — no-op for Supabase
+export function setAuthTokenProvider(_provider: () => Promise<string | null>) {}
 
 // ─── Types ─────────────────────────────────────────────────
 
@@ -194,28 +76,103 @@ export interface ApiPricesResponse {
 // ─── Asset operations ──────────────────────────────────────
 
 export async function fetchAssets(): Promise<ApiAsset[]> {
-  const response = await apiFetch<{ assets: ApiAsset[] }>("/api/assets");
-  return response.assets;
+  const { data, error } = await supabase
+    .from("assets")
+    .select("*")
+    .order("symbol");
+  if (error) throw new Error(`fetchAssets: ${error.message}`);
+  return (data || []).map((a) => ({
+    id: a.id,
+    symbol: a.symbol,
+    name: a.name,
+    category: a.category || "other",
+    coingecko_id: a.coingecko_id,
+    binance_symbol: a.binance_symbol,
+    precision_qty: a.precision_qty ?? 8,
+    precision_price: a.precision_price ?? 8,
+  }));
 }
 
-/** Auto-create a missing asset. Returns existing if symbol already exists. */
 export async function createAsset(input: {
   symbol: string;
   name?: string;
   coingecko_id?: string;
   binance_symbol?: string;
 }): Promise<{ asset: ApiAsset; created: boolean }> {
-  return apiFetch<{ asset: ApiAsset; created: boolean }>("/api/assets", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  // Check if exists first
+  const { data: existing } = await supabase
+    .from("assets")
+    .select("*")
+    .eq("symbol", input.symbol.toUpperCase())
+    .maybeSingle();
+
+  if (existing) {
+    return {
+      asset: {
+        id: existing.id,
+        symbol: existing.symbol,
+        name: existing.name,
+        category: existing.category || "other",
+        coingecko_id: existing.coingecko_id,
+        binance_symbol: existing.binance_symbol,
+        precision_qty: existing.precision_qty ?? 8,
+        precision_price: existing.precision_price ?? 8,
+      },
+      created: false,
+    };
+  }
+
+  const { data, error } = await supabase
+    .from("assets")
+    .insert({
+      symbol: input.symbol.toUpperCase(),
+      name: input.name || input.symbol.toUpperCase(),
+      coingecko_id: input.coingecko_id || null,
+      binance_symbol: input.binance_symbol || null,
+    })
+    .select()
+    .single();
+
+  if (error) throw new Error(`createAsset: ${error.message}`);
+  return {
+    asset: {
+      id: data.id,
+      symbol: data.symbol,
+      name: data.name,
+      category: data.category || "other",
+      coingecko_id: data.coingecko_id,
+      binance_symbol: data.binance_symbol,
+      precision_qty: data.precision_qty ?? 8,
+      precision_price: data.precision_price ?? 8,
+    },
+    created: true,
+  };
 }
 
 // ─── Transaction operations ────────────────────────────────
 
 export async function fetchTransactions(): Promise<ApiTransaction[]> {
-  const response = await apiFetch<{ transactions: ApiTransaction[] }>("/api/transactions");
-  return response.transactions;
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("*")
+    .order("timestamp", { ascending: true });
+  if (error) throw new Error(`fetchTransactions: ${error.message}`);
+  return (data || []).map((tx) => ({
+    id: tx.id,
+    user_id: tx.user_id,
+    asset_id: tx.asset_id,
+    timestamp: tx.timestamp,
+    type: tx.type,
+    qty: Number(tx.qty),
+    unit_price: Number(tx.unit_price),
+    fee_amount: Number(tx.fee_amount),
+    fee_currency: tx.fee_currency || "USD",
+    venue: tx.venue,
+    note: tx.note,
+    tags: tx.tags ? JSON.stringify(tx.tags) : null,
+    source: tx.source || "manual",
+    external_id: tx.external_id,
+  }));
 }
 
 export interface CreateTransactionInput {
@@ -234,28 +191,95 @@ export interface CreateTransactionInput {
 }
 
 export async function createTransaction(input: CreateTransactionInput): Promise<ApiTransaction> {
-  const response = await apiFetch<{ transaction: ApiTransaction }>("/api/transactions", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
-  return response.transaction;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { data, error } = await supabase
+    .from("transactions")
+    .insert({
+      user_id: user.id,
+      asset_id: input.asset_id,
+      timestamp: input.timestamp,
+      type: input.type,
+      qty: input.qty,
+      unit_price: input.unit_price,
+      fee_amount: input.fee_amount ?? 0,
+      fee_currency: input.fee_currency ?? "USD",
+      venue: input.venue ?? null,
+      note: input.note ?? null,
+      tags: input.tags ?? null,
+      source: input.source ?? "manual",
+      external_id: input.external_id ?? null,
+    })
+    .select()
+    .single();
+
+  if (error) throw new Error(`createTransaction: ${error.message}`);
+  return {
+    id: data.id,
+    user_id: data.user_id,
+    asset_id: data.asset_id,
+    timestamp: data.timestamp,
+    type: data.type,
+    qty: Number(data.qty),
+    unit_price: Number(data.unit_price),
+    fee_amount: Number(data.fee_amount),
+    fee_currency: data.fee_currency || "USD",
+    venue: data.venue,
+    note: data.note,
+    tags: data.tags ? JSON.stringify(data.tags) : null,
+    source: data.source || "manual",
+    external_id: data.external_id,
+  };
 }
 
 export async function updateTransaction(
   transactionId: string,
   updates: Partial<CreateTransactionInput>,
 ): Promise<ApiTransaction> {
-  const response = await apiFetch<{ transaction: ApiTransaction }>(`/api/transactions/${transactionId}`, {
-    method: "PUT",
-    body: JSON.stringify(updates),
-  });
-  return response.transaction;
+  const updateData: Record<string, any> = { updated_at: new Date().toISOString() };
+  if (updates.type !== undefined) updateData.type = updates.type;
+  if (updates.qty !== undefined) updateData.qty = updates.qty;
+  if (updates.unit_price !== undefined) updateData.unit_price = updates.unit_price;
+  if (updates.asset_id !== undefined) updateData.asset_id = updates.asset_id;
+  if (updates.fee_amount !== undefined) updateData.fee_amount = updates.fee_amount;
+  if (updates.fee_currency !== undefined) updateData.fee_currency = updates.fee_currency;
+  if (updates.venue !== undefined) updateData.venue = updates.venue;
+  if (updates.note !== undefined) updateData.note = updates.note;
+  if (updates.timestamp !== undefined) updateData.timestamp = updates.timestamp;
+
+  const { data, error } = await supabase
+    .from("transactions")
+    .update(updateData)
+    .eq("id", transactionId)
+    .select()
+    .single();
+
+  if (error) throw new Error(`updateTransaction: ${error.message}`);
+  return {
+    id: data.id,
+    user_id: data.user_id,
+    asset_id: data.asset_id,
+    timestamp: data.timestamp,
+    type: data.type,
+    qty: Number(data.qty),
+    unit_price: Number(data.unit_price),
+    fee_amount: Number(data.fee_amount),
+    fee_currency: data.fee_currency || "USD",
+    venue: data.venue,
+    note: data.note,
+    tags: data.tags ? JSON.stringify(data.tags) : null,
+    source: data.source || "manual",
+    external_id: data.external_id,
+  };
 }
 
 export async function deleteTransaction(transactionId: string): Promise<void> {
-  await apiFetch<{ ok: boolean }>(`/api/transactions/${transactionId}`, {
-    method: "DELETE",
-  });
+  const { error } = await supabase
+    .from("transactions")
+    .delete()
+    .eq("id", transactionId);
+  if (error) throw new Error(`deleteTransaction: ${error.message}`);
 }
 
 export interface BatchCreateResult {
@@ -269,49 +293,141 @@ export interface BatchCreateResult {
 export async function batchCreateTransactions(
   transactions: CreateTransactionInput[],
 ): Promise<BatchCreateResult> {
-  const response = await apiFetch<BatchCreateResult>("/api/transactions/batch", {
-    method: "POST",
-    body: JSON.stringify({ transactions }),
-    signal: AbortSignal.timeout(60000),
-  });
-  return response;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  let created = 0;
+  let skippedDuplicates = 0;
+  let errors = 0;
+  const errorDetails: Array<{ index: number; reason: string }> = [];
+  const createdTxs: ApiTransaction[] = [];
+
+  for (let i = 0; i < transactions.length; i++) {
+    const input = transactions[i];
+    try {
+      const { data, error } = await supabase
+        .from("transactions")
+        .insert({
+          user_id: user.id,
+          asset_id: input.asset_id,
+          timestamp: input.timestamp,
+          type: input.type,
+          qty: input.qty,
+          unit_price: input.unit_price,
+          fee_amount: input.fee_amount ?? 0,
+          fee_currency: input.fee_currency ?? "USD",
+          venue: input.venue ?? null,
+          note: input.note ?? null,
+          tags: input.tags ?? null,
+          source: input.source ?? "import",
+          external_id: input.external_id ?? null,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        if (error.message.includes("duplicate") || error.message.includes("unique")) {
+          skippedDuplicates++;
+        } else {
+          errors++;
+          errorDetails.push({ index: i, reason: error.message });
+        }
+      } else if (data) {
+        created++;
+        createdTxs.push({
+          id: data.id,
+          user_id: data.user_id,
+          asset_id: data.asset_id,
+          timestamp: data.timestamp,
+          type: data.type,
+          qty: Number(data.qty),
+          unit_price: Number(data.unit_price),
+          fee_amount: Number(data.fee_amount),
+          fee_currency: data.fee_currency || "USD",
+          venue: data.venue,
+          note: data.note,
+          tags: data.tags ? JSON.stringify(data.tags) : null,
+          source: data.source || "import",
+          external_id: data.external_id,
+        });
+      }
+    } catch (err: any) {
+      errors++;
+      errorDetails.push({ index: i, reason: err?.message || "Unknown" });
+    }
+  }
+
+  return { created, skippedDuplicates, errors, errorDetails, transactions: createdTxs };
 }
 
 // ─── Price operations ──────────────────────────────────────
 
 export async function fetchPrices(): Promise<{ prices: Record<string, ApiPriceEntry>; ts: number; stale: boolean }> {
-  const response = await apiFetch<ApiPricesResponse>("/api/prices");
-  return {
-    prices: response.prices ?? {},
-    ts: response.ts ?? Date.now(),
-    stale: response.stale ?? false,
-  };
+  const { data, error } = await supabase
+    .from("price_cache")
+    .select("*");
+
+  if (error) throw new Error(`fetchPrices: ${error.message}`);
+
+  const prices: Record<string, ApiPriceEntry> = {};
+  let latestTs = 0;
+
+  for (const row of data || []) {
+    prices[row.asset_id] = {
+      price: Number(row.price),
+      change_1h: row.price_change_1h != null ? Number(row.price_change_1h) : null,
+      change_24h: row.price_change_24h != null ? Number(row.price_change_24h) : null,
+      change_7d: row.price_change_7d != null ? Number(row.price_change_7d) : null,
+      market_cap: row.market_cap != null ? Number(row.market_cap) : null,
+      volume_24h: row.volume_24h != null ? Number(row.volume_24h) : null,
+      ts: row.timestamp ? new Date(row.timestamp).getTime() : Date.now(),
+    };
+    const rowTs = row.timestamp ? new Date(row.timestamp).getTime() : 0;
+    if (rowTs > latestTs) latestTs = rowTs;
+  }
+
+  const ageMs = latestTs > 0 ? Date.now() - latestTs : Infinity;
+  return { prices, ts: latestTs || Date.now(), stale: ageMs > 600_000 };
 }
 
 // ─── Tracking preferences ──────────────────────────────────
 
 export async function fetchTrackingPreference(assetId?: string): Promise<{ tracking_mode: string } | null> {
-  const query = assetId ? `?asset_id=${encodeURIComponent(assetId)}` : "";
-  const response = await apiFetch<{ preference: { tracking_mode: string } | null }>(`/api/tracking-preferences${query}`);
-  return response.preference;
+  let query = supabase.from("tracking_preferences").select("*");
+  if (assetId) {
+    query = query.eq("asset_id", assetId);
+  }
+  const { data } = await query.maybeSingle();
+  return data ? { tracking_mode: data.tracking_mode } : null;
 }
 
 export async function setTrackingPreference(trackingMode: string, assetId?: string): Promise<any> {
-  const response = await apiFetch<{ preference: any }>("/api/tracking-preferences", {
-    method: "PUT",
-    body: JSON.stringify({
-      tracking_mode: trackingMode,
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { data, error } = await supabase
+    .from("tracking_preferences")
+    .upsert({
+      user_id: user.id,
       asset_id: assetId ?? null,
-    }),
-  });
-  return response.preference;
+      tracking_mode: trackingMode,
+    }, { onConflict: "user_id,asset_id" })
+    .select()
+    .single();
+
+  if (error) throw new Error(`setTrackingPreference: ${error.message}`);
+  return data;
 }
 
 // ─── Imported files ────────────────────────────────────────
 
 export async function fetchImportedFiles(): Promise<any[]> {
-  const response = await apiFetch<{ files: any[] }>("/api/imported-files");
-  return response.files;
+  const { data, error } = await supabase
+    .from("imported_files")
+    .select("*")
+    .order("imported_at", { ascending: false });
+  if (error) throw new Error(`fetchImportedFiles: ${error.message}`);
+  return data || [];
 }
 
 export interface CreateImportedFileInput {
@@ -323,11 +439,24 @@ export interface CreateImportedFileInput {
 }
 
 export async function createImportedFile(input: CreateImportedFileInput): Promise<any> {
-  const response = await apiFetch<{ file: any }>("/api/imported-files", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
-  return response.file;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { data, error } = await supabase
+    .from("imported_files")
+    .insert({
+      user_id: user.id,
+      file_name: input.file_name,
+      file_hash: input.file_hash,
+      exchange: input.exchange,
+      export_type: input.export_type,
+      row_count: input.row_count,
+    })
+    .select()
+    .single();
+
+  if (error) throw new Error(`createImportedFile: ${error.message}`);
+  return data;
 }
 
 // ─── Import audit / fingerprint lookup (v2) ─────────────────
@@ -338,43 +467,131 @@ export type ImportLookupResponse = {
 };
 
 export async function lookupImportRows(input: { fingerprint_hashes: string[]; native_ids: string[] }): Promise<ImportLookupResponse> {
-  return apiFetch<ImportLookupResponse>("/api/import/lookup", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  const result: ImportLookupResponse = {
+    existingFingerprints: {},
+    existingByNativeId: {},
+  };
+
+  if (input.fingerprint_hashes.length > 0) {
+    const { data } = await supabase
+      .from("import_row_fingerprints")
+      .select("fingerprint_hash, native_id, canonical_json")
+      .in("fingerprint_hash", input.fingerprint_hashes);
+
+    for (const row of data || []) {
+      result.existingFingerprints[row.fingerprint_hash] = {
+        native_id: row.native_id,
+        canonical_json: row.canonical_json,
+      };
+    }
+  }
+
+  if (input.native_ids.length > 0) {
+    const { data } = await supabase
+      .from("import_row_fingerprints")
+      .select("native_id, fingerprint_hash, canonical_json")
+      .in("native_id", input.native_ids);
+
+    for (const row of data || []) {
+      if (row.native_id) {
+        result.existingByNativeId[row.native_id] = {
+          fingerprint_hash: row.fingerprint_hash,
+          canonical_json: row.canonical_json,
+        };
+      }
+    }
+  }
+
+  return result;
 }
 
 export async function recordImportBatch(input: any): Promise<{ ok: boolean; batch_id: string }> {
-  return apiFetch<{ ok: boolean; batch_id: string }>("/api/import/record", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { data, error } = await supabase
+    .from("import_batches")
+    .insert({
+      user_id: user.id,
+      file_name: input.file_name,
+      file_hash: input.file_hash,
+      source_exchange: input.source_exchange,
+      source_export_type: input.source_export_type,
+      parsed_count: input.parsed_count ?? 0,
+      accepted_new_count: input.accepted_new_count ?? 0,
+      already_imported_count: input.already_imported_count ?? 0,
+      warning_count: input.warning_count ?? 0,
+      invalid_count: input.invalid_count ?? 0,
+      conflict_count: input.conflict_count ?? 0,
+      persisted_count: input.persisted_count ?? 0,
+      failed_count: input.failed_count ?? 0,
+    })
+    .select()
+    .single();
+
+  if (error) throw new Error(`recordImportBatch: ${error.message}`);
+  return { ok: true, batch_id: data.id };
 }
 
 // ─── User preferences ─────────────────────────────────────
 
 export async function fetchUserPreferences(): Promise<Record<string, string>> {
-  const response = await apiFetch<{ preferences: Record<string, string> }>("/api/preferences");
-  return response.preferences;
+  const { data, error } = await supabase
+    .from("user_preferences")
+    .select("key, value");
+
+  if (error) throw new Error(`fetchUserPreferences: ${error.message}`);
+  const prefs: Record<string, string> = {};
+  for (const row of data || []) {
+    prefs[row.key] = row.value;
+  }
+  return prefs;
 }
 
 export async function saveUserPreferences(prefs: Record<string, string>): Promise<void> {
-  await apiFetch<{ ok: boolean }>("/api/preferences", {
-    method: "PUT",
-    body: JSON.stringify(prefs),
-  });
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const rows = Object.entries(prefs).map(([key, value]) => ({
+    user_id: user.id,
+    key,
+    value,
+  }));
+
+  for (const row of rows) {
+    const { error } = await supabase
+      .from("user_preferences")
+      .upsert(row, { onConflict: "user_id,key" });
+    if (error) console.warn(`saveUserPreferences(${row.key}):`, error.message);
+  }
 }
 
 // ─── Clear all data ───────────────────────────────────────
 
 export async function clearAllTransactions(): Promise<{ deleted: number }> {
-  return apiFetch<{ ok: boolean; deleted: number }>("/api/transactions/all", {
-    method: "DELETE",
-  });
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { data, error } = await supabase
+    .from("transactions")
+    .delete()
+    .eq("user_id", user.id)
+    .select("id");
+
+  if (error) throw new Error(`clearAllTransactions: ${error.message}`);
+  return { deleted: data?.length ?? 0 };
 }
 
 export async function clearAllImportedFiles(): Promise<{ deleted: number }> {
-  return apiFetch<{ ok: boolean; deleted: number }>("/api/imported-files/all", {
-    method: "DELETE",
-  });
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { data, error } = await supabase
+    .from("imported_files")
+    .delete()
+    .eq("user_id", user.id)
+    .select("id");
+
+  if (error) throw new Error(`clearAllImportedFiles: ${error.message}`);
+  return { deleted: data?.length ?? 0 };
 }

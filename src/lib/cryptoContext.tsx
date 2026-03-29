@@ -1,16 +1,13 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, forwardRef } from "react";
-import { useAuth } from "@clerk/react";
+import { useAuth } from "@/lib/supabaseAuth";
 import { CryptoState, loadState, saveState, defaultState, refreshPrices } from "./cryptoState";
 import {
   fetchImportedFiles,
   fetchTransactions,
   fetchUserPreferences,
   saveUserPreferences,
-  isWorkerConfigured,
-  setAuthTokenProvider,
 } from "@/lib/api";
 import { getAssetCatalog, resolveAssetSymbol } from "@/lib/assetResolver";
-import { runMigration } from "@/lib/migration";
 import type { ApiTransaction } from "@/lib/api";
 
 interface CryptoCtx {
@@ -75,25 +72,12 @@ export const CryptoProvider = forwardRef<HTMLDivElement, { children: React.React
   const [toastMsg, setToast] = useState<{ msg: string; type: string } | null>(null);
   const lastHydratedUserRef = useRef<string | null>(null);
 
-  // Clerk auth — no try/catch, Clerk must be available
-  const { isSignedIn, getToken, userId } = useAuth();
-
-  // Wire auth token provider when Clerk state changes
-  useEffect(() => {
-    setAuthTokenProvider(async () => {
-      if (!isSignedIn) return null;
-      try {
-        return await getToken();
-      } catch {
-        return null;
-      }
-    });
-  }, [isSignedIn, getToken]);
+  const { isSignedIn, userId } = useAuth();
 
   const setState = useCallback((updater: (prev: CryptoState) => CryptoState) => {
     setStateRaw((prev) => {
       const next = updater(prev);
-      saveState(next); // saves UI prefs only
+      saveState(next);
       return next;
     });
   }, []);
@@ -113,12 +97,8 @@ export const CryptoProvider = forwardRef<HTMLDivElement, { children: React.React
     setTimeout(() => setToast(null), 3000);
   }, []);
 
-  /**
-   * Full rehydration from backend.
-   * Fetches all canonical data and replaces in-memory state.
-   */
   const rehydrateFromBackend = useCallback(async () => {
-    if (!isWorkerConfigured() || !isSignedIn) return;
+    if (!isSignedIn) return;
 
     setStateRaw((prev) => ({ ...prev, syncStatus: "loading" as const }));
 
@@ -170,14 +150,9 @@ export const CryptoProvider = forwardRef<HTMLDivElement, { children: React.React
     }
   }, [isSignedIn]);
 
-  /**
-   * Hydration effect — runs on auth identity change.
-   * Clears stale data when user changes and rehydrates from backend.
-   */
+  // Hydration effect — runs on auth identity change
   useEffect(() => {
-    if (!isWorkerConfigured()) return;
     if (!isSignedIn || !userId) {
-      // User signed out — clear business data, keep UI prefs
       if (lastHydratedUserRef.current !== null) {
         lastHydratedUserRef.current = null;
         setStateRaw((prev) => ({
@@ -191,7 +166,6 @@ export const CryptoProvider = forwardRef<HTMLDivElement, { children: React.React
       return;
     }
 
-    // If same user already hydrated, skip
     if (lastHydratedUserRef.current === userId) return;
     lastHydratedUserRef.current = userId;
 
@@ -242,30 +216,6 @@ export const CryptoProvider = forwardRef<HTMLDivElement, { children: React.React
             return next;
           });
         }
-
-        // Run migration (idempotent, uses external_id dedup)
-        const migrationResult = await runMigration();
-        if (migrationResult?.migrated && migrationResult.txsMigrated > 0 && !cancelled) {
-          console.info(`[migration] Migrated ${migrationResult.txsMigrated} txs, ${migrationResult.filesMigrated} files, ${migrationResult.txsSkippedDuplicate} skipped duplicates`);
-          // Re-fetch after migration to get canonical state
-          const newTxs = await fetchTransactions();
-          const newImported = await fetchImportedFiles().catch(() => []);
-          if (!cancelled) {
-            setStateRaw((prev) => ({
-              ...prev,
-              txs: mapTransactions(newTxs, assetById),
-              importedFiles: newImported.map((file: any) => ({
-                name: file.file_name,
-                hash: file.file_hash,
-                importedAt: file.imported_at ? Date.parse(file.imported_at) : Date.now(),
-                exchange: file.exchange,
-                exportType: file.export_type,
-                rowCount: Number(file.row_count || 0),
-              })),
-              syncStatus: "synced" as const,
-            }));
-          }
-        }
       } catch (err) {
         console.error("[crypto-context] Backend hydration failed:", err);
         if (!cancelled) {
@@ -284,7 +234,7 @@ export const CryptoProvider = forwardRef<HTMLDivElement, { children: React.React
   // Sync preferences to backend when they change
   const prevPrefsRef = useRef<string>("");
   useEffect(() => {
-    if (!isSignedIn || !isWorkerConfigured()) return;
+    if (!isSignedIn) return;
     if (state.syncStatus !== "synced") return;
 
     const currentPrefs = JSON.stringify({

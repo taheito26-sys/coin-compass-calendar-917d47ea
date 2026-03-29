@@ -1,5 +1,5 @@
 import type { ApiAsset } from "@/lib/api";
-import { fetchAssets, createAsset, isWorkerConfigured } from "@/lib/api";
+import { fetchAssets, createAsset } from "@/lib/api";
 import { extractBaseFromPair, matchAssetBySymbol, normalizeSymbol } from "@/lib/symbolAliases";
 
 const ASSET_CACHE_MS = 60_000;
@@ -7,8 +7,6 @@ let assetCache: ApiAsset[] = [];
 let assetCacheTs = 0;
 
 export async function getAssetCatalog(force = false): Promise<ApiAsset[]> {
-  if (!isWorkerConfigured()) return [];
-
   if (!force && assetCache.length > 0 && Date.now() - assetCacheTs < ASSET_CACHE_MS) {
     return assetCache;
   }
@@ -31,10 +29,6 @@ export function resolveAssetId(rawSymbol: string, assets: ApiAsset[]): { assetId
   return { assetId, symbol };
 }
 
-/**
- * Resolve asset ID, auto-creating the asset in the backend if missing.
- * Returns the asset ID (never null if worker is configured and reachable).
- */
 export async function resolveOrCreateAsset(rawSymbol: string): Promise<{ assetId: string; symbol: string }> {
   const symbol = resolveAssetSymbol(rawSymbol);
   const assets = await getAssetCatalog();
@@ -44,11 +38,7 @@ export async function resolveOrCreateAsset(rawSymbol: string): Promise<{ assetId
     return { assetId: existingId, symbol };
   }
 
-  // Auto-create the asset
   const { asset } = await createAsset({ symbol, name: symbol });
-
-  // Invalidate cache so subsequent calls see the new asset
-  assetCacheTs = 0;
-
+  assetCacheTs = 0; // Invalidate cache
   return { assetId: asset.id, symbol };
 }

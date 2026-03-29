@@ -4,21 +4,19 @@
  * Real-time crypto price layer.
  * - Binance REST for bootstrap prices
  * - Binance WebSocket for live tick updates
- * - CoinGecko for historical charts and coin search (fallback only)
+ * - CoinGecko direct for historical charts and coin search
  *
- * No API key needed. All endpoints are public.
+ * No Cloudflare Worker proxy — all requests go direct.
  */
 
 const BINANCE_REST = "https://api.binance.com/api/v3";
-const WORKER_API_URL = import.meta.env.VITE_WORKER_API_URL || "";
-const COINGECKO_BASE = `${WORKER_API_URL}/api/coingecko`;
+const COINGECKO_API = "https://api.coingecko.com/api/v3";
 const HIST_TTL_MS = 60 * 60 * 1000;
 const SEARCH_TTL_MS = 30 * 60 * 1000;
 
 const _cache: Record<string, { data: any; ts: number }> = {};
 
 // ─── Symbol Maps ───────────────────────────────────────────
-// Expand as needed — every symbol a user might hold MUST exist here.
 
 export const BINANCE_SYMBOLS: Record<string, string> = {
   BTC: "BTCUSDT", ETH: "ETHUSDT", SOL: "SOLUSDT", BNB: "BNBUSDT",
@@ -143,7 +141,6 @@ export async function getSpotPrices(
   const result: Record<string, SpotPrice> = {};
   const now = Date.now();
 
-  // Stablecoins → hardcode
   const nonStable: typeof assets = [];
   for (const a of assets) {
     if (STABLECOINS.has(a.sym.toUpperCase())) {
@@ -153,7 +150,6 @@ export async function getSpotPrices(
     }
   }
 
-  // Collect Binance pairs
   const binancePairs: string[] = [];
   const pairToAsset = new Map<string, typeof nonStable[0]>();
   for (const a of nonStable) {
@@ -164,7 +160,6 @@ export async function getSpotPrices(
     }
   }
 
-  // Binance batch ticker
   if (binancePairs.length > 0) {
     try {
       const symbolsParam = JSON.stringify(binancePairs);
@@ -187,17 +182,17 @@ export async function getSpotPrices(
         }
       }
     } catch (e) {
-      console.warn("[priceProvider] Binance REST failed, trying CoinGecko fallback:", e);
+      console.warn("[priceProvider] Binance REST failed:", e);
     }
   }
 
-  // CoinGecko fallback for missing prices
+  // CoinGecko fallback for missing
   const missing = nonStable.filter(a => !result[a.sym.toUpperCase()] && a.coingeckoId);
   if (missing.length > 0) {
     try {
       const ids = missing.map(a => a.coingeckoId!).join(",");
       const r = await fetch(
-        `${COINGECKO_BASE}/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`,
+        `${COINGECKO_API}/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`,
         { signal: AbortSignal.timeout(10000) }
       );
       if (r.ok) {
@@ -216,7 +211,7 @@ export async function getSpotPrices(
         }
       }
     } catch (e) {
-      console.warn("[priceProvider] CoinGecko fallback also failed:", e);
+      console.warn("[priceProvider] CoinGecko fallback failed:", e);
     }
   }
 
@@ -342,7 +337,7 @@ export async function getDailyHistory(
     return new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric', year: days > 90 ? '2-digit' : undefined });
   };
 
-  // Try Binance
+  // Try Binance first
   const binancePair = BINANCE_SYMBOLS[sym.toUpperCase()];
   if (binancePair) {
     let interval = "1d", limit = days;
@@ -353,30 +348,29 @@ export async function getDailyHistory(
       const url = `${BINANCE_REST}/klines?symbol=${binancePair}&interval=${interval}&limit=${limit}`;
       const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
       if (r.ok) {
-         const json = await r.json();
-         const points = json.map((k: any) => ({
-           day: formatDate(k[0]),
-           price: parseFloat(k[4]) // close price
-         }));
-         _cache[key] = { data: points, ts: Date.now() };
-         return points;
+        const json = await r.json();
+        const points = json.map((k: any) => ({
+          day: formatDate(k[0]),
+          price: parseFloat(k[4])
+        }));
+        _cache[key] = { data: points, ts: Date.now() };
+        return points;
       }
-    } catch(e) {
+    } catch (e) {
       console.warn("[priceProvider] Binance klines failed for", sym, e);
     }
   }
 
-  // Fallback to CoinGecko Proxy
+  // Fallback to CoinGecko direct
   const coingeckoId = KNOWN_IDS[sym.toUpperCase()] || sym.toLowerCase();
   try {
     const r = await fetch(
-      `${COINGECKO_BASE}/coins/${coingeckoId}/market_chart?vs_currency=usd&days=${days}`,
+      `${COINGECKO_API}/coins/${coingeckoId}/market_chart?vs_currency=usd&days=${days}`,
       { signal: AbortSignal.timeout(15000) }
     );
     if (!r.ok) return [];
     const json = await r.json();
     const pricesList = json.prices || [];
-    // Throttle data points to max 100 for SVG performance
     const step = Math.ceil(pricesList.length / 100);
     const points = pricesList.filter((_: any, i: number) => i % step === 0).map(([ts, price]: [number, number]) => ({
       day: formatDate(ts),
@@ -397,7 +391,7 @@ export async function searchCoins(
   if (cached && Date.now() - cached.ts < SEARCH_TTL_MS) return cached.data;
 
   try {
-    const r = await fetch(`${COINGECKO_BASE}/search?query=${encodeURIComponent(query)}`, {
+    const r = await fetch(`${COINGECKO_API}/search?query=${encodeURIComponent(query)}`, {
       signal: AbortSignal.timeout(10000),
     });
     if (!r.ok) return [];
