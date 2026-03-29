@@ -55,6 +55,16 @@ export interface ApiTransaction {
   tags: string | null;
   source: string;
   external_id: string | null;
+  fingerprint_hash?: string;
+}
+
+export interface DetailedImportCounts {
+  parsed: number;
+  accepted: number;
+  rejected: number;
+  persisted: number;
+  skippedDuplicate: number;
+  failed: number;
 }
 
 export interface ApiPriceEntry {
@@ -188,6 +198,7 @@ export interface CreateTransactionInput {
   tags?: string[];
   source?: string;
   external_id?: string;
+  fingerprint_hash?: string;
 }
 
 export async function createTransaction(input: CreateTransactionInput): Promise<ApiTransaction> {
@@ -321,6 +332,7 @@ export async function batchCreateTransactions(
           tags: input.tags ?? null,
           source: input.source ?? "import",
           external_id: input.external_id ?? null,
+          fingerprint_hash: input.fingerprint_hash ?? null,
         })
         .select()
         .single();
@@ -349,7 +361,18 @@ export async function batchCreateTransactions(
           tags: data.tags ? JSON.stringify(data.tags) : null,
           source: data.source || "import",
           external_id: data.external_id,
+          fingerprint_hash: data.fingerprint_hash,
         });
+
+        // Record fingerprint audit log
+        if (input.fingerprint_hash) {
+          await supabase.from("import_row_fingerprints").upsert({
+            user_id: user.id,
+            fingerprint_hash: input.fingerprint_hash,
+            native_id: input.external_id || null,
+            transaction_id: data.id,
+          }, { onConflict: "user_id,fingerprint_hash" });
+        }
       }
     } catch (err: any) {
       errors++;
@@ -505,6 +528,17 @@ export async function lookupImportRows(input: { fingerprint_hashes: string[]; na
   return result;
 }
 
+/** Check if this specific file content was already successfully imported. */
+export async function checkFileImported(contentHash: string): Promise<boolean> {
+  if (!contentHash) return false;
+  const { data } = await supabase
+    .from("import_batches")
+    .select("id")
+    .eq("content_hash", contentHash)
+    .maybeSingle();
+  return !!data;
+}
+
 export async function recordImportBatch(input: any): Promise<{ ok: boolean; batch_id: string }> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
@@ -515,6 +549,7 @@ export async function recordImportBatch(input: any): Promise<{ ok: boolean; batc
       user_id: user.id,
       file_name: input.file_name,
       file_hash: input.file_hash,
+      content_hash: input.content_hash,
       source_exchange: input.source_exchange,
       source_export_type: input.source_export_type,
       parsed_count: input.parsed_count ?? 0,

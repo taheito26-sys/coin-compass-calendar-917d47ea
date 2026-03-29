@@ -43,19 +43,25 @@ function guessQuoteFromPair(pair: string, base: string): string {
   return p.startsWith(b) ? p.slice(b.length) : "";
 }
 
+function normalizeDecimals(val: number, precision = 12): string {
+  if (!Number.isFinite(val)) return "0";
+  // Fix precision to avoid 0.000000000001 diffs
+  return val.toFixed(precision).replace(/\.?0+$/, "");
+}
+
 function toCanonical(row: NormalizedRow, exportType: string): CanonicalTransactionRow {
-  const assetSymbol = normalizeSymbol(row.symbol);
-  const baseAsset = extractBaseFromPair(assetSymbol);
-  const quoteAsset = guessQuoteFromPair(assetSymbol, baseAsset);
+  const assetSymbol = normalizeSymbol(row.symbol).trim().toUpperCase();
+  const baseAsset = extractBaseFromPair(assetSymbol).trim().toUpperCase();
+  const quoteAsset = guessQuoteFromPair(assetSymbol, baseAsset).trim().toUpperCase();
 
   return {
-    sourceExchange: row.exchange,
-    sourceExportType: exportType,
+    sourceExchange: (row.exchange || "unknown").trim().toLowerCase() as Exchange,
+    sourceExportType: (exportType || "unknown").trim().toLowerCase(),
     sourceRowIndex: row.sourceRowIndex,
 
-    timestamp: row.timestamp,
+    timestamp: Math.floor(row.timestamp / 1000) * 1000, // Normalize to second precision
     type: "trade",
-    side: row.side,
+    side: (row.side || "buy").trim().toLowerCase() as "buy" | "sell",
 
     assetSymbol,
     baseAsset: normalizeSymbol(baseAsset),
@@ -65,27 +71,58 @@ function toCanonical(row: NormalizedRow, exportType: string): CanonicalTransacti
     price: row.unitPrice,
     grossValue: row.grossValue,
 
-    feeAmount: row.feeAmount,
-    feeAsset: normalizeSymbol(row.feeAsset || ""),
+    feeAmount: row.feeAmount || 0,
+    feeAsset: normalizeSymbol(row.feeAsset || "").trim().toUpperCase(),
 
-    orderId: row.orderId || "",
-    tradeId: row.tradeId || "",
-    txHash: row.txHash || "",
+    orderId: (row.orderId || "").trim(),
+    tradeId: (row.tradeId || "").trim(),
+    txHash: (row.txHash || "").trim(),
 
     rawRow: row.raw,
   };
 }
 
+/**
+ * Builds a deterministic row identity (fingerprint) as per user requirements.
+ * Combination: Date(UTC), Pair, Side, Price, Executed, Amount, Fee, Fee Coin, Status, Notes
+ * Uses order-independent canonical serialization.
+ */
 async function fingerprintForRow(c: CanonicalTransactionRow): Promise<{ fingerprint: string; fingerprintHash: string; nativeId: string | null }> {
   const nativeId = (c.tradeId || c.orderId || c.txHash || "").trim() || null;
 
-  // Priority fingerprint
-  const fp = nativeId
-    ? `${c.sourceExchange}:${exportTypeKey(c.sourceExportType)}:native:${nativeId}`
-    : `${c.sourceExchange}:${exportTypeKey(c.sourceExportType)}:composite:${c.timestamp}:${c.type}:${c.side}:${c.assetSymbol}:${c.baseAsset}:${c.quoteAsset}:${c.qty}:${c.price}:${c.feeAmount}:${c.feeAsset}`;
+  // We build a canonical component string for the fingerprint.
+  // We use the fields requested by the user for maximum idempotency across different files.
+  const components = [
+    new Date(c.timestamp).toISOString(),
+    c.assetSymbol,
+    c.side,
+    normalizeDecimals(c.price),
+    normalizeDecimals(c.qty),
+    normalizeDecimals(c.grossValue),
+    normalizeDecimals(c.feeAmount),
+    c.feeAsset,
+    "FILLED", // Default status as most imports only include filled trades
+    "",       // Notes (usually empty on import unless specifically mapped)
+  ].map(s => String(s || "").trim());
 
-  const fingerprintHash = await hashString(fp);
-  return { fingerprint: fp, fingerprintHash, nativeId };
+  const fingerprint = components.join("|");
+  const fingerprintHash = await hashString(fingerprint);
+
+  return { fingerprint, fingerprintHash, nativeId };
+}
+
+/**
+ * Calculates a file-level content hash that is order-insensitive.
+ * Computed by sorting all valid row fingerprints and hashing the result.
+ */
+export async function calculateContentHash(rows: ImportPreviewRow[]): Promise<string> {
+  const validFps = rows
+    .filter(r => r.status !== "invalid" && r.fingerprintHash)
+    .map(r => r.fingerprintHash)
+    .sort();
+
+  if (validFps.length === 0) return "";
+  return hashString(validFps.join(""));
 }
 
 function validateCanonical(c: CanonicalTransactionRow): { status: ImportRowStatus; message: string | null } {
@@ -105,7 +142,7 @@ export async function importCSV(
   fileContent: string,
   fileName: string,
   opts?: { forceExchange?: Exchange },
-): Promise<ParseResult> {
+): Promise<ParseResult & { contentHash: string }> {
   const { headers, rows } = parseCSV(fileContent);
   const warnings: string[] = [];
 
@@ -127,6 +164,7 @@ export async function importCSV(
       dateRange: null,
       rowCount: 0,
       skippedCount: 0,
+      contentHash: "",
     };
   }
 
@@ -145,6 +183,7 @@ export async function importCSV(
       dateRange: null,
       rowCount: 0,
       skippedCount: 0,
+      contentHash: "",
     };
   }
 
@@ -221,6 +260,9 @@ export async function importCSV(
   }
 
   const allRows = [...canonicalRows, ...invalidRows].sort((a, b) => a.sourceRowIndex - b.sourceRowIndex);
+  
+  // Calculate content-based order-insensitive file hash
+  const contentHash = await calculateContentHash(allRows);
 
   // Date range from valid timestamps
   const validTimestamps = allRows.map((r) => r.timestamp).filter((ts) => Number.isFinite(ts) && ts > 0);
@@ -241,12 +283,14 @@ export async function importCSV(
     dateRange,
     rowCount: allRows.length,
     skippedCount,
+    contentHash,
   };
 }
 
 export interface ImportLookupPayload {
   existingFingerprints: Record<string, { native_id: string | null; canonical_json: string | null }>;
   existingByNativeId: Record<string, { fingerprint_hash: string; canonical_json: string | null }>;
+  isExactFileMatch?: boolean;
 }
 
 /** Apply backend lookup results to mark rows as alreadyImported/conflict (keeps invalid/warning). */
@@ -269,3 +313,4 @@ export function applyLookup(rows: ImportPreviewRow[], lookup: ImportLookupPayloa
 }
 
 export { hashFile };
+

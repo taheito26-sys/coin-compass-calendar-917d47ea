@@ -98,6 +98,7 @@ export interface ParseResult {
   dateRange: [number, number] | null;
   rowCount: number;
   skippedCount: number;
+  contentHash: string;
 }
 
 export interface ImportFile {

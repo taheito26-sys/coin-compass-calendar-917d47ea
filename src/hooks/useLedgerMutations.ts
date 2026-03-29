@@ -20,6 +20,7 @@ import {
   deleteTransaction,
   batchCreateTransactions,
   createImportedFile,
+  recordImportBatch,
   clearAllTransactions,
   clearAllImportedFiles,
   type CreateTransactionInput,
@@ -146,6 +147,7 @@ export function useLedgerMutations() {
     batchPayload: CreateTransactionInput[];
     fileName: string;
     fileHash: string;
+    contentHash: string;
     exchange: string;
     exportType: string;
   }): Promise<ImportMutationResult> => {
@@ -168,18 +170,22 @@ export function useLedgerMutations() {
         totalFailed += result.errors;
       }
 
-      // Record imported file metadata (409 = duplicate = fine)
+      // Record imported file metadata (409 = duplicate = fine if we use upsert or handle error)
       try {
-        await createImportedFile({
+        await recordImportBatch({
           file_name: params.fileName,
           file_hash: params.fileHash,
-          exchange: params.exchange,
-          export_type: params.exportType,
-          row_count: totalCreated,
+          content_hash: params.contentHash,
+          source_exchange: params.exchange,
+          source_export_type: params.exportType,
+          parsed_count: params.batchPayload.length,
+          persisted_count: totalCreated,
+          already_imported_count: totalSkipped,
+          failed_count: totalFailed,
         });
       } catch (err: any) {
         if (!err?.message?.includes("409")) {
-          console.warn("[import] file record:", err?.message);
+          console.warn("[import] batch record:", err?.message);
         }
       }
 

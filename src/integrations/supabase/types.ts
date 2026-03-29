@@ -148,6 +148,7 @@ export type Database = {
           source_export_type: string | null
           user_id: string
           warning_count: number | null
+          content_hash: string | null
         }
         Insert: {
           accepted_new_count?: number | null
@@ -165,6 +166,7 @@ export type Database = {
           source_export_type?: string | null
           user_id: string
           warning_count?: number | null
+          content_hash?: string | null
         }
         Update: {
           accepted_new_count?: number | null
@@ -182,6 +184,7 @@ export type Database = {
           source_export_type?: string | null
           user_id?: string
           warning_count?: number | null
+          content_hash?: string | null
         }
         Relationships: []
       }
@@ -395,6 +398,7 @@ export type Database = {
           updated_at: string | null
           user_id: string
           venue: string | null
+          fingerprint_hash: string | null
         }
         Insert: {
           asset_id: string
@@ -413,6 +417,7 @@ export type Database = {
           updated_at?: string | null
           user_id: string
           venue?: string | null
+          fingerprint_hash?: string | null
         }
         Update: {
           asset_id?: string
@@ -431,6 +436,7 @@ export type Database = {
           updated_at?: string | null
           user_id?: string
           venue?: string | null
+          fingerprint_hash?: string | null
         }
         Relationships: [
           {

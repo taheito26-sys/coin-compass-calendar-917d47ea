@@ -8,6 +8,7 @@ import ExchangeConnect from "@/components/ledger/ExchangeConnect";
 import {
   isWorkerConfigured,
   lookupImportRows,
+  checkFileImported,
 } from "@/lib/api";
 import { getAssetCatalog, resolveAssetId, resolveOrCreateAsset } from "@/lib/assetResolver";
 import { useLedgerMutations, type WriteStatus } from "@/hooks/useLedgerMutations";
@@ -305,6 +306,8 @@ export default function LedgerPage() {
       const hash = await hashFile(text);
 
       const parsedBase = await importCSV(text, file.name);
+      const contentHash = parsedBase.contentHash;
+
       setFileName(file.name);
       setFileHash(hash);
 
@@ -314,7 +317,21 @@ export default function LedgerPage() {
         return;
       }
 
-      // Backend-aware delta check via fingerprints
+      // 1) BLOCK EXACT RE-IMPORT of same content (order-insensitive)
+      if (isWorkerConfigured()) {
+        try {
+          const isExactMatch = await checkFileImported(contentHash);
+          if (isExactMatch) {
+            setImportError("This file was already imported before. No new rows were found.");
+            setImportLoading(false);
+            return;
+          }
+        } catch {
+          // Fallback to row checks if content check fails
+        }
+      }
+
+      // 2) DELTA CHECK via row fingerprints
       let parsed = parsedBase;
       if (isWorkerConfigured()) {
         try {
@@ -337,7 +354,7 @@ export default function LedgerPage() {
       if (acceptedNew === 0) {
         setImportError(
           already > 0
-            ? `No new transactions found. All rows were already imported (${already} already imported${invalid ? `, ${invalid} invalid` : ""}).`
+            ? `All rows in this upload already exist in the system. Nothing was imported (${already} duplicate rows skipped).`
             : "No importable rows found.",
         );
         setImportLoading(false);
@@ -398,6 +415,7 @@ export default function LedgerPage() {
           fee_amount: row.feeAmount,
           fee_currency: row.feeAsset || "USD",
           external_id: nativeId || undefined,
+          fingerprint_hash: row.fingerprintHash,
           venue: EXCHANGE_LABELS[row.sourceExchange] ?? row.sourceExchange,
           note: `Import: ${nativeId}`,
           source: "import",
@@ -415,6 +433,7 @@ export default function LedgerPage() {
         batchPayload,
         fileName,
         fileHash,
+        contentHash: importResult.contentHash,
         exchange: importResult.exchange,
         exportType: importResult.exportType,
       });
