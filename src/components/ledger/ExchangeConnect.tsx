@@ -92,8 +92,21 @@ interface Connection {
 const AUTO_SYNC_KEY = "exchange_auto_sync";
 const AUTO_SYNC_INTERVAL_KEY = "exchange_auto_sync_interval";
 
-async function apiFetch(_path: string, _options: RequestInit = {}): Promise<Response> {
-  throw new Error("Exchange sync backend not yet migrated to Supabase");
+const FUNCTION_URL = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/exchange-sync`;
+
+async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error("Not authenticated");
+
+  return fetch(`${FUNCTION_URL}${path}`, {
+    ...options,
+    headers: {
+      ...options.headers as Record<string, string>,
+      "Authorization": `Bearer ${session.access_token}`,
+      "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      "Content-Type": "application/json",
+    },
+  });
 }
 
 export default function ExchangeConnect() {
@@ -123,15 +136,15 @@ export default function ExchangeConnect() {
   const [nextAutoSync, setNextAutoSync] = useState<Date | null>(null);
 
   const loadConnections = useCallback(async () => {
-    // Exchange sync not yet migrated to Supabase
-    setLoading(false); return;
     try {
-      const res = await apiFetch("/api/exchange-sync");
+      const res = await apiFetch("");
       if (res.ok) {
         const data = await res.json();
         setConnections((data as any).connections || []);
       }
-    } catch {}
+    } catch (err) {
+      console.warn("[ExchangeConnect] Failed to load connections:", err);
+    }
     setLoading(false);
   }, []);
 
@@ -146,7 +159,7 @@ export default function ExchangeConnect() {
     setSaving(true);
     setTestResult(null);
     try {
-      const res = await apiFetch("/api/exchange-sync", {
+      const res = await apiFetch("", {
         method: "POST",
         body: JSON.stringify({
           exchange: selectedExchange,
@@ -174,11 +187,11 @@ export default function ExchangeConnect() {
     setTesting(exId);
     setTestResult(null);
     try {
-      const res = await apiFetch(`/api/exchange-sync/test/${exId}`, { method: "POST" });
+      const res = await apiFetch(`/test/${exId}`, { method: "POST" });
       const data = await res.json() as any;
       setTestResult({ ok: data.ok, message: data.message || data.error || "Unknown" });
       if (data.ok) toast(`${exId}: ${data.message}`, "good");
-      else toast(`${exId}: ${data.error}`, "bad");
+      else toast(`${exId}: ${data.error || data.message}`, "bad");
     } catch (err: any) {
       setTestResult({ ok: false, message: err?.message || "Test failed" });
       toast("Connection test failed", "bad");
@@ -190,7 +203,7 @@ export default function ExchangeConnect() {
     if (!silent) setSyncing(exId);
     setSyncResult(null);
     try {
-      const res = await apiFetch(`/api/exchange-sync/sync/${exId}`, { method: "POST" });
+      const res = await apiFetch(`/sync/${exId}`, { method: "POST" });
       const data = await res.json() as any;
       if (data.ok) {
         if (!silent) {
@@ -278,23 +291,16 @@ export default function ExchangeConnect() {
   const deleteConnection = async (exId: string) => {
     if (!confirm(`Disconnect ${exId}? This won't delete imported trades.`)) return;
     try {
-      await apiFetch(`/api/exchange-sync/${exId}`, { method: "DELETE" });
+      await apiFetch(`/${exId}`, { method: "DELETE" });
       toast("Disconnected ✓", "good");
       await loadConnections();
     } catch {}
   };
 
-  // Exchange sync not yet migrated to Supabase
-  if (true) {
+  if (loading) {
     return (
-      <div className="panel">
-        <div className="panel-body" style={{ textAlign: "center", padding: 40 }}>
-          <div style={{ fontSize: 28, marginBottom: 8 }}>🔗</div>
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>Coming Soon</div>
-          <div className="muted" style={{ fontSize: 12 }}>
-            Exchange API connections are being migrated to Supabase and will be available soon.
-          </div>
-        </div>
+      <div style={{ textAlign: "center", padding: 40, color: "var(--muted)", fontSize: 12 }}>
+        Loading connections…
       </div>
     );
   }

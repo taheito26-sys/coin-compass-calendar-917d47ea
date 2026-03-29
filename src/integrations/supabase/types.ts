@@ -50,6 +50,51 @@ export type Database = {
         }
         Relationships: []
       }
+      exchange_connections: {
+        Row: {
+          api_key: string
+          api_secret: string
+          created_at: string
+          exchange: string
+          id: string
+          label: string | null
+          last_sync: string | null
+          passphrase: string | null
+          status: string
+          sync_count: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          api_key: string
+          api_secret: string
+          created_at?: string
+          exchange: string
+          id?: string
+          label?: string | null
+          last_sync?: string | null
+          passphrase?: string | null
+          status?: string
+          sync_count?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          api_key?: string
+          api_secret?: string
+          created_at?: string
+          exchange?: string
+          id?: string
+          label?: string | null
+          last_sync?: string | null
+          passphrase?: string | null
+          status?: string
+          sync_count?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       import_batches: {
         Row: {
           accepted_new_count: number | null
