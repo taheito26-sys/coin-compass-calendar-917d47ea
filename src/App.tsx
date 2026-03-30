@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AuthProvider, useAuth } from "@/lib/supabaseAuth";
 import { CryptoProvider, useCrypto } from "@/lib/cryptoContext";
 import AuthScreen from "@/components/AuthScreen";
@@ -45,7 +45,7 @@ function AppShell({
 }) {
   const [page, setPage] = useState("dashboard");
   const { toastMsg } = useCrypto();
-  const [title, sub] = PAGE_TITLES[page] || ["CryptoTracker", ""];
+  const [title, sub] = PAGE_TITLES[page] || ["Royal Qatar", ""];
 
   return (
     <>
@@ -100,6 +100,10 @@ function AuthGate() {
 }
 
 export default function App() {
+  useEffect(() => {
+    document.title = "Royal Qatar Pro — Portfolio & Intelligence";
+  }, []);
+
   return (
     <AuthProvider>
       <CryptoProvider>
