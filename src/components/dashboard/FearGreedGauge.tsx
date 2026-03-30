@@ -5,7 +5,7 @@
 import { useState, useEffect } from "react";
 import { isWorkerConfigured } from "@/lib/api";
 
-const WORKER_BASE = (import.meta.env.VITE_WORKER_API_URL || "https://cryptotracker-api.taheito26.workers.dev").replace(/\/$/, "");
+const WORKER_BASE = (import.meta.env.VITE_WORKER_API_URL || "").replace(/\/$/, "");
 
 interface FearGreedData {
   value: number;
