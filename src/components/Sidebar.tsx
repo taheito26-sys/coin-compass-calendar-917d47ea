@@ -18,11 +18,11 @@ export default function Sidebar({ page, onNav, onLogout }: { page: string; onNav
     <aside className="sidebar">
       <div className="brand">
         <div className="logo">
-          <svg viewBox="0 0 24 24" fill="none"><path d="M12 2.5c4.7 0 8.5 3.8 8.5 8.5S16.7 19.5 12 19.5 3.5 15.7 3.5 11 7.3 2.5 12 2.5Z" stroke="rgba(255,255,255,.9)" strokeWidth="1.5"/><path d="M7 12h10M12 7v10" stroke="rgba(255,255,255,.9)" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          <img src="/logo.png" alt="Royal Qatar Logo" style={{ width: 32, height: 32, borderRadius: 6, objectFit: "cover" }} />
         </div>
         <div>
-          <div className="brand-name">CryptoTracker</div>
-          <div className="brand-ver">v2 · Portfolio</div>
+          <div className="brand-name">Royal Qatar</div>
+          <div className="brand-ver">v2 · Royal Portfolio</div>
         </div>
       </div>
       <nav className="nav">
