@@ -1,3 +1,5 @@
+import type { CompactionMetadata } from "../compaction";
+
 // ── Import system types ──────────────────────────────────────────
 // v2: Production-grade spot trade import pipeline.
 
@@ -71,6 +73,9 @@ export interface CanonicalTransactionRow {
   txHash: string;
 
   rawRow: Record<string, string>;
+
+  // v2.1: Trade-Event Compaction audit trail
+  compactionMetadata?: CompactionMetadata;
 }
 
 export interface ImportPreviewRow extends CanonicalTransactionRow {

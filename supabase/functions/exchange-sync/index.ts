@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { compactTrades } from "./compaction.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -805,38 +806,13 @@ async function syncExchangeTrades(
   const sortedTrades = combined.sort(
     (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
   );
-  const clusters: (NormalizedTrade & { _lastTs: number })[] = [];
 
-  for (const trade of sortedTrades) {
-    const tradeTs = new Date(trade.timestamp).getTime();
-    if (!Number.isFinite(tradeTs)) continue;
+  const { trades: finalTrades, summary: compactionStats } = compactTrades(sortedTrades, {
+    timeWindowSeconds: 60,
+    priceTolerancePercent: 0.15,
+    isCsvImport: false,
+  });
 
-    const lastCluster = clusters[clusters.length - 1];
-    if (lastCluster) {
-      const within15Minutes = tradeTs - lastCluster._lastTs <= 15 * 60 * 1000;
-      const sameOrderId = !!trade.orderId && !!lastCluster.orderId && trade.orderId === lastCluster.orderId;
-      const sameBucket = trade.symbol === lastCluster.symbol && trade.side === lastCluster.side;
-
-      if (sameBucket && (within15Minutes || sameOrderId)) {
-        const totalQty = lastCluster.qty + trade.qty;
-        if (totalQty > 0) {
-          lastCluster.price =
-            (lastCluster.price * lastCluster.qty + trade.price * trade.qty) / totalQty;
-        }
-        lastCluster.qty = totalQty;
-        lastCluster.fee += trade.fee || 0;
-        lastCluster._lastTs = Math.max(lastCluster._lastTs, tradeTs);
-        continue;
-      }
-    }
-
-    clusters.push({
-      ...trade,
-      _lastTs: tradeTs,
-    });
-  }
-
-  const finalTrades = clusters.map(({ _lastTs: _ignored, ...trade }) => trade);
   const duplicateCompactionCount = sortedTrades.length - finalTrades.length;
 
   safeLog("log", "sync_fetch_stats", {
@@ -946,6 +922,11 @@ async function syncExchangeTrades(
       continue;
     }
 
+    const tags: string[] = [];
+    if (trade.compaction_metadata) {
+      tags.push(`compaction_v1:${JSON.stringify(trade.compaction_metadata)}`);
+    }
+
     const { error: insertError } = await supabase.from("transactions").insert({
       user_id: userId,
       asset_id: assetId,
@@ -958,6 +939,7 @@ async function syncExchangeTrades(
       source: `api_${exchange}`,
       venue: exchange,
       external_id: externalId,
+      tags: tags.length > 0 ? tags : null,
     });
 
     if (insertError) {
@@ -1735,54 +1717,76 @@ async function compactAllTransactions(supabase: any, userId: string) {
   }
 
   const originalCount = txs.length;
-  const groups: Record<string, any[]> = {};
-  
-  // Group by Asset and Side
-  for (const t of txs) {
-    const key = `${t.asset_id}_${t.type}`;
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(t);
-  }
 
-  const finalTxs: any[] = [];
-  let mergedCount = 0;
+  const normalizedForCompaction: NormalizedTrade[] = txs.map((t: any) => ({
+    id: t.id,
+    orderId: t.note && t.note.length > 5 ? t.note : undefined, // Heuristic: try to recover orderId from note if possible
+    symbol: t.asset_id, // We'll group by ID directly here
+    side: t.type as any,
+    qty: t.qty,
+    price: t.unit_price,
+    fee: t.fee_amount,
+    feeCurrency: t.fee_currency || "USD",
+    timestamp: t.timestamp,
+    venue: t.venue || "unknown",
+  }));
 
-  for (const group of Object.values(groups)) {
-    const sorted = group.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-    const clusters: any[] = [];
+  const { trades: compactedLocal } = compactTrades(normalizedForCompaction, {
+    timeWindowSeconds: 120, // Strict rule
+    priceTolerancePercent: 0.15,
+  });
 
-    for (const tx of sorted) {
-      const txTs = new Date(tx.timestamp).getTime();
-      const last = clusters[clusters.length - 1];
-
-      if (last) {
-        const diffMs = txTs - new Date(last.timestamp).getTime();
-        const sameOrder = tx.order_id && last.order_id && tx.order_id === last.order_id;
-        // Same asset (implied by group) and within 15 mins or same order
-        if (diffMs < 15 * 60 * 1000 || sameOrder) {
-          const totalQty = last.qty + tx.qty;
-          if (totalQty > 0) {
-            last.unit_price = (last.unit_price * last.qty + tx.unit_price * tx.qty) / totalQty;
-          }
-          last.qty = totalQty;
-          last.fee_amount = (last.fee_amount || 0) + (tx.fee_amount || 0);
-          last.note = (last.note || "") + (tx.note ? ` + ${tx.note}` : "");
-          // Keep the earliest ID to avoid breaking UI references if possible, 
-          // or we just trust the new state. We'll keep the first one.
-          mergedCount++;
-          continue;
-        }
-      }
-      clusters.push({ ...tx });
-    }
-    finalTxs.push(...clusters);
-  }
+  const mergedCount = originalCount - compactedLocal.length;
 
   if (mergedCount === 0) {
-    return { ok: true, message: "No fragmented trades found to compact.", original: originalCount, compacted: 0 };
+    return { ok: true, message: "No fragmented trades found to compact with current rules.", original: originalCount, compacted: 0 };
   }
 
-  // 2. Perform Atomic Swap (Delete ALL and Re-insert Compacted)
+  // 2. Map back to DB format
+  const finalTxs = compactedLocal.map(ct => {
+    // Find one original row in this group to preserve metadata like user_id, source, etc.
+    const original = txs.find((t: any) => t.id === ct.id) || txs[0]; 
+    
+    const tags: string[] = Array.isArray(original.tags) ? [...original.tags] : [];
+    if (ct.compaction_metadata) {
+      // Remove any old compaction tags to avoid duplication
+      const filteredTags = tags.filter(tag => !tag.startsWith("compaction_v1:"));
+      filteredTags.push(`compaction_v1:${JSON.stringify(ct.compaction_metadata)}`);
+      return {
+        user_id: userId,
+        asset_id: ct.symbol,
+        timestamp: ct.timestamp,
+        type: ct.side,
+        qty: ct.qty,
+        unit_price: ct.price,
+        fee_amount: ct.fee,
+        fee_currency: ct.feeCurrency,
+        venue: ct.venue === "unknown" ? null : ct.venue,
+        note: original.note,
+        source: original.source,
+        external_id: ct.external_id,
+        tags: filteredTags,
+      };
+    }
+
+    return {
+      user_id: userId,
+      asset_id: ct.symbol,
+      timestamp: ct.timestamp,
+      type: ct.side,
+      qty: ct.qty,
+      unit_price: ct.price,
+      fee_amount: ct.fee,
+      fee_currency: ct.feeCurrency,
+      venue: ct.venue === "unknown" ? null : ct.venue,
+      note: original.note,
+      source: original.source,
+      external_id: ct.external_id,
+      tags: tags.length > 0 ? tags : null,
+    };
+  });
+
+  // 3. Perform Atomic Swap (Delete ALL and Re-insert Compacted)
   // Warning: This is destructive. We use a transaction-like approach.
   // Since we are in an Edge Function, we'll do delete then insert.
   const { error: delError } = await supabase.from("transactions").delete().eq("user_id", userId);
@@ -1790,10 +1794,7 @@ async function compactAllTransactions(supabase: any, userId: string) {
 
   // Re-insert in batches of 500 to stay within limits
   for (let i = 0; i < finalTxs.length; i += 500) {
-    const batch = finalTxs.slice(i, i + 500).map(t => {
-      const { id, created_at, ...rest } = t; // Let database generate new IDs or omit them
-      return rest;
-    });
+    const batch = finalTxs.slice(i, i + 500);
     const { error: insError } = await supabase.from("transactions").insert(batch);
     if (insError) throw new Error(`Compaction failed during re-insertion: ${insError.message}`);
   }

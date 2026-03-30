@@ -13,6 +13,7 @@ import {
 } from "@/lib/api";
 import { getAssetCatalog, resolveAssetId, resolveOrCreateAsset } from "@/lib/assetResolver";
 import { useLedgerMutations, type WriteStatus } from "@/hooks/useLedgerMutations";
+import { compactTrades, type NormalizedTrade, type CompactionSummary } from "@/lib/compaction";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -65,6 +66,20 @@ function TypeBadge({ type }: { type: string }) {
       border: `1px solid ${meta.color}30`,
     }}>
       {meta.icon} {meta.label}
+    </span>
+  );
+}
+
+function CompactionBadge({ fills }: { fills: number }) {
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 3,
+      fontSize: 9, fontWeight: 800, letterSpacing: "0.06em",
+      padding: "1px 5px", borderRadius: " var(--lt-radius-sm)",
+      background: "var(--brand)15", color: "var(--brand)",
+      border: "1px solid var(--brand)30",
+    }}>
+      🪄 COMPACTED ({fills} fills)
     </span>
   );
 }
@@ -175,6 +190,7 @@ export default function LedgerPage() {
   const [importError, setImportError] = useState("");
   const [isDeltaImport, setIsDeltaImport] = useState(false);
   const [deltaCount, setDeltaCount] = useState(0);
+  const [compactionStats, setCompactionStats] = useState<CompactionSummary | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const importedFiles = state.importedFiles ?? [];
@@ -367,6 +383,45 @@ export default function LedgerPage() {
         const lookup = await lookupImportRows({ fingerprint_hashes: fpHashes, native_ids: [] });
         parsed = { ...parsedBase, rows: applyLookup(parsedBase.rows, lookup) };
       }
+
+      // v2.1: Trade-Event Compaction
+      const normalizedForCompaction: NormalizedTrade[] = parsed.rows.map(r => ({
+        id: r.fingerprintHash,
+        orderId: r.orderId,
+        symbol: r.assetSymbol,
+        side: r.side,
+        qty: r.qty,
+        price: r.price,
+        fee: r.feeAmount,
+        feeCurrency: r.feeAsset,
+        timestamp: new Date(r.timestamp).toISOString(),
+        venue: r.sourceExchange,
+        external_id: r.tradeId || r.fingerprintHash,
+      }));
+
+      const { trades: compactedLocal, summary } = compactTrades(normalizedForCompaction, {
+        timeWindowSeconds: 120, // CSV rule
+        priceTolerancePercent: 0.15,
+        isCsvImport: true,
+      });
+
+      setCompactionStats(summary);
+
+      // Map back to ImportPreviewRow
+      const finalPreviewRows = compactedLocal.map(ct => {
+        const originalFirstRow = parsed.rows.find(r => r.fingerprintHash === ct.id)!;
+        return {
+          ...originalFirstRow,
+          qty: ct.qty,
+          price: ct.price,
+          feeAmount: ct.fee,
+          timestamp: new Date(ct.timestamp).getTime(),
+          compactionMetadata: ct.compaction_metadata,
+        };
+      });
+
+      parsed = { ...parsed, rows: finalPreviewRows };
+
       const already = parsed.rows.filter(r => r.status === "alreadyImported").length;
       setIsDeltaImport(already > 0);
       setDeltaCount(already);
@@ -392,11 +447,17 @@ export default function LedgerPage() {
           const res = await resolveOrCreateAsset(row.assetSymbol);
           assetId = res.assetId;
         }
+        const tags: string[] = [];
+        if (row.compactionMetadata) {
+          tags.push(`compaction_v1:${JSON.stringify(row.compactionMetadata)}`);
+        }
+
         batch.push({
           asset_id: assetId, timestamp: new Date(row.timestamp).toISOString(), type: row.side,
           qty: row.qty, unit_price: row.price, fee_amount: row.feeAmount, fee_currency: row.feeAsset,
           venue: EXCHANGE_LABELS[row.sourceExchange] ?? row.sourceExchange, note: row.tradeId,
-          source: "import", external_id: row.tradeId || row.fingerprintHash
+          source: "import", external_id: row.orderId || row.tradeId || row.fingerprintHash,
+          tags: tags.length > 0 ? tags : undefined,
         });
         counts.accepted++;
       }
@@ -416,6 +477,7 @@ export default function LedgerPage() {
   const resetImport = () => {
     setImportStage("upload"); setImportResult(null); setImportCounts(null);
     setFileName(""); setFileHash(""); setImportError(""); setImportErrorMsg("");
+    setCompactionStats(null);
     if (fileRef.current) fileRef.current.value = "";
   };
 
@@ -606,16 +668,83 @@ export default function LedgerPage() {
               </div>
             )}
             {importStage === "preview" && importResult && (
-              <div>
-                <p>Found <strong>{importResult.rows.length}</strong> trades.</p>
-                <button className="btn" onClick={commitImport}>Commit Trades</button>
-                <button className="btn secondary" onClick={resetImport}>Cancel</button>
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <h3 style={{ margin: 0 }}>Import Preview: {fileName}</h3>
+                    <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--muted)" }}>
+                      Detected {importResult.rows.length} logical trades from {compactionStats?.raw_trades ?? importResult.rows.length} raw fills.
+                    </p>
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button className="btn secondary" onClick={resetImport}>Cancel</button>
+                    <button className="btn" onClick={commitImport}>Confirm & Import</button>
+                  </div>
+                </div>
+
+                <div className="tableWrap" style={{ maxHeight: 400, border: "1px solid var(--line)" }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>DATE</th><th>TYPE</th><th>ASSET</th><th>QTY</th><th>PRICE</th><th>FEE</th><th>STATUS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importResult.rows.map((row, idx) => (
+                        <tr key={idx} style={{ opacity: row.status === "alreadyImported" ? 0.5 : 1 }}>
+                          <td className="mono muted" style={{ fontSize: 11 }}>{new Date(row.timestamp).toLocaleString()}</td>
+                          <td>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                              <TypeBadge type={row.side} />
+                              {row.compactionMetadata && <CompactionBadge fills={row.compactionMetadata.num_fills} />}
+                            </div>
+                          </td>
+                          <td className="mono"><strong>{row.assetSymbol}</strong></td>
+                          <td className="mono">{fmtQty(row.qty)}</td>
+                          <td className="mono">${fmtPx(row.price)}</td>
+                          <td className="mono muted">{row.feeAmount > 0 ? `${fmtQty(row.feeAmount)} ${row.feeAsset}` : "—"}</td>
+                          <td>
+                            {row.status === "alreadyImported" ? (
+                              <span style={{ color: "var(--warn, #eab308)", fontSize: 11, fontWeight: 700 }}>Already Imported</span>
+                            ) : (
+                              <span style={{ color: "var(--good)", fontSize: 11, fontWeight: 700 }}>Ready</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
-            {importStage === "done" && (
-              <div style={{ textAlign: "center" }}>
-                <p>Import successful!</p>
-                <button className="btn" onClick={resetImport}>Import Another</button>
+            {importStage === "done" && importCounts && (
+              <div style={{ textAlign: "center", padding: "20px 0" }}>
+                <div style={{ fontSize: 40, marginBottom: 16 }}>✅</div>
+                <h3 style={{ marginBottom: 24 }}>Import Successful</h3>
+                
+                <div style={{ 
+                  display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12, 
+                  maxWidth: 400, margin: "0 auto 30px", textAlign: "left" 
+                }}>
+                  <div className="stat-item" style={{ background: "var(--panel2)", padding: 12, borderRadius: 8, border: "1px solid var(--line)" }}>
+                    <div style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700 }}>RAW FILLS</div>
+                    <div style={{ fontSize: 18, fontWeight: 800 }}>{compactionStats?.raw_trades ?? 0}</div>
+                  </div>
+                  <div className="stat-item" style={{ background: "var(--panel2)", padding: 12, borderRadius: 8, border: "1px solid var(--line)" }}>
+                    <div style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700 }}>INVALID ROWS</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: "var(--bad)" }}>{importResult?.skippedCount ?? 0}</div>
+                  </div>
+                  <div className="stat-item" style={{ background: "var(--panel2)", padding: 12, borderRadius: 8, border: "1px solid var(--line)" }}>
+                    <div style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700 }}>DUPLICATE ROWS</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: "var(--warn, #eab308)" }}>{importCounts.skippedDuplicate}</div>
+                  </div>
+                  <div className="stat-item" style={{ background: "var(--panel2)", padding: 12, borderRadius: 8, border: "1px solid var(--line)" }}>
+                    <div style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700 }}>COMPACTED TRADES</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: "var(--brand)" }}>{importCounts.persisted}</div>
+                  </div>
+                </div>
+
+                <button className="btn" onClick={resetImport}>Import Another File</button>
               </div>
             )}
             {importError && <p style={{ color: "var(--bad)" }}>{importError}</p>}
