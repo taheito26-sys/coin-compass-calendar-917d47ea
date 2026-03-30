@@ -3,6 +3,7 @@ import { useCrypto } from "@/lib/cryptoContext";
 import { uid, fmtPx } from "@/lib/cryptoState";
 import { cryptoDerived } from "@/lib/cryptoState";
 import { supabase } from "@/integrations/supabase/client";
+import { repairMultiplierTransactions } from "@/lib/api";
 
 // ── Layout & theme metadata ───────────────────────────────────────────────
 
@@ -213,6 +214,7 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
   // User Preferences from Database
   const [minImportValue, setMinImportValue] = useState(100);
   const [loadingPrefs, setLoadingPrefs] = useState(false);
+  const [repairingPEPE, setRepairingPEPE] = useState(false);
 
   useEffect(() => {
     async function loadPrefs() {
@@ -238,6 +240,39 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
       else toast("Sync threshold saved to cloud ✓", "good");
     }
     setLoadingPrefs(false);
+  };
+
+  const runPEPEMultiplierRepair = async () => {
+    if (!confirm("Run in-place multiplier repair for PEPE x1000? This updates existing buy/sell rows without deleting data.")) {
+      return;
+    }
+
+    setRepairingPEPE(true);
+    try {
+      const preview = await repairMultiplierTransactions({
+        symbol: "PEPE",
+        multiplier: 1000,
+        dryRun: true,
+      });
+
+      if (!preview?.candidates) {
+        toast("No PEPE rows need repair", "warn");
+        return;
+      }
+
+      const result = await repairMultiplierTransactions({
+        symbol: "PEPE",
+        multiplier: 1000,
+        dryRun: false,
+        force: true,
+      });
+
+      toast(`PEPE repair complete: ${result.repaired} row(s) updated`, "good");
+    } catch (err: any) {
+      toast(err?.message || "PEPE repair failed", "bad");
+    } finally {
+      setRepairingPEPE(false);
+    }
   };
 
   const alerts = state.alerts || [];
@@ -511,6 +546,19 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
                 toast("All data cleared", "bad");
               }
             }}>🗑 Clear All Data</button>
+          </div>
+          <div style={{ borderTop: "1px solid var(--line)", paddingTop: 10, marginTop: 10 }}>
+            <button
+              className="btn secondary"
+              style={{ minWidth: 0, whiteSpace: "normal" }}
+              onClick={runPEPEMultiplierRepair}
+              disabled={repairingPEPE}
+            >
+              {repairingPEPE ? "Repairing..." : "🛠 Admin: Repair PEPE x1000 Rows"}
+            </button>
+            <p className="muted" style={{ marginTop: 8, fontSize: 11, lineBreak: "auto", wordBreak: "break-word", lineHeight: "1.4" }}>
+              One-click in-place repair for previously imported multiplier-corrupted PEPE transactions. No data wipe.
+            </p>
           </div>
         </div>
       </div>

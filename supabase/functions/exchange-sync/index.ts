@@ -307,6 +307,45 @@ Deno.serve(async (req) => {
       }
     }
 
+    // POST /exchange-sync/repair-multiplier
+    if (req.method === "POST" && action === "repair-multiplier") {
+      const body = await req.json().catch(() => ({}));
+      const canonicalSymbol = String(body?.symbol || "").trim().toUpperCase();
+      const multiplier = Number(body?.multiplier);
+      const dryRun = body?.dryRun !== false;
+      const forceApply = body?.force === true;
+      const venue = body?.venue ? String(body.venue) : null;
+
+      if (!canonicalSymbol) {
+        return json({ ok: false, error: "Missing symbol", stage: "repair-multiplier" }, 400);
+      }
+      if (!Number.isFinite(multiplier) || multiplier <= 1) {
+        return json({ ok: false, error: "Invalid multiplier", stage: "repair-multiplier" }, 400);
+      }
+      if (!dryRun && !forceApply) {
+        return json(
+          {
+            ok: false,
+            error: "Explicit force=true required for non-dry-run execution",
+            stage: "repair-multiplier",
+          },
+          400
+        );
+      }
+
+      try {
+        const result = await repairMultiplierTransactions(supabase, user.id, {
+          canonicalSymbol,
+          multiplier,
+          venue,
+          dryRun,
+        });
+        return json(result);
+      } catch (err) {
+        return toErrorResponse(err, undefined, "sync");
+      }
+    }
+
 
     // POST /exchange-sync
     if (req.method === "POST" && (!action || action === "exchange-sync")) {
@@ -1779,6 +1818,172 @@ async function krakenSign(path: string, postData: string, nonce: number, secret:
   );
   const sig = await crypto.subtle.sign("HMAC", key, message);
   return btoa(String.fromCharCode(...new Uint8Array(sig)));
+}
+
+type MultiplierRepairOptions = {
+  canonicalSymbol: string;
+  multiplier: number;
+  venue?: string | null;
+  dryRun: boolean;
+};
+
+type RepairRow = {
+  id: string;
+  qty: number;
+  unit_price: number;
+  tags?: string[] | null;
+};
+
+async function repairMultiplierTransactions(
+  supabase: any,
+  userId: string,
+  options: MultiplierRepairOptions
+) {
+  const repairTagPrefix = "instrument_multiplier_repair_v1:";
+  const tsIso = new Date().toISOString();
+
+  const { data: assets, error: assetError } = await supabase
+    .from("assets")
+    .select("id, symbol, binance_symbol")
+    .or(`symbol.eq.${options.canonicalSymbol},binance_symbol.eq.${options.canonicalSymbol}`);
+
+  if (assetError) {
+    throw new AppError({
+      message: "Failed to resolve target asset",
+      status: 500,
+      stage: "sync",
+      hint: toSafeSnippet(assetError.message),
+    });
+  }
+
+  const assetIds = (assets || []).map((a: any) => a.id).filter(Boolean);
+  if (assetIds.length === 0) {
+    return {
+      ok: true,
+      dryRun: options.dryRun,
+      message: `No asset found for symbol ${options.canonicalSymbol}`,
+      scanned: 0,
+      candidates: 0,
+      repaired: 0,
+      skippedAlreadyRepaired: 0,
+      invariantFailures: 0,
+      sample: [],
+    };
+  }
+
+  let txQuery = supabase
+    .from("transactions")
+    .select("id, qty, unit_price, tags, venue")
+    .eq("user_id", userId)
+    .in("asset_id", assetIds)
+    .in("type", ["buy", "sell"]);
+
+  if (options.venue) {
+    txQuery = txQuery.eq("venue", options.venue);
+  }
+
+  const { data: rows, error: txError } = await txQuery;
+  if (txError) {
+    throw new AppError({
+      message: "Failed to load transactions for multiplier repair",
+      status: 500,
+      stage: "sync",
+      hint: toSafeSnippet(txError.message),
+    });
+  }
+
+  const scanned = (rows || []).length;
+  let candidates = 0;
+  let repaired = 0;
+  let skippedAlreadyRepaired = 0;
+  let invariantFailures = 0;
+  const sample: Array<Record<string, unknown>> = [];
+
+  for (const row of (rows || []) as RepairRow[]) {
+    const existingTags = Array.isArray(row.tags) ? row.tags : [];
+    if (existingTags.some((tag) => typeof tag === "string" && tag.startsWith(repairTagPrefix))) {
+      skippedAlreadyRepaired++;
+      continue;
+    }
+
+    const rawQty = Number(row.qty);
+    const rawPrice = Number(row.unit_price);
+    const normalized = normalizeTradeEconomics(rawQty, rawPrice, options.multiplier);
+    if (!normalized.invariantHolds) {
+      invariantFailures++;
+      continue;
+    }
+
+    candidates++;
+    if (sample.length < 20) {
+      sample.push({
+        id: row.id,
+        qtyBefore: rawQty,
+        priceBefore: rawPrice,
+        qtyAfter: normalized.canonicalQty,
+        priceAfter: normalized.canonicalPrice,
+        invariantDelta: normalized.invariantDelta,
+      });
+    }
+
+    if (options.dryRun) {
+      continue;
+    }
+
+    const repairTag = `${repairTagPrefix}${JSON.stringify({
+      canonicalSymbol: options.canonicalSymbol,
+      multiplier: options.multiplier,
+      repairedAt: tsIso,
+    })}`;
+    const nextTags = [...existingTags, repairTag];
+
+    const { error: updateError } = await supabase
+      .from("transactions")
+      .update({
+        qty: normalized.canonicalQty,
+        unit_price: normalized.canonicalPrice,
+        tags: nextTags,
+        updated_at: tsIso,
+      })
+      .eq("id", row.id)
+      .eq("user_id", userId);
+
+    if (updateError) {
+      throw new AppError({
+        message: "Failed to update transaction during multiplier repair",
+        status: 500,
+        stage: "sync",
+        hint: toSafeSnippet(updateError.message),
+      });
+    }
+
+    repaired++;
+  }
+
+  safeLog("log", "multiplier_repair_completed", {
+    user: userPrefix(userId),
+    canonicalSymbol: options.canonicalSymbol,
+    multiplier: options.multiplier,
+    dryRun: options.dryRun,
+    scanned,
+    candidates,
+    repaired,
+    skippedAlreadyRepaired,
+    invariantFailures,
+  });
+
+  return {
+    ok: true,
+    dryRun: options.dryRun,
+    symbol: options.canonicalSymbol,
+    multiplier: options.multiplier,
+    scanned,
+    candidates,
+    repaired,
+    skippedAlreadyRepaired,
+    invariantFailures,
+    sample,
+  };
 }
 
 async function compactAllTransactions(supabase: any, userId: string) {

@@ -705,3 +705,31 @@ export async function apiFetch(path: string, options: RequestInit = {}): Promise
     json: async () => data,
   } as Response;
 }
+
+export interface MultiplierRepairRequest {
+  symbol: string;
+  multiplier: number;
+  dryRun?: boolean;
+  force?: boolean;
+  venue?: string;
+}
+
+export async function repairMultiplierTransactions(request: MultiplierRepairRequest): Promise<any> {
+  const response = await apiFetch("/repair-multiplier", {
+    method: "POST",
+    body: JSON.stringify({
+      symbol: request.symbol,
+      multiplier: request.multiplier,
+      dryRun: request.dryRun ?? true,
+      force: request.force ?? false,
+      venue: request.venue || undefined,
+    }),
+    headers: { "Content-Type": "application/json" },
+  });
+
+  const data = await response.json();
+  if (!response.ok || data?.ok === false) {
+    throw new Error(data?.error || "Failed to repair multiplier transactions");
+  }
+  return data;
+}
