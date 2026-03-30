@@ -2,6 +2,9 @@
  * exchange-auto-sync — Server-side cron function that syncs all exchange connections.
  * Called by pg_cron every 30 minutes. Uses service role to iterate all users.
  * Logs results to exchange_sync_logs table.
+ *
+ * All fetcher functions mirror the improved logic in exchange-sync/index.ts
+ * (windowed pagination, fresh HMAC per request, safety limits).
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
@@ -26,11 +29,8 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    // Service role client bypasses RLS to access all users' connections
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // Fetch all active connections
     const { data: connections, error: connErr } = await supabase
       .from("exchange_connections")
       .select("*")
@@ -67,7 +67,6 @@ Deno.serve(async (req) => {
           conn.passphrase
         );
 
-        // Update sync metadata
         await supabase
           .from("exchange_connections")
           .update({
@@ -78,7 +77,6 @@ Deno.serve(async (req) => {
           })
           .eq("id", conn.id);
 
-        // Log the sync
         await supabase.from("exchange_sync_logs").insert({
           user_id: conn.user_id,
           exchange: conn.exchange,
@@ -102,13 +100,11 @@ Deno.serve(async (req) => {
         const message = err instanceof Error ? err.message : "Unknown error";
         console.error(`[auto-sync] ${conn.exchange}@${conn.user_id.slice(0, 8)} failed:`, message);
 
-        // Mark connection as error
         await supabase
           .from("exchange_connections")
           .update({ status: "error", updated_at: new Date().toISOString() })
           .eq("id", conn.id);
 
-        // Log the failure
         await supabase.from("exchange_sync_logs").insert({
           user_id: conn.user_id,
           exchange: conn.exchange,
@@ -172,6 +168,8 @@ async function syncExchangeTrades(
 ): Promise<{ ok: boolean; synced: number; skipped: number }> {
   let trades: NormalizedTrade[] = [];
 
+  console.log(`[auto-sync] Fetching trades from ${exchange}...`);
+
   switch (exchange) {
     case "binance":
       trades = await fetchBinanceTrades(apiKey, apiSecret);
@@ -195,12 +193,29 @@ async function syncExchangeTrades(
       throw new Error(`Unsupported exchange: ${exchange}`);
   }
 
+  console.log(`[auto-sync] ${exchange}: fetched ${trades.length} trades`);
+
   if (!trades.length) return { ok: true, synced: 0, skipped: 0 };
+
+  // --- Trade Compaction ---
+  const groups = new Map<string, NormalizedTrade>();
+  for (const t of trades) {
+    const minuteTs = t.timestamp.substring(0, 16);
+    const key = `${t.symbol}|${t.side}|${t.price}|${minuteTs}`;
+    if (groups.has(key)) {
+      const existing = groups.get(key)!;
+      existing.qty += t.qty;
+      existing.fee += t.fee;
+    } else {
+      groups.set(key, { ...t });
+    }
+  }
+  const finalTrades = Array.from(groups.values());
 
   let synced = 0;
   let skipped = 0;
 
-  for (const trade of trades) {
+  for (const trade of finalTrades) {
     const { data: existingAsset } = await supabase
       .from("assets")
       .select("id")
@@ -221,7 +236,9 @@ async function syncExchangeTrades(
       assetId = newAsset.id;
     }
 
-    const externalId = `${exchange}_${trade.id}`;
+    const minuteTs = trade.timestamp.substring(0, 16);
+    const externalId = `${exchange}_compact_${trade.symbol}_${trade.side}_${trade.price}_${minuteTs}`;
+
     const { data: existing } = await supabase
       .from("transactions")
       .select("id")
@@ -273,158 +290,311 @@ async function fetchBinanceTrades(apiKey: string, apiSecret: string): Promise<No
     (b: any) => parseFloat(b.free) > 0 || parseFloat(b.locked) > 0
   );
   const assets = balances.map((b: any) => b.asset as string);
+  const quotes = ["USDT", "USDC", "BUSD", "TUSD", "FDUSD", "DAI", "BTC", "ETH", "BNB"];
 
   const allTrades: NormalizedTrade[] = [];
   for (const asset of assets) {
-    if (["USDT", "USDC", "BUSD", "USD"].includes(asset)) continue;
-    const symbol = `${asset}USDT`;
-    const ts2 = Date.now();
-    const q = `symbol=${symbol}&limit=1000&timestamp=${ts2}`;
-    const s = await hmacSign(apiSecret, q);
-    const res = await fetch(
-      `https://api.binance.com/api/v3/myTrades?${q}&signature=${s}`,
-      { headers: { "X-MBX-APIKEY": apiKey } }
-    );
-    if (!res.ok) continue;
-    const trades = await res.json();
-    for (const t of trades) {
-      allTrades.push({
-        id: String(t.id),
-        symbol: asset,
-        side: t.isBuyer ? "buy" : "sell",
-        qty: parseFloat(t.qty),
-        price: parseFloat(t.price),
-        fee: parseFloat(t.commission || 0),
-        feeCurrency: t.commissionAsset || "USDT",
-        timestamp: new Date(t.time).toISOString(),
-      });
+    if (quotes.includes(asset)) continue;
+
+    const possibleSymbols = quotes.map(q => `${asset}${q}`);
+    for (const symbol of possibleSymbols) {
+      const ts2 = Date.now();
+      const q = `symbol=${symbol}&limit=1000&timestamp=${ts2}`;
+      const s = await hmacSign(apiSecret, q);
+      const res = await fetch(
+        `https://api.binance.com/api/v3/myTrades?${q}&signature=${s}`,
+        { headers: { "X-MBX-APIKEY": apiKey } }
+      );
+      if (!res.ok) continue;
+      const trades = await res.json();
+      if (!Array.isArray(trades)) continue;
+
+      for (const t of trades) {
+        allTrades.push({
+          id: String(t.id),
+          symbol: asset,
+          side: t.isBuyer ? "buy" : "sell",
+          qty: parseFloat(t.qty),
+          price: parseFloat(t.price),
+          fee: parseFloat(t.commission || 0),
+          feeCurrency: t.commissionAsset || "USDT",
+          timestamp: new Date(t.time).toISOString(),
+        });
+      }
     }
   }
   return allTrades;
 }
 
 async function fetchBybitTrades(apiKey: string, apiSecret: string): Promise<NormalizedTrade[]> {
-  const ts = Date.now();
+  const allTrades: NormalizedTrade[] = [];
   const recvWindow = "5000";
-  const params = "category=spot&limit=100";
-  const payload = `${ts}${apiKey}${recvWindow}${params}`;
-  const sig = await hmacSign(apiSecret, payload);
-  const res = await fetch(`https://api.bybit.com/v5/execution/list?${params}`, {
-    headers: {
-      "X-BAPI-API-KEY": apiKey,
-      "X-BAPI-SIGN": sig,
-      "X-BAPI-TIMESTAMP": String(ts),
-      "X-BAPI-RECV-WINDOW": recvWindow,
-    },
-  });
-  if (!res.ok) throw new Error(`Bybit trades failed: ${res.status}`);
-  const data = await res.json();
-  if (data.retCode !== 0) throw new Error(data.retMsg);
+  const now = Date.now();
+  const maxHistory = 180 * 24 * 60 * 60 * 1000;
+  const windowSize = 7 * 24 * 60 * 60 * 1000;
 
-  return (data.result?.list || []).map((t: any) => ({
-    id: t.execId || t.orderId || String(Date.now()),
-    symbol: (t.symbol || "").replace(/USDT$/, ""),
-    side: t.side?.toLowerCase() === "buy" ? "buy" : "sell",
-    qty: parseFloat(t.execQty || 0),
-    price: parseFloat(t.execPrice || 0),
-    fee: parseFloat(t.execFee || 0),
-    feeCurrency: t.feeCurrency || "USDT",
-    timestamp: new Date(parseInt(t.execTime || Date.now())).toISOString(),
-  }));
+  let windowStart = now - maxHistory;
+
+  while (windowStart < now) {
+    const windowEnd = Math.min(windowStart + windowSize, now);
+    let cursor = "";
+    let hasMore = true;
+
+    console.log(`[Bybit] Window: ${new Date(windowStart).toISOString().slice(0,10)} → ${new Date(windowEnd).toISOString().slice(0,10)}`);
+
+    while (hasMore) {
+      const ts = Date.now();
+      const params = `category=spot&limit=100&startTime=${windowStart}&endTime=${windowEnd}${cursor ? `&cursor=${cursor}` : ""}`;
+      const payload = `${ts}${apiKey}${recvWindow}${params}`;
+      const sig = await hmacSign(apiSecret, payload);
+
+      const res = await fetch(
+        `https://api.bybit.com/v5/execution/list?${params}`,
+        {
+          headers: {
+            "X-BAPI-API-KEY": apiKey,
+            "X-BAPI-SIGN": sig,
+            "X-BAPI-TIMESTAMP": String(ts),
+            "X-BAPI-RECV-WINDOW": recvWindow,
+          },
+        }
+      );
+
+      if (!res.ok) {
+        const body = await res.text();
+        console.error(`[Bybit] API error: ${res.status} — ${body}`);
+        throw new Error(`Bybit trades failed: ${res.status}`);
+      }
+      const data = await res.json();
+      if (data.retCode !== 0) {
+        console.error(`[Bybit] retCode=${data.retCode}: ${data.retMsg}`);
+        throw new Error(data.retMsg);
+      }
+
+      const list = data.result?.list || [];
+      if (list.length > 0) {
+        console.log(`[Bybit] Got ${list.length} trades in this page`);
+      }
+
+      for (const t of list) {
+        const rawSymbol = (t.symbol || "").toUpperCase();
+        let baseAsset = rawSymbol;
+        const quoteList = ["USDT", "USDC", "USDD", "USDE", "BUSD", "BTC", "ETH", "EUR", "GBP", "USD", "DAI"];
+        for (const q of quoteList) {
+          if (rawSymbol.length > q.length && rawSymbol.endsWith(q)) {
+            baseAsset = rawSymbol.slice(0, -q.length);
+            break;
+          }
+        }
+
+        allTrades.push({
+          id: t.execId || t.orderId || String(Date.now()),
+          symbol: baseAsset,
+          side: t.side?.toLowerCase() === "buy" ? "buy" : "sell",
+          qty: parseFloat(t.execQty || 0),
+          price: parseFloat(t.execPrice || 0),
+          fee: parseFloat(t.execFee || 0),
+          feeCurrency: t.feeCurrency || "USDT",
+          timestamp: new Date(parseInt(t.execTime || Date.now())).toISOString(),
+        });
+      }
+
+      cursor = data.result?.nextPageCursor || "";
+      hasMore = !!cursor && list.length > 0;
+
+      if (allTrades.length > 5000) {
+        console.log(`[Bybit] Safety limit reached at ${allTrades.length} trades`);
+        break;
+      }
+    }
+
+    if (allTrades.length > 5000) break;
+    windowStart = windowEnd;
+  }
+
+  console.log(`[Bybit] Total trades fetched: ${allTrades.length}`);
+  return allTrades;
 }
 
-async function fetchOkxTrades(apiKey: string, apiSecret: string, passphrase?: string | null): Promise<NormalizedTrade[]> {
-  const ts = new Date().toISOString();
-  const path = "/api/v5/trade/fills?instType=SPOT&limit=100";
-  const sig = await hmacSignBase64(apiSecret, `${ts}GET${path}`);
-  const res = await fetch(`https://www.okx.com${path}`, {
-    headers: {
-      "OK-ACCESS-KEY": apiKey,
-      "OK-ACCESS-SIGN": sig,
-      "OK-ACCESS-TIMESTAMP": ts,
-      "OK-ACCESS-PASSPHRASE": passphrase || "",
-    },
-  });
-  if (!res.ok) throw new Error(`OKX trades failed: ${res.status}`);
-  const data = await res.json();
-  if (data.code !== "0") throw new Error(data.msg);
+async function fetchOkxTrades(
+  apiKey: string,
+  apiSecret: string,
+  passphrase?: string | null
+): Promise<NormalizedTrade[]> {
+  const allTrades: NormalizedTrade[] = [];
+  const lookbackMs = 90 * 24 * 60 * 60 * 1000;
+  const beginMs = Date.now() - lookbackMs;
+  let afterId = "";
+  let hasMore = true;
 
-  return (data.data || []).map((t: any) => ({
-    id: t.tradeId || t.billId || String(Date.now()),
-    symbol: (t.instId || "").split("-")[0],
-    side: t.side?.toLowerCase() || "buy",
-    qty: parseFloat(t.fillSz || 0),
-    price: parseFloat(t.fillPx || 0),
-    fee: Math.abs(parseFloat(t.fee || 0)),
-    feeCurrency: t.feeCcy || "USDT",
-    timestamp: new Date(parseInt(t.ts || Date.now())).toISOString(),
-  }));
+  console.log(`[OKX] Starting sync...`);
+
+  while (hasMore) {
+    const ts = new Date().toISOString();
+    const path = `/api/v5/trade/fills?instType=SPOT&limit=100&begin=${beginMs}${afterId ? `&after=${afterId}` : ""}`;
+    const preSign = `${ts}GET${path}`;
+    const sig = await hmacSignBase64(apiSecret, preSign);
+
+    const res = await fetch(`https://www.okx.com${path}`, {
+      headers: {
+        "OK-ACCESS-KEY": apiKey,
+        "OK-ACCESS-SIGN": sig,
+        "OK-ACCESS-TIMESTAMP": ts,
+        "OK-ACCESS-PASSPHRASE": passphrase || "",
+      },
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      console.error(`[OKX] error: ${res.status} - ${body}`);
+      throw new Error(`OKX trades failed: ${res.status}`);
+    }
+    const data = await res.json();
+    if (data.code !== "0") throw new Error(data.msg);
+
+    const list = data.data || [];
+    if (list.length > 0) {
+      console.log(`[OKX] page trades: ${list.length}`);
+    }
+
+    for (const t of list) {
+      const baseAsset = (t.instId || "").split("-")[0];
+      allTrades.push({
+        id: t.tradeId || t.billId || String(Date.now()),
+        symbol: baseAsset.toUpperCase(),
+        side: t.side?.toLowerCase() || "buy",
+        qty: parseFloat(t.fillSz || 0),
+        price: parseFloat(t.fillPx || 0),
+        fee: Math.abs(parseFloat(t.fee || 0)),
+        feeCurrency: t.feeCcy || "USDT",
+        timestamp: new Date(parseInt(t.ts || Date.now())).toISOString(),
+      });
+    }
+
+    if (list.length === 100) {
+      afterId = list[list.length - 1].tradeId;
+    } else {
+      hasMore = false;
+    }
+
+    if (allTrades.length > 2000) break;
+  }
+
+  console.log(`[OKX] total trades: ${allTrades.length}`);
+  return allTrades;
 }
 
 async function fetchGateTrades(apiKey: string, apiSecret: string): Promise<NormalizedTrade[]> {
-  const ts = Math.floor(Date.now() / 1000);
-  const path = "/api/v4/spot/my_trades";
-  const query = "limit=100";
-  const hashedBody = await sha512("");
-  const signStr = `GET\n${path}\n${query}\n${hashedBody}\n${ts}`;
-  const sig = await hmacSign512(apiSecret, signStr);
-  const res = await fetch(`https://api.gateio.ws${path}?${query}`, {
-    headers: { KEY: apiKey, SIGN: sig, Timestamp: String(ts) },
-  });
-  if (!res.ok) throw new Error(`Gate trades failed: ${res.status}`);
-  const trades = await res.json();
+  const allTrades: NormalizedTrade[] = [];
+  const lookbackDays = 90;
+  const windowSize = 30;
+  const now = Math.floor(Date.now() / 1000);
+  let startTime = now - (lookbackDays * 24 * 60 * 60);
 
-  return (trades || []).map((t: any) => ({
-    id: String(t.id),
-    symbol: (t.currency_pair || "").split("_")[0],
-    side: t.side?.toLowerCase() || "buy",
-    qty: parseFloat(t.amount || 0),
-    price: parseFloat(t.price || 0),
-    fee: parseFloat(t.fee || 0),
-    feeCurrency: t.fee_currency || "USDT",
-    timestamp: new Date(parseInt(t.create_time || 0) * 1000).toISOString(),
-  }));
+  console.log(`[Gate] Deep scan (90 days)...`);
+
+  while (startTime < now) {
+    const endTime = Math.min(startTime + (windowSize * 24 * 60 * 60), now);
+    const ts = Math.floor(Date.now() / 1000);
+    const path = "/api/v4/spot/my_trades";
+    const query = `limit=100&from=${startTime}&to=${endTime}`;
+    const hashedBody = await sha512("");
+    const signStr = `GET\n${path}\n${query}\n${hashedBody}\n${ts}`;
+    const sig = await hmacSign512(apiSecret, signStr);
+
+    const res = await fetch(`https://api.gateio.ws${path}?${query}`, {
+      headers: { KEY: apiKey, SIGN: sig, Timestamp: String(ts) },
+    });
+
+    if (!res.ok) {
+      console.error(`[Gate] window error: ${res.status}`);
+      break;
+    }
+    const trades = await res.json();
+    if (Array.isArray(trades)) {
+      for (const t of trades) {
+        const baseAsset = (t.currency_pair || "").split("_")[0];
+        allTrades.push({
+          id: String(t.id),
+          symbol: baseAsset.toUpperCase(),
+          side: t.side?.toLowerCase() || "buy",
+          qty: parseFloat(t.amount || 0),
+          price: parseFloat(t.price || 0),
+          fee: parseFloat(t.fee || 0),
+          feeCurrency: t.fee_currency || "USDT",
+          timestamp: new Date(parseInt(t.create_time || 0) * 1000).toISOString(),
+        });
+      }
+    }
+    startTime = endTime;
+    if (allTrades.length > 2000) break;
+  }
+
+  return allTrades;
 }
 
 async function fetchKrakenTrades(apiKey: string, apiSecret: string): Promise<NormalizedTrade[]> {
-  const nonce = Date.now();
-  const postData = `nonce=${nonce}`;
-  const path = "/0/private/TradesHistory";
-  const sig = await krakenSign(path, postData, nonce, apiSecret);
-  const res = await fetch(`https://api.kraken.com${path}`, {
-    method: "POST",
-    headers: {
-      "API-Key": apiKey,
-      "API-Sign": sig,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: postData,
-  });
-  if (!res.ok) throw new Error(`Kraken trades failed: ${res.status}`);
-  const data = await res.json();
-  if (data.error?.length) throw new Error(data.error.join(", "));
+  const allTrades: NormalizedTrade[] = [];
+  let offset = 0;
+  let hasMore = true;
 
-  const trades = data.result?.trades || {};
-  return Object.entries(trades).map(([id, t]: [string, any]) => {
-    const pair = t.pair || "";
-    const baseAsset = pair.replace(/USD[T]?$/, "").replace(/^X/, "");
-    return {
-      id,
-      symbol: baseAsset === "BT" ? "BTC" : baseAsset,
-      side: t.type?.toLowerCase() || "buy",
-      qty: parseFloat(t.vol || 0),
-      price: parseFloat(t.price || 0),
-      fee: parseFloat(t.fee || 0),
-      feeCurrency: "USD",
-      timestamp: new Date(parseFloat(t.time || 0) * 1000).toISOString(),
-    };
-  });
+  console.log(`[Kraken] Paginating history...`);
+
+  while (hasMore) {
+    const nonce = Date.now();
+    const postData = `nonce=${nonce}&ofs=${offset}`;
+    const path = "/0/private/TradesHistory";
+    const sig = await krakenSign(path, postData, nonce, apiSecret);
+
+    const res = await fetch(`https://api.kraken.com${path}`, {
+      method: "POST",
+      headers: {
+        "API-Key": apiKey,
+        "API-Sign": sig,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: postData,
+    });
+
+    if (!res.ok) throw new Error(`Kraken failed: ${res.status}`);
+    const data = await res.json();
+    if (data.error?.length) throw new Error(data.error.join(", "));
+
+    const trades = data.result?.trades || {};
+    const list = Object.entries(trades);
+
+    for (const [id, t] of list as [string, any][]) {
+      const pair = t.pair || "";
+      const baseAsset = pair.replace(/USD[T]?$/, "").replace(/^X/, "").replace(/^Z/, "");
+      allTrades.push({
+        id,
+        symbol: baseAsset === "BT" ? "BTC" : (baseAsset === "DG" ? "DOGE" : baseAsset.toUpperCase()),
+        side: t.type?.toLowerCase() || "buy",
+        qty: parseFloat(t.vol || 0),
+        price: parseFloat(t.price || 0),
+        fee: parseFloat(t.fee || 0),
+        feeCurrency: "USD",
+        timestamp: new Date(parseFloat(t.time || 0) * 1000).toISOString(),
+      });
+    }
+
+    if (list.length === 50) {
+      offset += 50;
+    } else {
+      hasMore = false;
+    }
+    if (allTrades.length > 1000) break;
+  }
+
+  return allTrades;
 }
 
 async function fetchCoinbaseTrades(apiKey: string, apiSecret: string): Promise<NormalizedTrade[]> {
+  const allTrades: NormalizedTrade[] = [];
   const ts = Math.floor(Date.now() / 1000);
-  const path = "/v2/accounts";
+  const path = "/v2/accounts?limit=100";
   const sig = await hmacSign(apiSecret, `${ts}GET${path}`);
+
   const accRes = await fetch(`https://api.coinbase.com${path}`, {
     headers: {
       "CB-ACCESS-KEY": apiKey,
@@ -433,43 +603,51 @@ async function fetchCoinbaseTrades(apiKey: string, apiSecret: string): Promise<N
       "CB-VERSION": "2024-01-01",
     },
   });
-  if (!accRes.ok) throw new Error(`Coinbase accounts failed: ${accRes.status}`);
+
+  if (!accRes.ok) throw new Error(`Coinbase accounts failed`);
   const accData = await accRes.json();
 
-  const allTrades: NormalizedTrade[] = [];
-  for (const acc of accData.data || []) {
-    if (parseFloat(acc.balance?.amount || "0") === 0) continue;
-    const currency = acc.currency?.code;
-    if (!currency || ["USD", "USDC", "USDT"].includes(currency)) continue;
+  console.log(`[Coinbase] Scanning accounts...`);
 
-    for (const txType of ["buys", "sells"]) {
-      const ts2 = Math.floor(Date.now() / 1000);
-      const txPath = `/v2/accounts/${acc.id}/${txType}`;
-      const txSig = await hmacSign(apiSecret, `${ts2}GET${txPath}`);
-      const txRes = await fetch(`https://api.coinbase.com${txPath}`, {
-        headers: {
-          "CB-ACCESS-KEY": apiKey,
-          "CB-ACCESS-SIGN": txSig,
-          "CB-ACCESS-TIMESTAMP": String(ts2),
-          "CB-VERSION": "2024-01-01",
-        },
-      });
-      if (!txRes.ok) continue;
-      const txData = await txRes.json();
-      for (const t of txData.data || []) {
-        allTrades.push({
-          id: t.id || String(Date.now()),
-          symbol: currency,
-          side: txType === "buys" ? "buy" : "sell",
-          qty: parseFloat(t.amount?.amount || 0),
-          price: parseFloat(t.unit_price?.amount || t.subtotal?.amount || 0),
-          fee: parseFloat(t.fee?.amount || 0),
-          feeCurrency: t.fee?.currency || "USD",
-          timestamp: t.created_at || new Date().toISOString(),
+  for (const acc of accData.data || []) {
+    const currency = acc.currency?.code;
+    if (!currency || ["USD", "USDC", "USDT", "EUR", "GBP"].includes(currency)) continue;
+
+    for (const type of ["buys", "sells"]) {
+      let nextUri: string | null = `/v2/accounts/${acc.id}/${type}?limit=100`;
+
+      while (nextUri) {
+        const ts2 = Math.floor(Date.now() / 1000);
+        const txSig = await hmacSign(apiSecret, `${ts2}GET${nextUri}`);
+        const txRes = await fetch(`https://api.coinbase.com${nextUri}`, {
+          headers: {
+            "CB-ACCESS-KEY": apiKey,
+            "CB-ACCESS-SIGN": txSig,
+            "CB-ACCESS-TIMESTAMP": String(ts2),
+            "CB-VERSION": "2024-01-01",
+          },
         });
+
+        if (!txRes.ok) break;
+        const txData = await txRes.json();
+        for (const t of txData.data || []) {
+          allTrades.push({
+            id: t.id || String(Date.now()),
+            symbol: currency,
+            side: type === "buys" ? "buy" : "sell",
+            qty: parseFloat(t.amount?.amount || 0),
+            price: parseFloat(t.unit_price?.amount || t.subtotal?.amount || 0),
+            fee: parseFloat(t.fee?.amount || 0),
+            feeCurrency: t.fee?.currency || "USD",
+            timestamp: t.created_at || new Date().toISOString(),
+          });
+        }
+        nextUri = txData.pagination?.next_uri || null;
+        if (allTrades.length > 2000) break;
       }
     }
   }
+
   return allTrades;
 }
 
