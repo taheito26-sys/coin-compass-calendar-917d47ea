@@ -295,6 +295,8 @@ async function syncExchangeTrades(
 ): Promise<{ ok: boolean; synced: number; skipped: number }> {
   let trades: any[] = [];
 
+  console.log(`[sync] Fetching trades from ${exchange}...`);
+
   switch (exchange) {
     case "binance":
       trades = await fetchBinanceTrades(apiKey, apiSecret);
@@ -317,6 +319,8 @@ async function syncExchangeTrades(
     default:
       throw new Error(`Unsupported exchange: ${exchange}`);
   }
+
+  console.log(`[sync] ${exchange}: fetched ${trades.length} trades`);
 
   if (!trades.length) return { ok: true, synced: 0, skipped: 0 };
 
