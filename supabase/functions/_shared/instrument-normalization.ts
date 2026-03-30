@@ -20,8 +20,10 @@ export function parseInstrumentSymbol(symbol: string): ParsedInstrumentSymbol {
   const rawSymbol = String(symbol || "").trim().toUpperCase();
   const match = rawSymbol.match(MULTIPLIER_PREFIX_RE);
   const parsedMultiplier = match ? Number(match[0]) : 1;
-  const multiplier = Number.isFinite(parsedMultiplier) && parsedMultiplier > 1 ? parsedMultiplier : 1;
-  const canonicalSymbol = match ? rawSymbol.slice(match[0].length) : rawSymbol;
+  const matchedPrefix = match?.[0] || "";
+  const strippedSymbol = matchedPrefix ? rawSymbol.slice(matchedPrefix.length) : rawSymbol;
+  const multiplier = Number.isFinite(parsedMultiplier) && parsedMultiplier > 1 && strippedSymbol ? parsedMultiplier : 1;
+  const canonicalSymbol = multiplier > 1 ? strippedSymbol : rawSymbol;
 
   return {
     rawSymbol,

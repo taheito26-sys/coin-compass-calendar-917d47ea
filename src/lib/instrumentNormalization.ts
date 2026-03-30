@@ -19,9 +19,11 @@ const INVARIANT_TOLERANCE = 1e-8;
 export function parseInstrumentSymbol(symbol: string): ParsedInstrumentSymbol {
   const rawSymbol = String(symbol || "").trim().toUpperCase();
   const match = rawSymbol.match(MULTIPLIER_PREFIX_RE);
-  const multiplier = match ? Number(match[0]) : 1;
-  const canonicalSymbol = match ? rawSymbol.slice(match[0].length) : rawSymbol;
-  const safeMultiplier = Number.isFinite(multiplier) && multiplier > 1 ? multiplier : 1;
+  const parsedMultiplier = match ? Number(match[0]) : 1;
+  const matchedPrefix = match?.[0] || "";
+  const strippedSymbol = matchedPrefix ? rawSymbol.slice(matchedPrefix.length) : rawSymbol;
+  const safeMultiplier = Number.isFinite(parsedMultiplier) && parsedMultiplier > 1 && strippedSymbol ? parsedMultiplier : 1;
+  const canonicalSymbol = safeMultiplier > 1 ? strippedSymbol : rawSymbol;
 
   return {
     rawSymbol,

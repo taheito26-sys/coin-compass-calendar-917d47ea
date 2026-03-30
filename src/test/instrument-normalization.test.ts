@@ -11,6 +11,15 @@ describe("instrument normalization", () => {
     });
   });
 
+  it("does not alter symbols with numeric prefix of 1", () => {
+    expect(parseInstrumentSymbol("1INCH")).toEqual({
+      rawSymbol: "1INCH",
+      canonicalSymbol: "1INCH",
+      multiplier: 1,
+      hadMultiplier: false,
+    });
+  });
+
   it("normalizes qty/price while preserving gross value", () => {
     const normalized = normalizeTradeEconomics(12, 0.0032, 1000);
     expect(normalized.canonicalQty).toBe(12000);
