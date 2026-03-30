@@ -7,12 +7,18 @@
  * (windowed pagination, fresh HMAC per request, safety limits).
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { compactTrades } from "../_shared/compaction.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
 };
+
+const STABLECOIN_SYMBOLS = new Set([
+  "USDT", "USDC", "FDUSD", "TUSD", "DAI", "USDD", "USDE", "BUSD", "PYUSD", "USDP", "USD"
+]);
+
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -197,20 +203,14 @@ async function syncExchangeTrades(
 
   if (!trades.length) return { ok: true, synced: 0, skipped: 0 };
 
-  // --- Trade Compaction ---
-  const groups = new Map<string, NormalizedTrade>();
-  for (const t of trades) {
-    const minuteTs = t.timestamp.substring(0, 16);
-    const key = `${t.symbol}|${t.side}|${t.price}|${minuteTs}`;
-    if (groups.has(key)) {
-      const existing = groups.get(key)!;
-      existing.qty += t.qty;
-      existing.fee += t.fee;
-    } else {
-      groups.set(key, { ...t });
-    }
-  }
-  const finalTrades = Array.from(groups.values());
+  // --- Stablecoin Removal & Trade Compaction ---
+  const filteredTrades = trades.filter((t) => !STABLECOIN_SYMBOLS.has(t.symbol.toUpperCase()));
+  
+  const { trades: finalTrades } = compactTrades(filteredTrades as any, {
+    timeWindowSeconds: 60,
+    priceTolerancePercent: 0.15,
+  });
+
 
   let synced = 0;
   let skipped = 0;

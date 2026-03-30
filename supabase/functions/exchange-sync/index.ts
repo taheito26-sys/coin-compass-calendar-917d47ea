@@ -1,11 +1,18 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { compactTrades } from "./compaction.ts";
+import { compactTrades, type NormalizedTrade } from "../_shared/compaction.ts";
+import { AppError, UpstreamError, type SyncStage, type ExchangeId, type FetchStats, type FetchResult, type ExchangeRequestParams, type ExchangeResponse } from "../_shared/types.ts";
+
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
 };
+
+const STABLECOIN_SYMBOLS = new Set([
+  "USDT", "USDC", "FDUSD", "TUSD", "DAI", "USDD", "USDE", "BUSD", "PYUSD", "USDP", "USD"
+]);
 
 const BYBIT_RECV_WINDOW = 5000;
 const BYBIT_LOOKBACK_DAYS = 180;
@@ -18,109 +25,16 @@ const OKX_MAX_TRADES = 2000;
 const LOG_TRUNCATE = 1000;
 
 const SUPPORTED_QUOTES = [
-  "USDT",
-  "USDC",
-  "USDD",
-  "USDE",
-  "BUSD",
+  ...STABLECOIN_SYMBOLS,
   "BTC",
   "ETH",
   "EUR",
   "GBP",
-  "USD",
-  "DAI",
 ];
 
-type SyncStage = "test" | "sync" | "fetch" | "normalize" | "insert";
-type ExchangeId = "binance" | "bybit" | "okx" | "gate" | "kraken" | "coinbase";
 
-class AppError extends Error {
-  status: number;
-  stage: SyncStage;
-  exchange?: string;
-  code?: string;
-  hint?: string;
 
-  constructor(params: {
-    message: string;
-    status: number;
-    stage: SyncStage;
-    exchange?: string;
-    code?: string;
-    hint?: string;
-  }) {
-    super(params.message);
-    this.name = "AppError";
-    this.status = params.status;
-    this.stage = params.stage;
-    this.exchange = params.exchange;
-    this.code = params.code;
-    this.hint = params.hint;
-  }
-}
 
-class UpstreamError extends AppError {
-  endpoint: string;
-  upstreamStatus: number;
-  rawResponseTruncated: string;
-
-  constructor(params: {
-    message: string;
-    exchange: string;
-    stage?: SyncStage;
-    code?: string;
-    endpoint: string;
-    upstreamStatus: number;
-    rawResponseTruncated: string;
-    hint?: string;
-  }) {
-    super({
-      message: params.message,
-      status: 502,
-      stage: params.stage || "fetch",
-      exchange: params.exchange,
-      code: params.code,
-      hint: params.hint,
-    });
-    this.name = "UpstreamError";
-    this.endpoint = params.endpoint;
-    this.upstreamStatus = params.upstreamStatus;
-    this.rawResponseTruncated = params.rawResponseTruncated;
-  }
-}
-
-interface NormalizedTrade {
-  id: string;
-  orderId?: string;
-  orderLinkId?: string;
-  executionGroupId?: string;
-  tradeGroupId?: string;
-  parentOrderId?: string;
-  symbol: string;
-  side: "buy" | "sell" | "transfer_in" | "transfer_out";
-  qty: number;
-  price: number;
-  fee: number;
-  feeCurrency?: string;
-  timestamp: string;
-  venue?: string;
-  connectionId?: string;
-  batchId?: string;
-  sourceType?: string;
-}
-
-interface FetchStats {
-  fetchedPages: number;
-  fetchedTrades: number;
-  normalizedTrades: number;
-  invalidTrades: number;
-  windowsScanned?: number;
-}
-
-interface FetchResult {
-  trades: NormalizedTrade[];
-  stats: FetchStats;
-}
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -148,16 +62,7 @@ function safeLog(
   console[level](JSON.stringify({ event, ...ctx }));
 }
 
-async function exchangeRequest(params: {
-  exchange: string;
-  method: string;
-  url: string;
-  headers?: Record<string, string>;
-  body?: string;
-  stage: SyncStage;
-  endpoint: string;
-  logContext?: Record<string, unknown>;
-}): Promise<{ status: number; text: string; data: any }> {
+async function exchangeRequest(params: ExchangeRequestParams): Promise<ExchangeResponse> {
   safeLog("log", "exchange_request", {
     exchange: params.exchange,
     endpoint: params.endpoint,
@@ -793,7 +698,6 @@ async function syncExchangeTrades(
       });
   }
 
-  const stableTransferSymbols = new Set(["USDT", "USDC", "FDUSD", "TUSD", "DAI"]);
   const minUsdValue = Number.isFinite(options.minUsdValue) && options.minUsdValue >= 0
     ? options.minUsdValue
     : 100;
@@ -802,15 +706,16 @@ async function syncExchangeTrades(
     .filter((t) => options.types.includes(t.side))
     .filter((t) => options.coins.length === 0 || options.coins.includes(t.symbol.toUpperCase()))
     .filter((t) => {
+      // 1. Mandatory Stablecoin removal (base-assets like USDT/USDC in trades or transfers)
+      if (STABLECOIN_SYMBOLS.has(t.symbol.toUpperCase())) return false;
+      
+      // 2. Dust filtering for active trades
       if (t.side === "buy" || t.side === "sell") {
         return t.qty * t.price >= minUsdValue;
       }
       return true;
-    })
-    .filter((t) => {
-      const isTransfer = t.side === "transfer_in" || t.side === "transfer_out";
-      return !(isTransfer && stableTransferSymbols.has(t.symbol.toUpperCase()));
     });
+
 
   const sortedTrades = combined.sort(
     (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
