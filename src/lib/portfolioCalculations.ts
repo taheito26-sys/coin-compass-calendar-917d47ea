@@ -75,7 +75,7 @@ export function calculateFIFOLots(
   let realizedPnL = 0;
 
   for (const tx of assetTxs) {
-    if (tx.type === 'buy') {
+    if (tx.type === 'buy' || tx.type === 'transfer_in') {
       const totalCost = tx.qty * tx.unit_price + tx.fee_amount;
       const unitCost = tx.qty > 0 ? totalCost / tx.qty : 0;
 
@@ -91,7 +91,7 @@ export function calculateFIFOLots(
         venue: tx.venue,
         note: tx.note,
       });
-    } else if (tx.type === 'sell') {
+    } else if (tx.type === 'sell' || tx.type === 'transfer_out') {
       let qtyToConsume = tx.qty;
       let costBasisConsumed = 0;
 
@@ -131,11 +131,11 @@ export function calculateDCAPosition(
   let realizedPnL = 0;
 
   for (const tx of assetTxs) {
-    if (tx.type === 'buy') {
+    if (tx.type === 'buy' || tx.type === 'transfer_in') {
       const buyCost = tx.qty * tx.unit_price + tx.fee_amount;
       totalQty += tx.qty;
       totalCostBasis += buyCost;
-    } else if (tx.type === 'sell') {
+    } else if (tx.type === 'sell' || tx.type === 'transfer_out') {
       if (totalQty > 0) {
         const avgCostPerUnit = totalCostBasis / totalQty;
         const costBasisConsumed = tx.qty * avgCostPerUnit;

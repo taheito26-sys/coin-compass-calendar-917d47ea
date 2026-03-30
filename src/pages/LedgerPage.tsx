@@ -40,11 +40,15 @@ const EXCHANGE_LABELS: Record<string, string> = {
 const TX_TYPES = [
   { value: "buy",          label: "Buy",          color: "var(--good)" },
   { value: "sell",         label: "Sell",         color: "var(--bad)" },
+  { value: "transfer_in",  label: "Transfer In",  color: "var(--brand)" },
+  { value: "transfer_out", label: "Transfer Out", color: "var(--warn, #eab308)" },
 ];
 
 const TYPE_META: Record<string, { label: string; color: string; icon: string }> = {
   buy:          { label: "BUY",    color: "var(--good)",  icon: "↑" },
   sell:         { label: "SELL",   color: "var(--bad)",   icon: "↓" },
+  transfer_in:  { label: "IN",     color: "var(--brand)", icon: "→" },
+  transfer_out: { label: "OUT",    color: "var(--warn, #eab308)", icon: "←" },
 };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
