@@ -482,7 +482,7 @@ Deno.serve(async (req) => {
             : ["buy", "sell", "transfer_in", "transfer_out"],
           preview: !!body.preview,
           coins: Array.isArray(body.coins) ? body.coins : [],
-          minUsdValue: body.minUsdValue !== undefined ? Number(body.minUsdValue) : 100,
+          minUsdValue: Number(body.minUsdValue ?? 100),
         };
 
         const result = await syncExchangeTrades(
@@ -711,11 +711,12 @@ async function syncExchangeTrades(
   apiKey: string,
   apiSecret: string,
   passphrase?: string | null,
-  options: { period: number; types: string[]; preview: boolean; coins: string[] } = {
+  options: { period: number; types: string[]; preview: boolean; coins: string[]; minUsdValue: number } = {
     period: 90,
     types: ["buy", "sell", "transfer_in", "transfer_out"],
     preview: false,
     coins: [],
+    minUsdValue: 100,
   }
 ): Promise<{ ok: boolean; synced: number; skipped: number; previewData?: any[]; stats: any }> {
   safeLog("log", "sync_start", {
@@ -723,6 +724,7 @@ async function syncExchangeTrades(
     user: userPrefix(userId),
     period: options.period,
     preview: options.preview,
+    minUsdValue: options.minUsdValue,
   });
 
   let tradeResult: FetchResult = {
@@ -771,69 +773,71 @@ async function syncExchangeTrades(
       });
   }
 
+  const stableTransferSymbols = new Set(["USDT", "USDC", "FDUSD", "TUSD", "DAI"]);
+  const minUsdValue = Number.isFinite(options.minUsdValue) && options.minUsdValue >= 0
+    ? options.minUsdValue
+    : 100;
+
   const combined = [...tradeResult.trades, ...transferResult.trades]
     .filter((t) => options.types.includes(t.side))
     .filter((t) => options.coins.length === 0 || options.coins.includes(t.symbol.toUpperCase()))
     .filter((t) => {
-      // 1. Dust Filter (Default $100)
-      if (options.minUsdValue && (t.qty * t.price) < options.minUsdValue) {
-        if (t.side === "buy" || t.side === "sell") return false;
+      if (t.side === "buy" || t.side === "sell") {
+        return t.qty * t.price >= minUsdValue;
       }
-      
-      // 2. Stablecoin Transfer Filter
-      const isTransfer = t.side === "transfer_in" || t.side === "transfer_out";
-      const isStable = ["USDT", "USDC", "FDUSD", "TUSD", "DAI"].includes(t.symbol.toUpperCase());
-      if (isTransfer && isStable) return false;
-
       return true;
+    })
+    .filter((t) => {
+      const isTransfer = t.side === "transfer_in" || t.side === "transfer_out";
+      return !(isTransfer && stableTransferSymbols.has(t.symbol.toUpperCase()));
     });
 
-  // Compaction Logic: Merges fragmented fills (cluster trades)
-  const sorted = combined.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  const sortedTrades = combined.sort(
+    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+  );
   const clusters: (NormalizedTrade & { _lastTs: number })[] = [];
 
-  for (const t of sorted) {
-    const tTime = new Date(t.timestamp).getTime();
-    let existingIndex = -1;
-    
-    // Find a cluster of same symbol/side within 15 minutes or same orderId
-    for (let i = clusters.length - 1; i >= 0; i--) {
-      const c = clusters[i];
-      if (c.symbol === t.symbol && c.side === t.side) {
-        const diffMs = Math.abs(tTime - c._lastTs);
-        const sameOrder = t.orderId && c.orderId && t.orderId === c.orderId;
-        if (sameOrder || diffMs < 15 * 60 * 1000) {
-          existingIndex = i;
-          break;
+  for (const trade of sortedTrades) {
+    const tradeTs = new Date(trade.timestamp).getTime();
+    if (!Number.isFinite(tradeTs)) continue;
+
+    const lastCluster = clusters[clusters.length - 1];
+    if (lastCluster) {
+      const within15Minutes = tradeTs - lastCluster._lastTs <= 15 * 60 * 1000;
+      const sameOrderId = !!trade.orderId && !!lastCluster.orderId && trade.orderId === lastCluster.orderId;
+      const sameBucket = trade.symbol === lastCluster.symbol && trade.side === lastCluster.side;
+
+      if (sameBucket && (within15Minutes || sameOrderId)) {
+        const totalQty = lastCluster.qty + trade.qty;
+        if (totalQty > 0) {
+          lastCluster.price =
+            (lastCluster.price * lastCluster.qty + trade.price * trade.qty) / totalQty;
         }
+        lastCluster.qty = totalQty;
+        lastCluster.fee += trade.fee || 0;
+        lastCluster._lastTs = Math.max(lastCluster._lastTs, tradeTs);
+        continue;
       }
     }
 
-    if (existingIndex !== -1) {
-      const existing = clusters[existingIndex];
-      const totalQty = existing.qty + t.qty;
-      if (totalQty > 0) {
-        // Calculate VWAP (Volume Weighted Average Price)
-        existing.price = (existing.price * existing.qty + t.price * t.qty) / totalQty;
-      }
-      existing.qty = totalQty;
-      existing.fee += (t.fee || 0);
-      existing._lastTs = Math.max(existing._lastTs, tTime);
-    } else {
-      clusters.push({ ...t, _lastTs: tTime });
-    }
+    clusters.push({
+      ...trade,
+      _lastTs: tradeTs,
+    });
   }
 
-  const finalTrades = clusters;
-  const duplicateCompactionCount = combined.length - finalTrades.length;
+  const finalTrades = clusters.map(({ _lastTs: _ignored, ...trade }) => trade);
+  const duplicateCompactionCount = sortedTrades.length - finalTrades.length;
 
   safeLog("log", "sync_fetch_stats", {
     exchange,
     user: userPrefix(userId),
     tradeStats: tradeResult.stats,
     transferStats: transferResult.stats,
-    filteredTrades: combined.length,
+    filteredTrades: sortedTrades.length,
     compactedDuplicates: duplicateCompactionCount,
+    clusterCount: finalTrades.length,
+    minUsdValue,
   });
 
   if (options.preview) {
@@ -857,7 +861,7 @@ async function syncExchangeTrades(
 
   let synced = 0;
   let skipped = 0;
-  let duplicateTrades = 0;
+  let existingDuplicateTrades = 0;
   let assetResolutionFailures = 0;
   let insertFailures = 0;
 
@@ -882,7 +886,7 @@ async function syncExchangeTrades(
     }
 
     if (existing) {
-      duplicateTrades++;
+      existingDuplicateTrades++;
       skipped++;
       continue;
     }
@@ -964,7 +968,8 @@ async function syncExchangeTrades(
     exchange,
     synced,
     skipped,
-    duplicateTrades,
+    duplicateTrades: duplicateCompactionCount,
+    existingDuplicateTrades,
     assetResolutionFailures,
     insertFailures,
   });
@@ -977,7 +982,8 @@ async function syncExchangeTrades(
       fetchedTrades: tradeResult.stats.fetchedTrades + transferResult.stats.fetchedTrades,
       normalizedTrades: tradeResult.stats.normalizedTrades + transferResult.stats.normalizedTrades,
       invalidTrades: tradeResult.stats.invalidTrades + transferResult.stats.invalidTrades,
-      duplicateTrades,
+      duplicateTrades: duplicateCompactionCount,
+      existingDuplicateTrades,
       assetResolutionFailures,
       insertFailures,
       fetchedPages: tradeResult.stats.fetchedPages + transferResult.stats.fetchedPages,
