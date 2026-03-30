@@ -7,6 +7,8 @@ import { parseOKX } from "./okx";
 import { parseGate } from "./gate";
 import { parseMEXC } from "./mexc";
 import { parseKuCoin } from "./kucoin";
+import { parseCoinbase } from "./coinbase";
+import { parseKraken } from "./kraken";
 import { extractBaseFromPair, normalizeSymbol } from "@/lib/symbolAliases";
 import { normalizeTradeEconomics, parseInstrumentSymbol } from "@/lib/instrumentNormalization";
 import type {
@@ -28,6 +30,8 @@ const ADAPTERS = {
   gate: parseGate,
   mexc: parseMEXC,
   kucoin: parseKuCoin,
+  coinbase: parseCoinbase as any,
+  kraken: parseKraken as any,
 } as const;
 
 export type { ParseResult, NormalizedRow, ImportFile };

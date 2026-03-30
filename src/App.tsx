@@ -10,6 +10,10 @@ import CalendarPage from "@/pages/CalendarPage";
 import MarketsPage from "@/pages/MarketsPage";
 import SettingsPage from "@/pages/SettingsPage";
 import LedgerPage from "@/pages/LedgerPage";
+import YearInReviewPage from "@/pages/YearInReviewPage";
+import RebalancePage from "@/pages/RebalancePage";
+import AirdropPage from "@/pages/AirdropPage";
+import XPubImportPage from "@/pages/XPubImportPage";
 
 const PAGE_TITLES: Record<string, [string, string]> = {
   dashboard: ["Dashboard", "KPIs, Allocation, Heatmap"],
@@ -18,6 +22,10 @@ const PAGE_TITLES: Record<string, [string, string]> = {
   calendar: ["Calendar", "Daily P&L, Per Coin"],
   markets: ["Markets", "Live Prices, Watchlist"],
   settings: ["Settings", "Theme, Data, Vault, Alerts"],
+  yearinreview: ["Year in Review", "Annual Trading Summary"],
+  rebalance: ["Rebalancer", "Target Allocations"],
+  airdrop: ["Airdrops", "Eligibility Checker"],
+  xpub: ["xPub Import", "Hardware Wallet Lookup"],
 };
 
 function LoadingScreen() {
@@ -81,6 +89,10 @@ function AppShell({
             {page === "calendar" && <CalendarPage />}
             {page === "markets" && <MarketsPage />}
             {page === "settings" && <SettingsPage />}
+            {page === "yearinreview" && <YearInReviewPage />}
+            {page === "rebalance" && <RebalancePage />}
+            {page === "airdrop" && <AirdropPage />}
+            {page === "xpub" && <XPubImportPage />}
           </div>
         </div>
       </div>

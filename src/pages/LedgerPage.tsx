@@ -5,6 +5,7 @@ import { importCSV, hashFile, applyLookup } from "@/lib/importers";
 import type { ParseResult, Exchange } from "@/lib/importers";
 import CoinAutocomplete from "@/components/CoinAutocomplete";
 import ExchangeConnect from "@/components/ledger/ExchangeConnect";
+import ExchangeHealthDashboard from "@/components/ledger/ExchangeHealthDashboard";
 import {
   isWorkerConfigured,
   lookupImportRows,
@@ -758,6 +759,7 @@ export default function LedgerPage() {
       )}
 
       {tab === "connect" && <ExchangeConnect />}
+      {tab === "connect" && <ExchangeHealthDashboard />}
     </div>
   );
 }

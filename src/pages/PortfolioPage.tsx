@@ -12,6 +12,7 @@ import { useState, useMemo, useEffect } from "react";
 import type { DerivedLot, ClosedPosition } from "@/lib/derivePortfolio";
 import { deriveRealizedByTx } from "@/lib/derivePortfolio";
 import { normalizeSymbol } from "@/lib/symbolAliases";
+import CostBasisComparison from "@/components/CostBasisComparison";
 
 // ── View mode ──────────────────────────────────────────────────────────────
 
@@ -347,6 +348,7 @@ export default function PortfolioPage() {
   const [dragCol,        setDragCol]        = useState<string | null>(null);
   const [drilldownSym,   setDrilldownSym]   = useState<string | null>(null);
   const [sellPos,        setSellPos]        = useState<DisplayRow | null>(null);
+  const [showCostBasis,  setShowCostBasis]  = useState(false);
 
   // Persist UI prefs
   useEffect(() => { localStorage.setItem(VIEW_MODE_KEY, viewMode); },  [viewMode]);
@@ -892,6 +894,7 @@ export default function PortfolioPage() {
                 <AssetFilter allSymbols={allSymbols} selected={filterSyms} onChange={setFilterSyms} />
                 <button className="btn secondary" onClick={handleRefresh} style={{ padding: "6px 10px", fontSize: 11 }}>↻ Refresh</button>
                 <button className="btn secondary" onClick={() => setShowColConfig(v => !v)} style={{ padding: "6px 10px", fontSize: 11 }}>⚙ Columns</button>
+                <button className="btn secondary" onClick={() => setShowCostBasis(true)} style={{ padding: "6px 10px", fontSize: 11 }}>⚖ Compare Methods</button>
                 <button
                   className="btn secondary"
                   onClick={() => setViewMode(v => v === "dca" ? "lot" : "dca")}
@@ -1159,6 +1162,10 @@ export default function PortfolioPage() {
 
       {sellPos && (
         <SellDialog pos={sellPos} base={base} onClose={() => setSellPos(null)} />
+      )}
+
+      {showCostBasis && (
+        <CostBasisComparison onClose={() => setShowCostBasis(false)} />
       )}
     </div>
   );
