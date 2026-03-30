@@ -453,7 +453,8 @@ async function fetchBinanceTrades(apiKey: string, apiSecret: string): Promise<No
 async function fetchBybitTrades(apiKey: string, apiSecret: string): Promise<NormalizedTrade[]> {
   const ts = Date.now();
   const recvWindow = "5000";
-  const params = "category=spot&limit=100";
+  const startTime = Date.now() - (180 * 24 * 60 * 60 * 1000); // Max 180 days for v5 execution list
+  const params = `category=spot&limit=100&startTime=${startTime}`;
   const payload = `${ts}${apiKey}${recvWindow}${params}`;
   const sig = await hmacSign(apiSecret, payload);
   const res = await fetch(
