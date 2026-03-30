@@ -8,6 +8,7 @@ import { parseGate } from "./gate";
 import { parseMEXC } from "./mexc";
 import { parseKuCoin } from "./kucoin";
 import { extractBaseFromPair, normalizeSymbol } from "@/lib/symbolAliases";
+import { normalizeTradeEconomics, parseInstrumentSymbol } from "@/lib/instrumentNormalization";
 import type {
   CanonicalTransactionRow,
   DetectionResult,
@@ -50,9 +51,19 @@ function normalizeDecimals(val: number, precision = 12): string {
 }
 
 function toCanonical(row: NormalizedRow, exportType: string): CanonicalTransactionRow {
-  const assetSymbol = normalizeSymbol(row.symbol).trim().toUpperCase();
+  const parsedSymbol = parseInstrumentSymbol(normalizeSymbol(row.symbol).trim().toUpperCase());
+  const assetSymbol = parsedSymbol.canonicalSymbol;
   const baseAsset = extractBaseFromPair(assetSymbol).trim().toUpperCase();
   const quoteAsset = guessQuoteFromPair(assetSymbol, baseAsset).trim().toUpperCase();
+  const normalizedEconomics = normalizeTradeEconomics(row.qty, row.unitPrice, parsedSymbol.multiplier);
+
+  if (parsedSymbol.hadMultiplier) {
+    console.info("MULTIPLIER_NORMALIZATION_APPLIED", {
+      rawSymbol: parsedSymbol.rawSymbol,
+      canonicalSymbol: parsedSymbol.canonicalSymbol,
+      multiplier: parsedSymbol.multiplier,
+    });
+  }
 
   return {
     sourceExchange: (row.exchange || "unknown").trim().toLowerCase() as Exchange,
@@ -67,9 +78,9 @@ function toCanonical(row: NormalizedRow, exportType: string): CanonicalTransacti
     baseAsset: normalizeSymbol(baseAsset),
     quoteAsset: normalizeSymbol(quoteAsset),
 
-    qty: row.qty,
-    price: row.unitPrice,
-    grossValue: row.grossValue,
+    qty: normalizedEconomics.canonicalQty,
+    price: normalizedEconomics.canonicalPrice,
+    grossValue: normalizedEconomics.canonicalGrossValue,
 
     feeAmount: row.feeAmount || 0,
     feeAsset: normalizeSymbol(row.feeAsset || "").trim().toUpperCase(),
@@ -78,7 +89,17 @@ function toCanonical(row: NormalizedRow, exportType: string): CanonicalTransacti
     tradeId: (row.tradeId || "").trim(),
     txHash: (row.txHash || "").trim(),
 
-    rawRow: row.raw,
+    rawRow: {
+      ...row.raw,
+      __rawSymbol: parsedSymbol.rawSymbol,
+      __multiplier: String(parsedSymbol.multiplier),
+    },
+    instrumentMetadata: {
+      rawSymbol: parsedSymbol.rawSymbol,
+      multiplier: parsedSymbol.multiplier,
+      hadMultiplier: parsedSymbol.hadMultiplier,
+      invariantDelta: normalizedEconomics.invariantDelta,
+    },
   };
 }
 
@@ -130,6 +151,7 @@ function validateCanonical(c: CanonicalTransactionRow): { status: ImportRowStatu
   if (!c.assetSymbol) return { status: "invalid", message: "Missing asset / pair" };
   if (!Number.isFinite(c.qty) || !(c.qty > 0)) return { status: "invalid", message: "Invalid quantity" };
   if (!Number.isFinite(c.price) || c.price < 0) return { status: "invalid", message: "Invalid price" };
+  if ((c.instrumentMetadata?.invariantDelta ?? 0) >= 1e-8) return { status: "invalid", message: "Instrument normalization invariant failed" };
 
   // Warning-level validations (still importable)
   if (c.feeAmount < 0) return { status: "warning", message: "Negative fee (will be normalized)" };
@@ -313,4 +335,3 @@ export function applyLookup(rows: ImportPreviewRow[], lookup: ImportLookupPayloa
 }
 
 export { hashFile };
-
