@@ -138,7 +138,15 @@ export default function LedgerPage() {
   // Tab
   const [tab, setTab] = useState<Tab>("journal");
 
-  // Manual entry
+  // Filters State
+  const [searchQ, setSearchQ] = useState("");
+  const [filterType, setFilterType] = useState("");
+  const [filterAsset, setFilterAsset] = useState("");
+  const [filterVenue, setFilterVenue] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+
+  // Manual entry fields
   const [txType, setTxType] = useState("buy");
   const [asset, setAsset] = useState("");
   const [qty, setQty] = useState("");
@@ -147,13 +155,6 @@ export default function LedgerPage() {
   const [venue, setVenue] = useState("");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
-
-  // Journal search/filter
-  const [searchQ, setSearchQ] = useState("");
-  const [filterType, setFilterType] = useState("");
-  const [filterAsset, setFilterAsset] = useState("");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
 
   // Inline edit
   const [editId, setEditId] = useState<string | null>(null);
@@ -192,27 +193,24 @@ export default function LedgerPage() {
   // ── Filtered txs for Journal ───────────────────────────────────────────────
 
   const filteredTxs = useMemo(() => {
-    let txs = [...state.txs].sort((a, b) => b.ts - a.ts);
-    
-    if (filterType) txs = txs.filter(t => t.type === filterType);
-    if (filterAsset) txs = txs.filter(t => t.asset.toUpperCase() === filterAsset.toUpperCase());
-    
-    if (fromDate) {
-      const start = new Date(fromDate).getTime();
-      txs = txs.filter(t => t.ts >= start);
-    }
-    if (toDate) {
-      const end = new Date(toDate).getTime() + 86400000; // end of day
-      txs = txs.filter(t => t.ts < end);
-    }
-    
-    if (searchQ) {
-      const q = searchQ.toLowerCase();
-      txs = txs.filter(t => t.asset.toLowerCase().includes(q) || (t.note || "").toLowerCase().includes(q));
-    }
-    
-    return txs.slice(0, 500);
-  }, [state.txs, filterType, filterAsset, fromDate, toDate, searchQ]);
+    const q = searchQ.toLowerCase().trim();
+    return state.txs.filter(t => {
+      const ts = new Date(t.ts);
+      if (fromDate && ts < new Date(fromDate)) return false;
+      if (toDate && ts > new Date(toDate + "T23:59:59")) return false;
+      if (filterType && t.type !== filterType) return false;
+      if (filterAsset && t.asset.toUpperCase() !== filterAsset.toUpperCase()) return false;
+      if (filterVenue && (t as any).venue !== filterVenue) return false;
+
+      if (q) {
+        const matchesNote = (t.note || "").toLowerCase().includes(q);
+        const matchesVenue = ((t as any).venue || "").toLowerCase().includes(q);
+        const matchesAsset = t.asset.toLowerCase().includes(q);
+        if (!matchesNote && !matchesVenue && !matchesAsset) return false;
+      }
+      return true;
+    }).sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
+  }, [state.txs, searchQ, filterType, filterAsset, filterVenue, fromDate, toDate]);
 
   const uniqueAssets = useMemo(() => {
     const assets = new Set<string>();
@@ -220,10 +218,17 @@ export default function LedgerPage() {
     return Array.from(assets).sort();
   }, [state.txs]);
 
+  const uniqueVenues = useMemo(() => {
+    const venues = new Set<string>();
+    state.txs.forEach(t => { if ((t as any).venue) venues.add((t as any).venue); });
+    return Array.from(venues).sort();
+  }, [state.txs]);
+
   const clearFilters = () => {
     setSearchQ("");
     setFilterType("");
     setFilterAsset("");
+    setFilterVenue("");
     setFromDate("");
     setToDate("");
   };
@@ -238,8 +243,8 @@ export default function LedgerPage() {
       const date = new Date(t.ts).toISOString().split("T")[0];
       const total = t.qty * t.price;
       const note = (t.note || "").replace(/"/g, '""');
-      const venue = ((t as any).venue || "").replace(/"/g, '""');
-      return `${date},${t.type.toUpperCase()},${t.asset},${t.qty},${t.price},${total},${t.fee},"${venue}","${note}"`;
+      const venueStr = ((t as any).venue || "").replace(/"/g, '""');
+      return `${date},${t.type.toUpperCase()},${t.asset},${t.qty},${t.price},${total},${t.fee},"${venueStr}","${note}"`;
     }).join("\n");
 
     const blob = new Blob([header + rows], { type: "text/csv;charset=utf-8;" });
@@ -297,22 +302,18 @@ export default function LedgerPage() {
 
   const saveEdit = async () => {
     if (!editId) return;
-
     const nextQty = parseFloat(editQty);
     const nextPrice = parseFloat(editPrice);
-
-    const updates: { type?: string; qty?: number; unit_price?: number; asset_id?: string } = {
+    const updates: any = {
       type: editType || undefined,
       qty: Number.isFinite(nextQty) ? nextQty : undefined,
       unit_price: Number.isFinite(nextPrice) ? nextPrice : undefined,
     };
 
-    // If asset symbol changed, resolve new asset_id
     const originalTx = state.txs.find(t => t.id === editId);
-    const trimmedAsset = editAsset.trim().toUpperCase();
-    if (originalTx && trimmedAsset && trimmedAsset !== originalTx.asset.toUpperCase()) {
+    if (originalTx && editAsset && editAsset.toUpperCase() !== originalTx.asset.toUpperCase()) {
       try {
-        const { assetId } = await resolveOrCreateAsset(trimmedAsset);
+        const { assetId } = await resolveOrCreateAsset(editAsset.toUpperCase());
         updates.asset_id = assetId;
       } catch (err: any) {
         toast(err?.message || "Failed to resolve asset", "bad");
@@ -321,26 +322,16 @@ export default function LedgerPage() {
     }
 
     const result = await updateLedgerTransaction(editId, updates);
-
-    if (result.success) {
-      toast("Transaction updated ✓", "good");
-    } else {
-      toast(result.error || "Update failed", "bad");
-    }
+    if (result.success) toast("Transaction updated ✓", "good");
+    else toast(result.error || "Update failed", "bad");
     setEditId(null);
   };
 
-  // ── Delete handler (BACKEND-ONLY) ────────────────────────────────────────
-
   const deleteTx = async (id: string) => {
-    if (!confirm("Delete this transaction? This will recalculate your portfolio.")) return;
-
+    if (!confirm("Delete this transaction?")) return;
     const result = await deleteLedgerTransaction(id);
-    if (result.success) {
-      toast("Transaction deleted ✓", "good");
-    } else {
-      toast(result.error || "Delete failed", "bad");
-    }
+    if (result.success) toast("Transaction deleted ✓", "good");
+    else toast(result.error || "Delete failed", "bad");
   };
 
   // ── Import handlers ───────────────────────────────────────────────────────
@@ -350,208 +341,87 @@ export default function LedgerPage() {
     setImportLoading(true);
     setIsDeltaImport(false);
     setDeltaCount(0);
-
     try {
       const text = await file.text();
       const hash = await hashFile(text);
-
       const parsedBase = await importCSV(text, file.name);
-      const contentHash = parsedBase.contentHash;
-
       setFileName(file.name);
       setFileHash(hash);
-
       if (parsedBase.rows.length === 0) {
         setImportError(parsedBase.warnings[0] ?? "No rows found in file.");
         setImportLoading(false);
         return;
       }
-
-      // 1) BLOCK EXACT RE-IMPORT of same content (order-insensitive)
       if (isWorkerConfigured()) {
-        try {
-          const isExactMatch = await checkFileImported(contentHash);
-          if (isExactMatch) {
-            setImportError("This file was already imported before. No new rows were found.");
-            setImportLoading(false);
-            return;
-          }
-        } catch {
-          // Fallback to row checks if content check fails
+        const isExactMatch = await checkFileImported(parsedBase.contentHash);
+        if (isExactMatch) {
+          setImportError("File already imported.");
+          setImportLoading(false);
+          return;
         }
       }
-
-      // 2) DELTA CHECK via row fingerprints
       let parsed = parsedBase;
       if (isWorkerConfigured()) {
-        try {
-          const fpHashes = parsedBase.rows.map((r) => r.fingerprintHash).filter(Boolean);
-          const nativeIds = parsedBase.rows.map((r) => r.nativeId).filter(Boolean) as string[];
-          const lookup = await lookupImportRows({ fingerprint_hashes: fpHashes, native_ids: nativeIds });
-          parsed = { ...parsedBase, rows: applyLookup(parsedBase.rows, lookup) };
-        } catch {
-          // Delta lookup failed — still allow preview, commit will check backend
-        }
+        const fpHashes = parsedBase.rows.map(r => r.fingerprintHash).filter(Boolean);
+        const lookup = await lookupImportRows({ fingerprint_hashes: fpHashes, native_ids: [] });
+        parsed = { ...parsedBase, rows: applyLookup(parsedBase.rows, lookup) };
       }
-
-      const already = parsed.rows.filter((r) => r.status === "alreadyImported").length;
-      const invalid = parsed.rows.filter((r) => r.status === "invalid").length;
-      const acceptedNew = parsed.rows.filter((r) => r.status === "new" || r.status === "warning").length;
-
+      const already = parsed.rows.filter(r => r.status === "alreadyImported").length;
       setIsDeltaImport(already > 0);
       setDeltaCount(already);
-
-      if (acceptedNew === 0) {
-        setImportError(
-          already > 0
-            ? `All rows in this upload already exist in the system. Nothing was imported (${already} duplicate rows skipped).`
-            : "No importable rows found.",
-        );
-        setImportLoading(false);
-        return;
-      }
-
       setImportResult(parsed);
       setImportStage("preview");
     } catch (e: any) {
-      setImportError("Parse failed: " + (e?.message ?? String(e)));
+      setImportError("Parse failed: " + (e?.message || String(e)));
     }
-
     setImportLoading(false);
   }, []);
 
-  // ── Commit import (BACKEND-ONLY) ──────────────────────────────────────────
-
   const commitImport = async () => {
-    if (!importResult || importResult.rows.length === 0) return;
-
+    if (!importResult) return;
     setImportStage("committing");
-    setImportErrorMsg("");
-
     const counts: ImportCounts = { parsed: importResult.rows.length, accepted: 0, rejected: 0, persisted: 0, skippedDuplicate: 0, failed: 0 };
-
     try {
       const assets = await getAssetCatalog(true);
-      const batchPayload: any[] = [];
-      const autoCreated: string[] = [];
-
+      const batch: any[] = [];
       for (const row of importResult.rows) {
-        // Skip already-imported rows
-        if (row.status === "alreadyImported" || row.status === "invalid") {
-          counts.rejected++;
-          continue;
-        }
-
-        let { assetId, symbol } = resolveAssetId(row.assetSymbol, assets);
+        if (row.status === "alreadyImported" || row.status === "invalid") { counts.rejected++; continue; }
+        let { assetId } = resolveAssetId(row.assetSymbol, assets);
         if (!assetId) {
-          try {
-            const result = await resolveOrCreateAsset(row.assetSymbol);
-            assetId = result.assetId;
-            symbol = result.symbol;
-            autoCreated.push(symbol);
-          } catch (err: any) {
-            console.error("[ledger] mapping fail:", row.assetSymbol, err?.message);
-            counts.rejected++;
-            continue;
-          }
+          const res = await resolveOrCreateAsset(row.assetSymbol);
+          assetId = res.assetId;
         }
-        const nativeId = row.tradeId || row.orderId || row.txHash || "";
-        counts.accepted++;
-        batchPayload.push({
-          asset_id: assetId,
-          timestamp: new Date(row.timestamp).toISOString(),
-          type: row.side,
-          qty: row.qty,
-          unit_price: row.price,
-          fee_amount: row.feeAmount,
-          fee_currency: row.feeAsset || "USD",
-          external_id: nativeId || undefined,
-          fingerprint_hash: row.fingerprintHash,
-          venue: EXCHANGE_LABELS[row.sourceExchange] ?? row.sourceExchange,
-          note: `Import: ${nativeId}`,
-          source: "import",
+        batch.push({
+          asset_id: assetId, timestamp: new Date(row.timestamp).toISOString(), type: row.side,
+          qty: row.qty, unit_price: row.price, fee_amount: row.feeAmount, fee_currency: row.feeAsset,
+          venue: EXCHANGE_LABELS[row.sourceExchange] ?? row.sourceExchange, note: row.tradeId,
+          source: "import", external_id: row.tradeId || row.fingerprintHash
         });
+        counts.accepted++;
       }
-
-      if (batchPayload.length === 0) {
-        setImportErrorMsg("No rows accepted.");
-        setImportStage("error");
-        setImportCounts(counts);
-        return;
-      }
-
-      const result = await commitImportedTransactions({
-        batchPayload,
-        fileName,
-        fileHash,
-        contentHash: importResult.contentHash,
-        exchange: importResult.exchange,
-        exportType: importResult.exportType,
-      });
-
+      const result = await commitImportedTransactions({ batchPayload: batch, fileName, fileHash, contentHash: importResult.contentHash, exchange: importResult.exchange, exportType: importResult.exportType });
       counts.persisted = result.persisted;
       counts.skippedDuplicate = result.skippedDuplicates;
       counts.failed = result.failed;
       setImportCounts(counts);
-
-      if (!result.success) {
-        setImportErrorMsg(result.error || "Import failed — backend error");
-        setImportStage("error");
-        toast("Import failed — no rows were committed", "bad");
-      } else if (counts.failed > 0 && counts.persisted === 0) {
-        setImportErrorMsg("All rows failed. Check the backend logs.");
-        setImportStage("error");
-      } else {
-        setImportStage("done");
-        const createdText = autoCreated.length > 0 ? ` · ${autoCreated.length} new assets created` : "";
-        toast(`Imported ${counts.persisted} trades (${counts.skippedDuplicate} dupes skipped)${createdText}`,
-          counts.failed > 0 ? "bad" : "good");
-      }
+      setImportStage("done");
+      toast(`Imported ${counts.persisted} trades`, "good");
     } catch (err: any) {
-      setImportErrorMsg(`Backend error: ${err?.message ?? "Unknown"}`);
+      setImportErrorMsg(err?.message || "Import failed");
       setImportStage("error");
-      setImportCounts(counts);
-      toast("Import failed — backend error", "bad");
     }
   };
 
   const resetImport = () => {
-    setImportStage("upload");
-    setImportResult(null);
-    setImportCounts(null);
-    setImportErrorMsg("");
-    setFileName("");
-    setFileHash("");
-    setImportError("");
-    setIsDeltaImport(false);
-    setDeltaCount(0);
+    setImportStage("upload"); setImportResult(null); setImportCounts(null);
+    setFileName(""); setFileHash(""); setImportError(""); setImportErrorMsg("");
     if (fileRef.current) fileRef.current.value = "";
   };
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // RENDER
-  // ─────────────────────────────────────────────────────────────────────────
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-
-      {/* Backend write status banner */}
       <WriteStatusBanner status={writeStatus} onRetry={checkWriteStatus} />
 
-      {/* Sync error banner */}
-      {state.syncStatus === "error" && (
-        <div style={{
-          display: "flex", alignItems: "center", gap: 12, padding: "10px 16px",
-          background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.25)",
-          borderRadius: "var(--lt-radius)", fontSize: 13, color: "var(--bad)",
-        }}>
-          <span>⚠ Backend sync error: {state.syncError ?? "Unknown"}. Data may be stale.</span>
-          <button className="btn secondary" onClick={rehydrateFromBackend}
-            style={{ marginLeft: "auto", fontSize: 11, padding: "4px 10px" }}>Retry Sync</button>
-        </div>
-      )}
-
-      {/* Stats Row */}
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
         <StatCard label="TOTAL TXS" value={stats.total} sub={`${stats.uniqueAssets} assets`} />
         <StatCard label="BUYS" value={stats.buys} sub={`$${(stats.totalBuyValue / 1000).toFixed(0)}K invested`} accent="var(--good)" />
@@ -559,40 +429,22 @@ export default function LedgerPage() {
         <StatCard label="IMPORTED FILES" value={importedFiles.length} sub="CSV imports" />
       </div>
 
-      {/* Tab Bar */}
-      <div style={{
-        display: "flex", gap: 0, background: "var(--panel2)",
-        border: "1px solid var(--line)", borderRadius: "var(--lt-radius)", padding: 4,
-        width: "fit-content",
-      }}>
-        {([
-          { id: "journal" as Tab, label: "📋 Journal",         badge: stats.total },
-          { id: "add"     as Tab, label: "✚ Add Transaction",  badge: 0 },
-          { id: "import"  as Tab, label: "📥 Import CSV",       badge: 0 },
-          { id: "connect" as Tab, label: "🔗 Connect API",      badge: 0 },
-        ]).map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            style={{
-              padding: "7px 16px", borderRadius: "calc(var(--lt-radius) - 2px)",
-              border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700,
-              display: "flex", alignItems: "center", gap: 6, transition: "var(--lt-tr)",
-              background: tab === t.id ? "var(--brand)" : "transparent",
-              color: tab === t.id ? "#fff" : "var(--muted)",
-            }}>
-            {t.label}
-            {t.badge > 0 && (
-              <span style={{
-                fontSize: 10, fontWeight: 900,
-                background: tab === t.id ? "rgba(255,255,255,0.25)" : "var(--brand3)",
-                color: tab === t.id ? "#fff" : "var(--brand)",
-                borderRadius: 999, padding: "1px 6px",
-              }}>{t.badge}</span>
-            )}
+      <div style={{ display: "flex", gap: 0, background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: "var(--lt-radius)", padding: 4, width: "fit-content" }}>
+        {[
+          { id: "journal" as Tab, label: "📋 Journal", badge: filteredTxs.length },
+          { id: "add" as Tab, label: "✚ Add Transaction", badge: 0 },
+          { id: "import" as Tab, label: "📥 Import CSV", badge: 0 },
+          { id: "connect" as Tab, label: "🔗 Connect API", badge: 0 },
+        ].map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{
+            padding: "7px 16px", borderRadius: "calc(var(--lt-radius) - 2px)", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700,
+            background: tab === t.id ? "var(--brand)" : "transparent", color: tab === t.id ? "#fff" : "var(--muted)", transition: "var(--lt-tr)"
+          }}>
+            {t.label} 
           </button>
         ))}
       </div>
 
-      {/* ═══════════ TAB: JOURNAL ═══════════ */}
       {tab === "journal" && (
         <div className="panel">
           <div className="panel-head">
@@ -600,441 +452,150 @@ export default function LedgerPage() {
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span className="pill">{filteredTxs.length} entries</span>
               {stats.total > 0 && (
-                <button
-                  className="btn secondary"
-                  disabled={!canWrite || clearing}
-                  onClick={async () => {
-                    if (!confirm(`⚠️ This will permanently delete ALL ${stats.total} transactions and ${importedFiles.length} imported file records. This cannot be undone.\n\nAre you sure?`)) return;
-                    setClearing(true);
-                    const result = await clearAllData();
-                    if (result.success) {
-                      toast("All tracker data cleared ✓", "good");
-                    } else {
-                      toast(result.error || "Clear failed", "bad");
-                    }
-                    setClearing(false);
-                  }}
-                  style={{ fontSize: 11, padding: "4px 10px", color: "var(--bad)", opacity: canWrite ? 1 : 0.5 }}
-                >
-                  {clearing ? "Clearing…" : "🗑 Clear All Data"}
+                <button className="btn secondary" disabled={!canWrite || clearing} onClick={async () => {
+                  if (!confirm("Clear ALL data?")) return;
+                  setClearing(true);
+                  if ((await clearAllData()).success) toast("Data cleared", "good");
+                  setClearing(false);
+                }} style={{ fontSize: 11, padding: "4px 10px", color: "var(--bad)" }}>
+                  🗑 Clear All
                 </button>
               )}
             </div>
           </div>
 
-          {/* Filters Row */}
-          <div style={{ padding: "12px 16px", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", borderBottom: "1px solid var(--line)", background: "var(--panel2)33" }}>
+          <div style={{ padding: "12px 16px", display: "flex", gap: 10, flexWrap: "wrap", borderBottom: "1px solid var(--line)", background: "var(--panel2)33" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <label style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: "0.05em" }}>SEARCH</label>
-              <input
-                className="inp"
-                placeholder="Note, venue…"
-                value={searchQ}
-                onChange={e => setSearchQ(e.target.value)}
-                style={{ width: 140, padding: "6px 10px", fontSize: 12 }}
-              />
+              <label style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)" }}>SEARCH</label>
+              <input className="inp" placeholder="Note, venue, asset..." value={searchQ} onChange={e => setSearchQ(e.target.value)} style={{ width: 140, padding: "6px 10px", fontSize: 12 }} />
             </div>
-
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <label style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: "0.05em" }}>TYPE</label>
-              <select
-                className="inp"
-                value={filterType}
-                onChange={e => setFilterType(e.target.value)}
-                style={{ width: 100, padding: "6px 8px", fontSize: 12 }}
-              >
+              <label style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)" }}>TYPE</label>
+              <select className="inp" value={filterType} onChange={e => setFilterType(e.target.value)} style={{ width: 100, padding: "6px 8px", fontSize: 12 }}>
                 <option value="">All Types</option>
                 {TX_TYPES.map(tt => <option key={tt.value} value={tt.value}>{tt.label}</option>)}
               </select>
             </div>
-
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <label style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: "0.05em" }}>ASSET</label>
-              <select
-                className="inp"
-                value={filterAsset}
-                onChange={e => setFilterAsset(e.target.value)}
-                style={{ width: 110, padding: "6px 8px", fontSize: 12 }}
-              >
+              <label style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)" }}>ASSET</label>
+              <select className="inp" value={filterAsset} onChange={e => setFilterAsset(e.target.value)} style={{ width: 100, padding: "6px 8px", fontSize: 12 }}>
                 <option value="">All Assets</option>
                 {uniqueAssets.map(a => <option key={a} value={a}>{a}</option>)}
               </select>
             </div>
-
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <label style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: "0.05em" }}>FROM</label>
-              <input
-                type="date"
-                className="inp"
-                value={fromDate}
-                onChange={e => setFromDate(e.target.value)}
-                style={{ width: 130, padding: "5px 10px", fontSize: 12 }}
-              />
+              <label style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)" }}>VENUE</label>
+              <select className="inp" value={filterVenue} onChange={e => setFilterVenue(e.target.value)} style={{ width: 100, padding: "6px 8px", fontSize: 12 }}>
+                <option value="">All Venues</option>
+                {uniqueVenues.map(v => <option key={v} value={v}>{EXCHANGE_LABELS[v] || v}</option>)}
+              </select>
             </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <label style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: "0.05em" }}>TO</label>
-              <input
-                type="date"
-                className="inp"
-                value={toDate}
-                onChange={e => setToDate(e.target.value)}
-                style={{ width: 130, padding: "5px 10px", fontSize: 12 }}
-              />
-            </div>
-
             <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
-              {(searchQ || filterType || filterAsset || fromDate || toDate) && (
-                <button className="btn secondary" onClick={clearFilters}
-                  style={{ padding: "6px 14px", fontSize: 12, fontWeight: 700 }}>Clear</button>
+              {(searchQ || filterType || filterAsset || filterVenue) && (
+                <button className="btn secondary" onClick={clearFilters} style={{ padding: "6px 14px", fontSize: 12 }}>Clear</button>
               )}
-              <button className="btn secondary" onClick={exportToCsv}
-                style={{ padding: "6px 14px", fontSize: 12, fontWeight: 700, color: "var(--brand)" }}>
-                Export CSV
-              </button>
+              <button className="btn secondary" onClick={exportToCsv} style={{ padding: "6px 14px", fontSize: 12, color: "var(--brand)" }}>Export CSV</button>
             </div>
           </div>
 
-          {/* Table */}
-          <div className="panel-body" style={{ padding: 0 }}>
-            <div className="tableWrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>DATE</th>
-                    <th>TYPE</th>
-                    <th>ASSET</th>
-                    <th>QTY</th>
-                    <th>UNIT PRICE</th>
-                    <th>TOTAL</th>
-                    <th>FEE</th>
-                    <th>VENUE</th>
-                    <th>NOTE</th>
-                    <th>ACTIONS</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredTxs.length === 0 ? (
-                    <tr><td colSpan={10} className="muted" style={{ textAlign: "center", padding: 32 }}>
-                      No transactions yet. Add one or import a CSV.
-                    </td></tr>
-                  ) : filteredTxs.map(t => (
-                    <tr key={t.id}>
-                      {editId === t.id ? (
-                        <>
-                          <td className="mono" style={{ fontSize: 11, color: "var(--muted)" }}>
-                            {new Date(t.ts).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "2-digit" })}
-                          </td>
-                          <td>
-                            <select className="inp" value={editType} onChange={e => setEditType(e.target.value)}
-                              style={{ width: 90, padding: "2px 4px", fontSize: 11 }}>
-                              {TX_TYPES.map(tt => <option key={tt.value} value={tt.value}>{tt.label}</option>)}
-                            </select>
-                          </td>
-                          <td style={{ minWidth: 100 }}>
-                            <CoinAutocomplete value={editAsset} onChange={(val) => setEditAsset(val.toUpperCase())} placeholder="BTC" />
-                          </td>
-                          <td>
-                            <input className="inp" type="number" value={editQty} onChange={e => setEditQty(e.target.value)}
-                              style={{ width: 90, padding: "2px 4px", fontSize: 11 }} />
-                          </td>
-                          <td>
-                            <input className="inp" type="number" value={editPrice} onChange={e => setEditPrice(e.target.value)}
-                              style={{ width: 80, padding: "2px 4px", fontSize: 11 }} />
-                          </td>
-                          <td className="mono muted">—</td>
-                          <td className="mono muted">—</td>
-                          <td className="mono muted">—</td>
-                          <td className="mono muted">—</td>
-                          <td>
-                            <div style={{ display: "flex", gap: 4 }}>
-                              <button onClick={saveEdit} disabled={!canWrite}
-                                style={{ background: "none", border: "1px solid var(--line)", borderRadius: "var(--lt-radius-sm)", padding: "4px 8px", cursor: canWrite ? "pointer" : "not-allowed", color: "var(--good)", fontSize: 12, opacity: canWrite ? 1 : 0.5 }}>✓</button>
-                              <button onClick={cancelEdit}
-                                style={{ background: "none", border: "1px solid var(--line)", borderRadius: "var(--lt-radius-sm)", padding: "4px 8px", cursor: "pointer", color: "var(--muted)", fontSize: 12 }}>✕</button>
-                            </div>
-                          </td>
-                        </>
-                      ) : (
-                        <>
-                          <td className="mono" style={{ fontSize: 11, color: "var(--muted)" }}>
-                            {new Date(t.ts).toLocaleString(undefined, { month: "short", day: "numeric", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
-                          </td>
-                          <td><TypeBadge type={t.type} /></td>
-                          <td className="mono" style={{ fontWeight: 900 }}>{t.asset}</td>
-                          <td className="mono">{fmtQty(t.qty)}</td>
-                          <td className="mono">{(t.type === "buy" || t.type === "sell") ? "$" + fmtPx(t.price) : "—"}</td>
-                          <td className="mono">{(t.qty * t.price) > 0 ? "$" + fmtPx(t.qty * t.price) : "—"}</td>
-                          <td className="mono muted">{t.fee > 0 ? fmtFiat(t.fee, state.base) : "—"}</td>
-                          <td className="mono muted">{(t as any).venue ?? "—"}</td>
-                          <td className="mono muted" style={{ maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {t.note ?? "—"}
-                          </td>
-                          <td>
-                            <div style={{ display: "flex", gap: 4 }}>
-                              <button onClick={() => startEdit(t)} disabled={!canWrite}
-                                style={{ background: "none", border: "1px solid var(--line)", borderRadius: "var(--lt-radius-sm)", padding: "4px 8px", cursor: canWrite ? "pointer" : "not-allowed", color: "var(--text)", fontSize: 13, opacity: canWrite ? 1 : 0.5 }}>✎</button>
-                              <button onClick={() => deleteTx(t.id)} disabled={!canWrite}
-                                style={{ background: "none", border: "1px solid var(--line)", borderRadius: "var(--lt-radius-sm)", padding: "4px 8px", cursor: canWrite ? "pointer" : "not-allowed", color: "var(--bad)", fontSize: 13, opacity: canWrite ? 1 : 0.5 }}>🗑</button>
-                            </div>
-                          </td>
-                        </>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Imported files footer */}
-          {importedFiles.length > 0 && (
-            <div style={{ padding: "10px 16px", borderTop: "1px solid var(--line)", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-              <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 700 }}>IMPORTED FILES:</span>
-              {importedFiles.map((f: any, i: number) => (
-                <span key={i} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 999, background: "var(--panel2)", border: "1px solid var(--line)", color: "var(--muted)" }}>
-                  {EXCHANGE_LABELS[f.exchange] ?? f.exchange} · {f.rowCount} rows
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ═══════════ TAB: ADD TRANSACTION ═══════════ */}
-      {tab === "add" && (
-        <div className="panel">
-          <div className="panel-head">
-            <h2>Add Transaction</h2>
-            {saving && <span className="pill">Saving…</span>}
-            {!canWrite && <span className="pill" style={{ background: "rgba(220,38,38,0.15)", color: "var(--bad)" }}>Backend unavailable</span>}
-          </div>
-          <div className="panel-body">
-            {/* Transaction type pills */}
-            <div className="form-field" style={{ marginBottom: 12 }}>
-              <label className="form-label">Transaction Type</label>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {TX_TYPES.map(tt => (
-                  <button key={tt.value} onClick={() => setTxType(tt.value)} style={{
-                    padding: "7px 16px", borderRadius: "var(--lt-radius-sm)", border: "1px solid",
-                    borderColor: txType === tt.value ? tt.color : "var(--line)",
-                    background: txType === tt.value ? `${tt.color}18` : "transparent",
-                    color: txType === tt.value ? tt.color : "var(--muted)",
-                    cursor: "pointer", fontSize: 12, fontWeight: txType === tt.value ? 800 : 500,
-                    transition: "var(--lt-tr)",
-                  }}>{tt.label}</button>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              <div className="form-field">
-                <label className="form-label">Asset</label>
-                <CoinAutocomplete value={asset} onChange={setAsset} />
-              </div>
-              <div className="form-field">
-                <label className="form-label">Quantity</label>
-                <input className="inp" type="number" min="0" value={qty} onChange={e => setQty(e.target.value)} placeholder="0.00" />
-              </div>
-              <div className="form-field">
-                <label className="form-label">Unit Price ({state.base || "USD"})</label>
-                <input className="inp" type="number" min="0" value={price} onChange={e => setPrice(e.target.value)} placeholder="0.00" />
-              </div>
-              <div className="form-field">
-                <label className="form-label">Fee</label>
-                <input className="inp" type="number" min="0" value={fee} onChange={e => setFee(e.target.value)} placeholder="0.00" />
-              </div>
-              <div className="form-field">
-                <label className="form-label">Venue</label>
-                <input className="inp" value={venue} onChange={e => setVenue(e.target.value)} placeholder="Binance, Coinbase…" />
-              </div>
-              <div className="form-field">
-                <label className="form-label">Note</label>
-                <input className="inp" value={note} onChange={e => setNote(e.target.value)} placeholder="Optional" />
-              </div>
-            </div>
-
-            {/* Live preview */}
-            {asset && parseFloat(qty) > 0 && (
-              <div style={{
-                marginTop: 12, padding: "10px 14px",
-                background: "var(--panel2)", border: "1px solid var(--line)",
-                borderRadius: "var(--lt-radius-sm)", fontSize: 12,
-                display: "flex", gap: 16, flexWrap: "wrap",
-              }}>
-                <span className="muted">Preview:</span>
-                <span><strong>{txType.toUpperCase()}</strong> {parseFloat(qty) || 0} <strong>{asset.toUpperCase()}</strong></span>
-                {parseFloat(price) > 0 && (
-                  <span>@ ${fmtPx(parseFloat(price))} = <strong>${fmtPx(parseFloat(qty) * parseFloat(price))}</strong></span>
-                )}
-                {parseFloat(fee) > 0 && <span className="muted">Fee: ${fmtPx(parseFloat(fee))}</span>}
-              </div>
-            )}
-
-            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-              <button className="btn" onClick={save} disabled={saving || !asset || !qty || !canWrite}
-                style={{ opacity: canWrite ? 1 : 0.5 }}>
-                {saving ? "Saving…" : canWrite ? "Save Transaction" : "Backend Unavailable"}
-              </button>
-              <button className="btn secondary" onClick={() => { setAsset(""); setQty(""); setPrice(""); setFee("0"); setVenue(""); setNote(""); }}>
-                Clear
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ═══════════ TAB: CSV IMPORT ═══════════ */}
-      {tab === "import" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <div className="panel">
-            <div className="panel-head">
-              <h2>Import CSV</h2>
-              <span className="pill">Spot Trades · Binance · Bybit · OKX · Gate.io · MEXC · KuCoin</span>
-            </div>
-            <div className="panel-body">
-
-              {/* STAGE: UPLOAD */}
-              {importStage === "upload" && (
-                <div>
-                  {!canWrite && (
-                    <div style={{
-                      marginBottom: 12, padding: "10px 14px",
-                      background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.25)",
-                      borderRadius: "var(--lt-radius-sm)", fontSize: 12, color: "var(--bad)",
-                    }}>
-                      ⚠ Backend unavailable — CSV import is disabled. Transactions cannot be saved.
-                    </div>
-                  )}
-                  <div
-                    style={{
-                      border: "2px dashed var(--line)", borderRadius: "var(--lt-radius)",
-                      padding: "40px 24px", textAlign: "center", cursor: canWrite ? "pointer" : "not-allowed",
-                      transition: "var(--lt-tr)", background: "var(--panel2)",
-                      opacity: canWrite ? 1 : 0.5,
-                    }}
-                    onDragOver={e => { if (canWrite) e.preventDefault(); }}
-                    onDrop={e => { e.preventDefault(); if (canWrite) { const f = e.dataTransfer.files[0]; if (f) handleFile(f); } }}
-                    onClick={() => canWrite && fileRef.current?.click()}
-                  >
-                    <input ref={fileRef} type="file" accept=".csv,.txt" style={{ display: "none" }}
-                      onChange={e => { const f = e.target.files?.[0]; if (f && canWrite) handleFile(f); }} />
-                    {importLoading ? (
-                      <div className="muted">Parsing…</div>
+          <div className="tableWrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>DATE</th><th>TYPE</th><th>ASSET</th><th>QTY</th><th>PRICE</th><th>TOTAL</th><th>FEE</th><th>VENUE</th><th>NOTE</th><th>ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredTxs.map(t => (
+                  <tr key={t.id}>
+                    {editId === t.id ? (
+                      <>
+                        <td>{new Date(t.ts).toLocaleDateString()}</td>
+                        <td><select className="inp" value={editType} onChange={e => setEditType(e.target.value)}>{TX_TYPES.map(tt => <option key={tt.value} value={tt.value}>{tt.label}</option>)}</select></td>
+                        <td><CoinAutocomplete value={editAsset} onChange={setEditAsset} /></td>
+                        <td><input className="inp" type="number" value={editQty} onChange={e => setEditQty(e.target.value)} /></td>
+                        <td><input className="inp" type="number" value={editPrice} onChange={e => setEditPrice(e.target.value)} /></td>
+                        <td colSpan={4}></td>
+                        <td>
+                          <button onClick={saveEdit} style={{ color: "var(--good)" }}>✓</button>
+                          <button onClick={cancelEdit}>✕</button>
+                        </td>
+                      </>
                     ) : (
                       <>
-                        <svg viewBox="0 0 24 24" fill="none" width="32" height="32" style={{ color: "var(--muted)", margin: "0 auto 8px" }}>
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Drop CSV or click to browse</div>
-                        <div style={{ fontSize: 12, color: "var(--muted)" }}>Supports Binance, Bybit, OKX, Gate.io spot trade exports</div>
+                        <td className="mono muted">{new Date(t.ts).toLocaleString()}</td>
+                        <td><TypeBadge type={t.type} /></td>
+                        <td className="mono"><strong>{t.asset}</strong></td>
+                        <td className="mono">{fmtQty(t.qty)}</td>
+                        <td className="mono">${fmtPx(t.price)}</td>
+                        <td className="mono">${fmtPx(t.qty * t.price)}</td>
+                        <td className="mono muted">{t.fee > 0 ? fmtFiat(t.fee, state.base) : "—"}</td>
+                        <td className="mono muted">{(t as any).venue || "—"}</td>
+                        <td className="mono muted">{t.note || "—"}</td>
+                        <td>
+                          <button onClick={() => startEdit(t)}>✎</button>
+                          <button onClick={() => deleteTx(t.id)} style={{ color: "var(--bad)" }}>🗑</button>
+                        </td>
                       </>
                     )}
-                  </div>
-                  {importError && (
-                    <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: "var(--lt-radius-sm)", background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.25)", color: "var(--bad)", fontSize: 12 }}>
-                      ⚠ {importError}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* STAGE: PREVIEW */}
-              {importStage === "preview" && importResult && (
-                <div>
-                  {isDeltaImport && (
-                    <div style={{
-                      marginBottom: 12, padding: "10px 14px",
-                      background: "rgba(234,179,8,0.08)", border: "1px solid rgba(234,179,8,0.3)",
-                      borderRadius: "var(--lt-radius-sm)", fontSize: 12, color: "var(--warn)",
-                      display: "flex", alignItems: "center", gap: 8,
-                    }}>
-                      <span style={{ fontSize: 16 }}>⚡</span>
-                      <span>
-                        <strong>Delta import:</strong> This file was previously imported.{" "}
-                        <strong>{deltaCount}</strong> row{deltaCount !== 1 ? "s" : ""} already in your tracker —
-                        only the <strong>{importResult.rowCount}</strong> new row{importResult.rowCount !== 1 ? "s" : ""} will be added.
-                      </span>
-                    </div>
-                  )}
-                  <div style={{ marginBottom: 12, display: "flex", gap: 16, flexWrap: "wrap" }}>
-                    <StatCard label={isDeltaImport ? "NEW ROWS" : "ROWS PARSED"} value={importResult.rowCount} accent="var(--good)" />
-                    {isDeltaImport && <StatCard label="ALREADY EXIST" value={deltaCount} accent="var(--muted)" />}
-                    <StatCard label="SKIPPED" value={importResult.skippedCount} accent={importResult.skippedCount > 0 ? "var(--bad)" : "var(--muted)"} />
-                    <StatCard label="EXCHANGE" value={EXCHANGE_LABELS[importResult.exchange] ?? importResult.exchange} />
-                    <StatCard label="TYPE" value={importResult.exportType} />
-                  </div>
-                  {importResult.dateRange && (
-                    <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>
-                      Date range: {new Date(importResult.dateRange[0]).toLocaleDateString()} → {new Date(importResult.dateRange[1]).toLocaleDateString()}
-                    </div>
-                  )}
-                  {importResult.warnings.length > 0 && (
-                    <div style={{ marginBottom: 12 }}>
-                      {importResult.warnings.map((w, i) => (
-                        <div key={i} style={{ padding: "6px 10px", borderRadius: "var(--lt-radius-sm)", background: "rgba(217,119,6,0.08)", border: "1px solid rgba(217,119,6,0.25)", color: "var(--warn)", fontSize: 12, marginBottom: 4 }}>
-                          ⚠ {w}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 16 }}>
-                    File: <strong style={{ color: "var(--text)" }}>{fileName}</strong>
-                  </div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button className="btn" onClick={commitImport} disabled={!canWrite}
-                      style={{ opacity: canWrite ? 1 : 0.5 }}>
-                      {!canWrite ? "Backend Unavailable" : isDeltaImport ? `Import ${importResult.rowCount} New Trade${importResult.rowCount !== 1 ? "s" : ""} →` : `Commit ${importResult.rowCount} Trades →`}
-                    </button>
-                    <button className="btn secondary" onClick={resetImport}>Cancel</button>
-                  </div>
-                </div>
-              )}
-
-              {/* STAGE: COMMITTING */}
-              {importStage === "committing" && (
-                <div style={{ textAlign: "center", padding: "32px 24px" }}>
-                  <div style={{ fontSize: 36, marginBottom: 12 }}>⏳</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>Persisting to backend…</div>
-                  <div style={{ fontSize: 13, color: "var(--muted)" }}>Do not close this page.</div>
-                </div>
-              )}
-
-              {/* STAGE: DONE */}
-              {importStage === "done" && importCounts && (
-                <div>
-                  <div style={{ fontSize: 36, textAlign: "center", marginBottom: 12 }}>✅</div>
-                  <div style={{ marginBottom: 16, display: "flex", gap: 16, flexWrap: "wrap" }}>
-                    <StatCard label="PERSISTED" value={importCounts.persisted} accent="var(--good)" />
-                    <StatCard label="DUPES SKIPPED" value={importCounts.skippedDuplicate} accent="var(--muted)" />
-                    <StatCard label="REJECTED" value={importCounts.rejected} accent={importCounts.rejected > 0 ? "var(--bad)" : "var(--muted)"} />
-                    <StatCard label="FAILED" value={importCounts.failed} accent={importCounts.failed > 0 ? "var(--bad)" : "var(--muted)"} />
-                  </div>
-                  {importErrorMsg && (
-                    <div style={{ padding: "8px 12px", borderRadius: "var(--lt-radius-sm)", background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.25)", color: "var(--bad)", fontSize: 12, marginBottom: 12 }}>
-                      ⚠ {importErrorMsg}
-                    </div>
-                  )}
-                  <button className="btn" onClick={resetImport}>Import Another File</button>
-                </div>
-              )}
-
-              {/* STAGE: ERROR */}
-              {importStage === "error" && (
-                <div>
-                  <div style={{ fontSize: 36, textAlign: "center", marginBottom: 12 }}>❌</div>
-                  <div style={{ padding: "8px 12px", borderRadius: "var(--lt-radius-sm)", background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.25)", color: "var(--bad)", fontSize: 12, marginBottom: 16 }}>
-                    {importErrorMsg || "Import failed — no rows were committed to the backend."}
-                  </div>
-                  <button className="btn secondary" onClick={resetImport}>Try Again</button>
-                </div>
-              )}
-            </div>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
 
-      {/* ═══════════ TAB: CONNECT API ═══════════ */}
+      {tab === "add" && (
+        <div className="panel">
+          <div className="panel-head"><h2>Add Transaction</h2></div>
+          <div className="panel-body">
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div className="form-field"><label className="form-label">Type</label>
+                <div style={{ display: "flex", gap: 4 }}>{TX_TYPES.map(tt => (
+                  <button key={tt.value} onClick={() => setTxType(tt.value)} style={{ padding: "4px 10px", fontSize: 11, border: "1px solid var(--line)", borderRadius: 4, background: txType === tt.value ? "var(--brand)" : "transparent", color: txType === tt.value ? "#fff" : "inherit" }}>{tt.label}</button>
+                ))}</div>
+              </div>
+              <div className="form-field"><label className="form-label">Asset</label><CoinAutocomplete value={asset} onChange={setAsset} /></div>
+              <div className="form-field"><label className="form-label">Qty</label><input className="inp" type="number" value={qty} onChange={e => setQty(e.target.value)} /></div>
+              <div className="form-field"><label className="form-label">Price</label><input className="inp" type="number" value={price} onChange={e => setPrice(e.target.value)} /></div>
+              <div className="form-field"><label className="form-label">Fee</label><input className="inp" type="number" value={fee} onChange={e => setFee(e.target.value)} /></div>
+              <div className="form-field"><label className="form-label">Venue</label><input className="inp" value={venue} onChange={e => setVenue(e.target.value)} /></div>
+              <div className="form-field"><label className="form-label">Note</label><input className="inp" value={note} onChange={e => setNote(e.target.value)} /></div>
+            </div>
+            <button className="btn" onClick={save} disabled={saving || !asset || !qty} style={{ marginTop: 12 }}>{saving ? "Saving..." : "Save Transaction"}</button>
+          </div>
+        </div>
+      )}
+
+      {tab === "import" && (
+        <div className="panel">
+          <div className="panel-head"><h2>Import CSV</h2></div>
+          <div className="panel-body">
+            {importStage === "upload" && (
+              <div onClick={() => fileRef.current?.click()} style={{ border: "2px dashed var(--line)", padding: 40, textAlign: "center", cursor: "pointer", background: "var(--panel2)" }}>
+                <input ref={fileRef} type="file" style={{ display: "none" }} onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
+                <strong>Click to Upload CSV</strong>
+              </div>
+            )}
+            {importStage === "preview" && importResult && (
+              <div>
+                <p>Found <strong>{importResult.rows.length}</strong> trades.</p>
+                <button className="btn" onClick={commitImport}>Commit Trades</button>
+                <button className="btn secondary" onClick={resetImport}>Cancel</button>
+              </div>
+            )}
+            {importStage === "done" && (
+              <div style={{ textAlign: "center" }}>
+                <p>Import successful!</p>
+                <button className="btn" onClick={resetImport}>Import Another</button>
+              </div>
+            )}
+            {importError && <p style={{ color: "var(--bad)" }}>{importError}</p>}
+          </div>
+        </div>
+      )}
+
       {tab === "connect" && <ExchangeConnect />}
     </div>
   );

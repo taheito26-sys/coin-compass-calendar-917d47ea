@@ -34,7 +34,6 @@ Deno.serve(async (req) => {
 
     const url = new URL(req.url);
     const pathParts = url.pathname.split("/").filter(Boolean);
-    // Path: /exchange-sync, /exchange-sync/test/:exchange, /exchange-sync/sync/:exchange, /exchange-sync/:exchange
     const action = pathParts[1]; // test, sync, or exchange id for DELETE
     const exchangeId = pathParts[2] || action;
 
@@ -112,34 +111,44 @@ Deno.serve(async (req) => {
       if (!conn) return json({ error: "Connection not found" }, 404);
 
       try {
+        const body = await req.json().catch(() => ({}));
+        const options = {
+          period: body.period || 90,
+          types: body.types || ["buy", "sell", "transfer_in", "transfer_out"],
+          preview: body.preview || false,
+          coins: body.coins || [],
+        };
+
         const result = await syncExchangeTrades(
           supabase,
           user.id,
           exchangeId,
           conn.api_key,
           conn.api_secret,
-          conn.passphrase
+          conn.passphrase,
+          options
         );
 
-        // Update sync metadata
-        await supabase
-          .from("exchange_connections")
-          .update({
-            last_sync: new Date().toISOString(),
-            sync_count: (conn.sync_count || 0) + (result.synced || 0),
-            status: "connected",
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", conn.id);
+        if (!options.preview && result.ok) {
+          await supabase
+            .from("exchange_connections")
+            .update({
+              last_sync: new Date().toISOString(),
+              sync_count: (conn.sync_count || 0) + result.synced,
+              status: "connected",
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", conn.id);
+        }
 
         return json(result);
       } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Sync failed";
+        console.error(`[sync-error] ${exchangeId}: ${message}`);
         await supabase
           .from("exchange_connections")
           .update({ status: "error", updated_at: new Date().toISOString() })
           .eq("id", conn.id);
-
-        const message = err instanceof Error ? err.message : "Sync failed";
         return json({ ok: false, error: message }, 500);
       }
     }
@@ -177,106 +186,60 @@ async function testExchangeConnection(
       const ts = Date.now();
       const query = `timestamp=${ts}`;
       const sig = await hmacSign(apiSecret, query);
-      const res = await fetch(
-        `https://api.binance.com/api/v3/account?${query}&signature=${sig}`,
-        { headers: { "X-MBX-APIKEY": apiKey } }
-      );
+      const res = await fetch(`https://api.binance.com/api/v3/account?${query}&signature=${sig}`, { headers: { "X-MBX-APIKEY": apiKey } });
       if (res.ok) return { ok: true, message: "Binance connection verified ✓" };
-      const err = await res.json().catch(() => ({}));
-      return { ok: false, message: (err as any)?.msg || `HTTP ${res.status}` };
+      return { ok: false, message: "Binance verification failed" };
     }
     case "bybit": {
       const ts = Date.now();
-      const recvWindow = "5000";
       const query = "accountType=UNIFIED";
-      const payload = `${ts}${apiKey}${recvWindow}${query}`;
+      const payload = `${ts}${apiKey}5000${query}`;
       const sig = await hmacSign(apiSecret, payload);
-      const res = await fetch(
-        `https://api.bybit.com/v5/account/wallet-balance?${query}`,
-        {
-          headers: {
-            "X-BAPI-API-KEY": apiKey,
-            "X-BAPI-SIGN": sig,
-            "X-BAPI-TIMESTAMP": String(ts),
-            "X-BAPI-RECV-WINDOW": recvWindow,
-          },
-        }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        if (data.retCode === 0) return { ok: true, message: "Bybit connection verified ✓" };
-        return { ok: false, message: data.retMsg || "Unknown error" };
-      }
-      return { ok: false, message: `HTTP ${res.status}` };
+      const res = await fetch(`https://api.bybit.com/v5/account/wallet-balance?${query}`, {
+        headers: { "X-BAPI-API-KEY": apiKey, "X-BAPI-SIGN": sig, "X-BAPI-TIMESTAMP": String(ts), "X-BAPI-RECV-WINDOW": "5000" }
+      });
+      if (res.ok) return { ok: true, message: "Bybit connection verified ✓" };
+      return { ok: false, message: "Bybit verification failed" };
     }
     case "okx": {
       const ts = new Date().toISOString();
       const path = "/api/v5/account/balance";
-      const preSign = `${ts}GET${path}`;
-      const sig = await hmacSignBase64(apiSecret, preSign);
+      const sig = await hmacSignBase64(apiSecret, `${ts}GET${path}`);
       const res = await fetch(`https://www.okx.com${path}`, {
-        headers: {
-          "OK-ACCESS-KEY": apiKey,
-          "OK-ACCESS-SIGN": sig,
-          "OK-ACCESS-TIMESTAMP": ts,
-          "OK-ACCESS-PASSPHRASE": passphrase || "",
-        },
+        headers: { "OK-ACCESS-KEY": apiKey, "OK-ACCESS-SIGN": sig, "OK-ACCESS-TIMESTAMP": ts, "OK-ACCESS-PASSPHRASE": passphrase || "" }
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.code === "0") return { ok: true, message: "OKX connection verified ✓" };
-        return { ok: false, message: data.msg || "Unknown error" };
-      }
-      return { ok: false, message: `HTTP ${res.status}` };
+      if (res.ok) return { ok: true, message: "OKX connection verified ✓" };
+      return { ok: false, message: "OKX verification failed" };
     }
     case "gate": {
       const ts = Math.floor(Date.now() / 1000);
       const path = "/api/v4/spot/accounts";
       const hashedBody = await sha512("");
-      const signStr = `GET\n${path}\n\n${hashedBody}\n${ts}`;
-      const sig = await hmacSign512(apiSecret, signStr);
-      const res = await fetch(`https://api.gateio.ws${path}`, {
-        headers: { KEY: apiKey, SIGN: sig, Timestamp: String(ts) },
-      });
+      const sig = await hmacSign512(apiSecret, `GET\n${path}\n\n${hashedBody}\n${ts}`);
+      const res = await fetch(`https://api.gateio.ws${path}`, { headers: { KEY: apiKey, SIGN: sig, Timestamp: String(ts) } });
       if (res.ok) return { ok: true, message: "Gate.io connection verified ✓" };
-      return { ok: false, message: `HTTP ${res.status}` };
+      return { ok: false, message: "Gate.io verification failed" };
     }
     case "kraken": {
       const nonce = Date.now();
       const postData = `nonce=${nonce}`;
       const path = "/0/private/Balance";
-      const message = await krakenSign(path, postData, nonce, apiSecret);
+      const sig = await krakenSign(path, postData, nonce, apiSecret);
       const res = await fetch(`https://api.kraken.com${path}`, {
-        method: "POST",
-        headers: {
-          "API-Key": apiKey,
-          "API-Sign": message,
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: postData,
+        method: "POST", headers: { "API-Key": apiKey, "API-Sign": sig, "Content-Type": "application/x-www-form-urlencoded" }, body: postData
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.error?.length === 0) return { ok: true, message: "Kraken connection verified ✓" };
-        return { ok: false, message: data.error?.join(", ") || "Unknown error" };
-      }
-      return { ok: false, message: `HTTP ${res.status}` };
+      if (res.ok) return { ok: true, message: "Kraken connection verified ✓" };
+      return { ok: false, message: "Kraken verification failed" };
     }
     case "coinbase": {
       const ts = Math.floor(Date.now() / 1000);
       const path = "/v2/accounts";
-      const preSign = `${ts}GET${path}`;
-      const sig = await hmacSign(apiSecret, preSign);
+      const sig = await hmacSign(apiSecret, `${ts}GET${path}`);
       const res = await fetch(`https://api.coinbase.com${path}`, {
-        headers: {
-          "CB-ACCESS-KEY": apiKey,
-          "CB-ACCESS-SIGN": sig,
-          "CB-ACCESS-TIMESTAMP": String(ts),
-          "CB-VERSION": "2024-01-01",
-        },
+        headers: { "CB-ACCESS-KEY": apiKey, "CB-ACCESS-SIGN": sig, "CB-ACCESS-TIMESTAMP": String(ts), "CB-VERSION": "2024-01-01" }
       });
       if (res.ok) return { ok: true, message: "Coinbase connection verified ✓" };
-      return { ok: false, message: `HTTP ${res.status}` };
+      return { ok: false, message: "Coinbase verification failed" };
     }
     default:
       return { ok: false, message: `Unsupported exchange: ${exchange}` };
@@ -287,7 +250,7 @@ interface NormalizedTrade {
   id: string;
   orderId?: string;
   symbol: string;
-  side: "buy" | "sell";
+  side: "buy" | "sell" | "transfer_in" | "transfer_out";
   qty: number;
   price: number;
   fee: number;
@@ -295,875 +258,353 @@ interface NormalizedTrade {
   timestamp: string;
 }
 
-/**
- * Standardizes trade data from various exchange formats into a unified internal format
- * and applies compaction logic to merge fragmented fills into clean "Purchase Operations".
- */
 async function syncExchangeTrades(
   supabase: any,
   userId: string,
   exchange: string,
   apiKey: string,
   apiSecret: string,
-  passphrase?: string | null
-): Promise<{ ok: boolean; synced: number; skipped: number }> {
+  passphrase?: string | null,
+  options: { period: number; types: string[]; preview: boolean; coins: string[] } = { period: 90, types: ["buy", "sell", "transfer_in", "transfer_out"], preview: false, coins: [] }
+): Promise<{ ok: boolean; synced: number; skipped: number; previewData?: any[] }> {
   let trades: NormalizedTrade[] = [];
   let transfers: NormalizedTrade[] = [];
+  const lookbackDays = options.period || 90;
 
-  console.log(`[sync] Fetching trades and transfers from ${exchange}...`);
+  console.log(`[sync] ${exchange}: Scanning ${lookbackDays}d (Preview: ${options.preview})`);
 
-  // Get assets we already know about for this user to ensure we scan history even for moved/sold assets
-  const { data: userAssets } = await supabase
-    .from("transactions")
-    .select("assets(symbol, binance_symbol)")
-    .eq("user_id", userId)
-    .eq("venue", exchange);
-  
+  // Get recently active assets to focus scan
+  const { data: userAssets } = await supabase.from("transactions").select("assets(symbol)").eq("user_id", userId).eq("venue", exchange);
   const knownSymbols = new Set<string>();
   for (const row of userAssets || []) {
-    const s = row.assets?.symbol || row.assets?.binance_symbol;
+    const s = row.assets?.symbol;
     if (s) knownSymbols.add(s.toUpperCase());
   }
 
-  switch (exchange) {
-    case "binance":
-      trades = await fetchBinanceTrades(apiKey, apiSecret, Array.from(knownSymbols));
-      transfers = await fetchBinanceTransfers(apiKey, apiSecret);
-      break;
-    case "bybit":
-      trades = await fetchBybitTrades(apiKey, apiSecret);
-      transfers = await fetchBybitTransfers(apiKey, apiSecret);
-      break;
-    case "okx":
-      trades = await fetchOkxTrades(apiKey, apiSecret, passphrase);
-      transfers = await fetchOkxTransfers(apiKey, apiSecret, passphrase);
-      break;
-    case "gate":
-      trades = await fetchGateTrades(apiKey, apiSecret);
-      break;
-    case "kraken":
-      trades = await fetchKrakenTrades(apiKey, apiSecret);
-      break;
-    case "coinbase":
-      trades = await fetchCoinbaseTrades(apiKey, apiSecret);
-      break;
-    default:
-      throw new Error(`Unsupported exchange: ${exchange}`);
+  try {
+    switch (exchange) {
+      case "binance":
+        trades = await fetchBinanceTrades(apiKey, apiSecret, Array.from(knownSymbols), lookbackDays);
+        if (options.types.includes("transfer_in") || options.types.includes("transfer_out")) {
+          transfers = await fetchBinanceTransfers(apiKey, apiSecret, lookbackDays);
+        }
+        break;
+      case "bybit":
+        trades = await fetchBybitTrades(apiKey, apiSecret, lookbackDays);
+        if (options.types.includes("transfer_in") || options.types.includes("transfer_out")) {
+          transfers = await fetchBybitTransfers(apiKey, apiSecret, lookbackDays);
+        }
+        break;
+      case "okx":
+        trades = await fetchOkxTrades(apiKey, apiSecret, passphrase, lookbackDays);
+        if (options.types.includes("transfer_in") || options.types.includes("transfer_out")) {
+          transfers = await fetchOkxTransfers(apiKey, apiSecret, passphrase, lookbackDays);
+        }
+        break;
+      case "gate": trades = await fetchGateTrades(apiKey, apiSecret, lookbackDays); break;
+      case "kraken": trades = await fetchKrakenTrades(apiKey, apiSecret, lookbackDays); break;
+      case "coinbase": trades = await fetchCoinbaseTrades(apiKey, apiSecret, lookbackDays); break;
+      default: throw new Error(`Unsupported exchange: ${exchange}`);
+    }
+  } catch (err) {
+    console.error(`[fetch-error] ${exchange}:`, err);
+    throw err;
   }
 
-  // Combine trades and transfers
-  const allHistory = [...trades, ...transfers];
+  // Filter & Deduplicate
+  let allHistory = [...trades, ...transfers]
+    .filter(t => options.types.includes(t.side))
+    .filter(t => options.coins.length === 0 || options.coins.includes(t.symbol.toUpperCase()));
 
-  if (!allHistory.length) {
-    console.log(`[sync] ${exchange}: No new trades or transfers found`);
-    return { ok: true, synced: 0, skipped: 0 };
-  }
+  if (allHistory.length === 0) return { ok: true, synced: 0, skipped: 0 };
 
-  // Fetch user preference for minimum import value
-  const { data: prefRows } = await supabase
-    .from("user_preferences")
-    .select("key, value")
-    .eq("user_id", userId);
-  
-  const prefs: Record<string, string> = {};
-  for (const row of prefRows || []) {
-    prefs[row.key] = row.value;
-  }
-  const minValThreshold = parseFloat(prefs.minImportValue || "100");
-
-  // --- Smart Trade Compaction Logic ---
-  // 1. Sort by time
-  const sorted = allHistory
-    .map(t => ({ ...t, symbol: t.symbol.toUpperCase() }))
-    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-
+  // Compaction Logic
+  const sorted = allHistory.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
   const clusters: (NormalizedTrade & { _lastTs: number })[] = [];
 
   for (const t of sorted) {
     const tTime = new Date(t.timestamp).getTime();
-    
-    // Strategy: 
-    // - If orderId matches exactly, it's definitely the same operation.
-    // - Otherwise, fallback to a 15-minute sliding window (if same symbol/side).
     let existingIndex = -1;
     for (let i = clusters.length - 1; i >= 0; i--) {
       const c = clusters[i];
       const isSameOp = t.orderId && c.orderId && t.orderId === c.orderId;
       const isClose = c.symbol === t.symbol && c.side === t.side && (tTime - c._lastTs) < 15 * 60 * 1000;
-      if (isSameOp || isClose) {
-        existingIndex = i;
-        break;
-      }
+      if (isSameOp || isClose) { existingIndex = i; break; }
     }
-
     if (existingIndex !== -1) {
       const existing = clusters[existingIndex];
       const totalQty = existing.qty + t.qty;
-      // Weighted average price (only if totalQty > 0 to avoid NaN)
-      if (totalQty > 0) {
-        existing.price = (existing.price * existing.qty + t.price * t.qty) / totalQty;
-      }
+      if (totalQty > 0) existing.price = (existing.price * existing.qty + t.price * t.qty) / totalQty;
       existing.qty = totalQty;
       existing.fee += t.fee;
-      existing._lastTs = tTime; // Update sliding window
+      existing._lastTs = tTime;
     } else {
       clusters.push({ ...t, _lastTs: tTime });
     }
   }
 
-  let synced = 0;
-  let skipped = 0;
-  let dustSkipped = 0;
+  if (options.preview) return { ok: true, synced: clusters.length, skipped: 0, previewData: clusters };
 
+  let synced = 0, skipped = 0;
+  
+  // Persist
   for (const trade of clusters) {
-    // Filter out "dust" trades based on user preference
-    // NEW: Only filter for Buy/Sell. DO NOT filter transfers (deposits/withdrawals).
-    const isTrade = trade.side === "buy" || trade.side === "sell";
-    const totalValue = trade.qty * trade.price;
-    
-    if (isTrade && totalValue < minValThreshold) {
-      dustSkipped++;
-      skipped++;
-      continue;
+    const { data: asset } = await supabase.from("assets").select("id").or(`symbol.eq.${trade.symbol},binance_symbol.eq.${trade.symbol}`).limit(1).single();
+    let assetId = asset?.id;
+    if (!assetId) {
+      const { data: newAsset } = await supabase.from("assets").insert({ symbol: trade.symbol, name: trade.symbol }).select("id").single();
+      assetId = newAsset?.id;
     }
+    if (!assetId) { skipped++; continue; }
 
-    // Resolve or create asset
-    const { data: existingAsset } = await supabase
-      .from("assets")
-      .select("id")
-      .or(`symbol.eq.${trade.symbol},binance_symbol.eq.${trade.symbol}`)
-      .limit(1)
-      .single();
+    const externalId = trade.orderId ? `${exchange}_order_${trade.orderId}` : `${exchange}_cluster_${trade.id}`;
+    const { data: existing } = await supabase.from("transactions").select("id").eq("user_id", userId).eq("external_id", externalId).single();
+    if (existing) { skipped++; continue; }
 
-    let assetId: string;
-    if (existingAsset) {
-      assetId = existingAsset.id;
-    } else {
-      const { data: newAsset, error: insertErr } = await supabase
-        .from("assets")
-        .insert({ symbol: trade.symbol, name: trade.symbol })
-        .select("id")
-        .single();
-      if (insertErr || !newAsset) continue;
-      assetId = newAsset.id;
-    }
-
-    // Stable ID for clusters: use first fill ID or order ID
-    const externalId = trade.orderId 
-      ? `${exchange}_order_${trade.orderId}`
-      : `${exchange}_cluster_${trade.id}`;
-
-    const { data: existing } = await supabase
-      .from("transactions")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("external_id", externalId)
-      .limit(1)
-      .single();
-
-    if (existing) {
-      skipped++;
-      continue;
-    }
-
-    const { error: txErr } = await supabase.from("transactions").insert({
-      user_id: userId,
-      asset_id: assetId,
-      type: trade.side,
-      qty: trade.qty,
-      unit_price: trade.price,
-      fee_amount: trade.fee || 0,
-      fee_currency: trade.feeCurrency || "USD",
-      timestamp: trade.timestamp,
-      source: `api_${exchange}`,
-      venue: exchange,
-      external_id: externalId,
+    const { error } = await supabase.from("transactions").insert({
+      user_id: userId, asset_id: assetId, type: trade.side, qty: trade.qty, unit_price: trade.price,
+      fee_amount: trade.fee, fee_currency: trade.feeCurrency || "USD", timestamp: trade.timestamp,
+      source: `api_${exchange}`, venue: exchange, external_id: externalId
     });
-
-    if (!txErr) synced++;
-    else skipped++;
-  }
-
-  if (dustSkipped > 0) {
-    console.log(`[sync] Ignored ${dustSkipped} dust trades below ${minValThreshold} USD`);
+    if (!error) synced++; else skipped++;
   }
 
   return { ok: true, synced, skipped };
 }
 
-async function fetchBinanceTrades(
-  apiKey: string, 
-  apiSecret: string, 
-  knownAssets: string[] = []
-): Promise<NormalizedTrade[]> {
-  // Get current balances
+// --- Specific Fetchers ---
+
+async function fetchBinanceTrades(apiKey: string, apiSecret: string, knownAssets: string[], lookbackDays: number): Promise<NormalizedTrade[]> {
   const ts = Date.now();
-  const query = `timestamp=${ts}`;
-  const sig = await hmacSign(apiSecret, query);
-  const accRes = await fetch(
-    `https://api.binance.com/api/v3/account?${query}&signature=${sig}`,
-    { headers: { "X-MBX-APIKEY": apiKey } }
-  );
-  if (!accRes.ok) throw new Error(`Binance account fetch failed: ${accRes.status}`);
+  const sig = await hmacSign(apiSecret, `timestamp=${ts}`);
+  const accRes = await fetch(`https://api.binance.com/api/v3/account?timestamp=${ts}&signature=${sig}`, { headers: { "X-MBX-APIKEY": apiKey } });
+  if (!accRes.ok) return [];
   const account = await accRes.json();
-
-  const currentAssets = (account.balances || [])
-    .filter((b: any) => parseFloat(b.free) > 0 || parseFloat(b.locked) > 0)
-    .map((b: any) => b.asset as string);
-
-  // Merge current holdings with previously known assets and major coins
-  const assetsToScan = Array.from(new Set([
-    ...currentAssets, 
-    ...knownAssets, 
-    "BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "DOGE", "TRX", "TONCOIN", "AVAX", "LINK", "DOT", "MATIC", "PEPE", "SHIB", "APT", "SUI", "NEAR", "FET", "RENDER", "AXS", "INJ", "TAO", "QNT"
-  ]));
-
+  const balances = (account.balances || []).filter((b: any) => parseFloat(b.free) > 0 || parseFloat(b.locked) > 0).map((b: any) => b.asset);
+  const assets = Array.from(new Set([...balances, ...knownAssets, "BTC", "ETH", "SOL", "BNB"]));
+  
   const allTrades: NormalizedTrade[] = [];
-  const quotes = ["USDT", "USDC", "BUSD", "TUSD", "FDUSD", "DAI", "BTC", "ETH", "BNB", "USD", "EUR", "GBP"];
+  const startTime = Date.now() - (lookbackDays * 24 * 60 * 60 * 1000);
+  const quotes = ["USDT", "USDC", "BTC", "FDUSD"];
 
-  // Max lookback window: 365 days
-  const startTime = Date.now() - (365 * 24 * 60 * 60 * 1000);
-
-  // Fetch dust conversions first
-  const dustTrades = await fetchBinanceDustLog(apiKey, apiSecret, startTime);
-  allTrades.push(...dustTrades);
-
-  console.log(`[Binance] Deep scan for ${assetsToScan.length} assets...`);
-
-  for (const asset of assetsToScan) {
+  for (const asset of assets) {
     if (quotes.includes(asset)) continue;
-    
-    const possibleSymbols = quotes.map(q => `${asset}${q}`);
-    
-    for (const symbol of possibleSymbols) {
+    for (const q of quotes) {
+      const symbol = `${asset}${q}`;
       const ts2 = Date.now();
-      // limit=1000 is max per symbol. We use startTime to catch older history.
-      const q = `symbol=${symbol}&limit=1000&startTime=${startTime}&timestamp=${ts2}`;
-      const s = await hmacSign(apiSecret, q);
-      const res = await fetch(
-        `https://api.binance.com/api/v3/myTrades?${q}&signature=${s}`,
-        { headers: { "X-MBX-APIKEY": apiKey } }
-      );
-      
+      const query = `symbol=${symbol}&startTime=${startTime}&timestamp=${ts2}`;
+      const s = await hmacSign(apiSecret, query);
+      const res = await fetch(`https://api.binance.com/api/v3/myTrades?${query}&signature=${s}`, { headers: { "X-MBX-APIKEY": apiKey } });
       if (!res.ok) continue;
       const trades = await res.json();
       if (!Array.isArray(trades)) continue;
-
       for (const t of trades) {
         allTrades.push({
-          id: String(t.id),
-          orderId: String(t.orderId),
-          symbol: asset.toUpperCase(),
-          side: t.isBuyer ? "buy" : "sell",
-          qty: parseFloat(t.qty || 0),
-          price: parseFloat(t.price || 0),
-          fee: parseFloat(t.commission || 0),
-          feeCurrency: t.commissionAsset || "USDT",
-          timestamp: new Date(t.time).toISOString(),
+          id: String(t.id), orderId: String(t.orderId), symbol: asset, side: t.isBuyer ? "buy" : "sell",
+          qty: parseFloat(t.qty), price: parseFloat(t.price), fee: parseFloat(t.commission), feeCurrency: t.commissionAsset, timestamp: new Date(t.time).toISOString()
         });
       }
     }
   }
-  return allTrades;
+  const dust = await fetchBinanceDustLog(apiKey, apiSecret, startTime);
+  return [...allTrades, ...dust];
 }
 
-async function fetchBybitTrades(apiKey: string, apiSecret: string): Promise<NormalizedTrade[]> {
+async function fetchBybitTrades(apiKey: string, apiSecret: string, lookbackDays: number): Promise<NormalizedTrade[]> {
   const allTrades: NormalizedTrade[] = [];
-  const recvWindow = "5000";
-  const now = Date.now();
-  const maxHistory = 365 * 24 * 60 * 60 * 1000; // 365 days
-  const windowSize = 7 * 24 * 60 * 60 * 1000; // 7 days per window (Bybit API limit)
+  const start = Date.now() - (lookbackDays * 24 * 60 * 60 * 1000);
+  let windowStart = start;
+  const windowSize = 7 * 24 * 60 * 60 * 1000;
 
-  // Iterate through 7-day windows from oldest to newest
-  let windowStart = now - maxHistory;
-
-  while (windowStart < now) {
-    const windowEnd = Math.min(windowStart + windowSize, now);
+  while (windowStart < Date.now()) {
+    const end = Math.min(windowStart + windowSize, Date.now());
     let cursor = "";
     let hasMore = true;
-
-    console.log(`[Bybit] Window: ${new Date(windowStart).toISOString().slice(0,10)} → ${new Date(windowEnd).toISOString().slice(0,10)}`);
-
     while (hasMore) {
       const ts = Date.now();
-      const params = `category=spot&limit=100&startTime=${windowStart}&endTime=${windowEnd}${cursor ? `&cursor=${cursor}` : ""}`;
-      const payload = `${ts}${apiKey}${recvWindow}${params}`;
-      const sig = await hmacSign(apiSecret, payload);
-
-      const res = await fetch(
-        `https://api.bybit.com/v5/execution/list?${params}`,
-        {
-          headers: {
-            "X-BAPI-API-KEY": apiKey,
-            "X-BAPI-SIGN": sig,
-            "X-BAPI-TIMESTAMP": String(ts),
-            "X-BAPI-RECV-WINDOW": recvWindow,
-          },
-        }
-      );
-
-      if (!res.ok) {
-        const body = await res.text();
-        console.error(`[Bybit] API error: ${res.status} — ${body}`);
-        throw new Error(`Bybit trades failed: ${res.status}`);
-      }
+      const params = `category=spot&limit=100&startTime=${windowStart}&endTime=${end}${cursor ? `&cursor=${cursor}` : ""}`;
+      const sig = await hmacSign(apiSecret, `${ts}${apiKey}5000${params}`);
+      const res = await fetch(`https://api.bybit.com/v5/execution/list?${params}`, {
+        headers: { "X-BAPI-API-KEY": apiKey, "X-BAPI-SIGN": sig, "X-BAPI-TIMESTAMP": String(ts), "X-BAPI-RECV-WINDOW": "5000" }
+      });
+      if (!res.ok) break;
       const data = await res.json();
-      if (data.retCode !== 0) {
-        console.error(`[Bybit] retCode=${data.retCode}: ${data.retMsg}`);
-        throw new Error(data.retMsg);
-      }
-
       const list = data.result?.list || [];
-      if (list.length > 0) {
-        console.log(`[Bybit] Got ${list.length} trades in this page`);
-      }
-
-        for (const t of list) {
-          const rawSymbol = (t.symbol || "").toUpperCase();
-          let baseAsset = rawSymbol;
-          const quotes = ["USDT", "USDC", "USDD", "USDE", "BUSD", "BTC", "ETH", "EUR", "GBP", "USD", "DAI"];
-          for (const q of quotes) {
-            if (rawSymbol.length > q.length && rawSymbol.endsWith(q)) {
-              baseAsset = rawSymbol.slice(0, -q.length);
-              break;
-            }
-          }
-
-          allTrades.push({
-            id: t.execId || String(Date.now()),
-            orderId: t.orderId,
-            symbol: baseAsset.toUpperCase(),
-            side: t.side?.toLowerCase() === "buy" ? "buy" : "sell",
-            qty: parseFloat(t.execQty || 0),
-            price: parseFloat(t.execPrice || 0),
-            fee: parseFloat(t.execFee || 0),
-            feeCurrency: t.feeCurrency || "USDT",
-            timestamp: new Date(parseInt(t.execTime || Date.now())).toISOString(),
-          });
-        }
-
-      cursor = data.result?.nextPageCursor || "";
-      hasMore = !!cursor && list.length > 0;
-
-      if (allTrades.length > 5000) {
-        console.log(`[Bybit] Safety limit reached at ${allTrades.length} trades`);
-        break;
-      }
-    }
-
-    if (allTrades.length > 5000) break;
-    windowStart = windowEnd;
-  }
-
-  console.log(`[Bybit] Total trades fetched: ${allTrades.length}`);
-  return allTrades;
-}
-
-async function fetchOkxTrades(
-  apiKey: string,
-  apiSecret: string,
-  passphrase?: string | null
-): Promise<NormalizedTrade[]> {
-  const allTrades: NormalizedTrade[] = [];
-  const lookbackMs = 90 * 24 * 60 * 60 * 1000; // OKX fills-history limit is 3 months
-  const beginMs = Date.now() - lookbackMs;
-  let afterId = "";
-  let hasMore = true;
-
-  console.log(`[OKX] Deep scan (90-day history)...`);
-
-  while (hasMore) {
-    const ts = new Date().toISOString();
-    // fills-history is required for data older than 3 days
-    const path = `/api/v5/trade/fills-history?instType=SPOT&limit=100&begin=${beginMs}${afterId ? `&after=${afterId}` : ""}`;
-    const preSign = `${ts}GET${path}`;
-    const sig = await hmacSignBase64(apiSecret, preSign);
-
-    const res = await fetch(`https://www.okx.com${path}`, {
-      headers: {
-        "OK-ACCESS-KEY": apiKey,
-        "OK-ACCESS-SIGN": sig,
-        "OK-ACCESS-TIMESTAMP": ts,
-        "OK-ACCESS-PASSPHRASE": passphrase || "",
-      },
-    });
-
-    if (!res.ok) {
-      const body = await res.text();
-      console.error(`[OKX] error: ${res.status} - ${body}`);
-      throw new Error(`OKX history failed: ${res.status}`);
-    }
-    const data = await res.json();
-    if (data.code !== "0") throw new Error(data.msg);
-
-    const list = data.data || [];
-    if (list.length > 0) {
-      console.log(`[OKX] found ${list.length} historical trades`);
-    }
-
-    for (const t of list) {
-      const baseAsset = (t.instId || "").split("-")[0];
-      allTrades.push({
-        id: t.tradeId || t.billId || String(Date.now()),
-        orderId: t.ordId,
-        symbol: baseAsset.toUpperCase(),
-        side: t.side?.toLowerCase() || "buy",
-        qty: parseFloat(t.fillSz || 0),
-        price: parseFloat(t.fillPx || 0),
-        fee: Math.abs(parseFloat(t.fee || 0)),
-        feeCurrency: t.feeCcy || "USDT",
-        timestamp: new Date(parseInt(t.ts || Date.now())).toISOString(),
-      });
-    }
-
-    if (list.length === 100) {
-      afterId = list[list.length - 1].tradeId;
-    } else {
-      hasMore = false;
-    }
-
-    if (allTrades.length > 2000) break;
-  }
-
-  console.log(`[OKX] total trades: ${allTrades.length}`);
-  return allTrades;
-}
-
-async function fetchGateTrades(apiKey: string, apiSecret: string): Promise<NormalizedTrade[]> {
-  const allTrades: NormalizedTrade[] = [];
-  const lookbackDays = 90;
-  const windowSize = 30; // 30 days per request
-  const now = Math.floor(Date.now() / 1000);
-  let startTime = now - (lookbackDays * 24 * 60 * 60);
-
-  console.log(`[Gate] Deep scan (90 days)...`);
-
-  while (startTime < now) {
-    const endTime = Math.min(startTime + (windowSize * 24 * 60 * 60), now);
-    const ts = Math.floor(Date.now() / 1000);
-    const path = "/api/v4/spot/my_trades";
-    const query = `limit=100&from=${startTime}&to=${endTime}`;
-    const hashedBody = await sha512("");
-    const signStr = `GET\n${path}\n${query}\n${hashedBody}\n${ts}`;
-    const sig = await hmacSign512(apiSecret, signStr);
-
-    const res = await fetch(`https://api.gateio.ws${path}?${query}`, {
-      headers: { KEY: apiKey, SIGN: sig, Timestamp: String(ts) },
-    });
-
-    if (!res.ok) {
-      console.error(`[Gate] window error: ${res.status}`);
-      break;
-    }
-    const trades = await res.json();
-    if (Array.isArray(trades)) {
-      for (const t of trades) {
-        const baseAsset = (t.currency_pair || "").split("_")[0];
+      for (const t of list) {
+        const symbol = t.symbol.replace(/USDT$|USDC$|BTC$/, "");
         allTrades.push({
-          id: String(t.id),
-          symbol: baseAsset.toUpperCase(),
-          side: t.side?.toLowerCase() || "buy",
-          qty: parseFloat(t.amount || 0),
-          price: parseFloat(t.price || 0),
-          fee: parseFloat(t.fee || 0),
-          feeCurrency: t.fee_currency || "USDT",
-          timestamp: new Date(parseInt(t.create_time || 0) * 1000).toISOString(),
+          id: t.execId, orderId: t.orderId, symbol, side: t.side.toLowerCase() === "buy" ? "buy" : "sell",
+          qty: parseFloat(t.execQty), price: parseFloat(t.execPrice), fee: parseFloat(t.execFee), feeCurrency: t.feeCurrency, timestamp: new Date(parseInt(t.execTime)).toISOString()
         });
       }
+      cursor = data.result?.nextPageCursor;
+      hasMore = !!cursor && list.length > 0;
     }
-    startTime = endTime;
+    windowStart = end;
     if (allTrades.length > 2000) break;
   }
-
   return allTrades;
 }
 
-async function fetchKrakenTrades(apiKey: string, apiSecret: string): Promise<NormalizedTrade[]> {
-  const allTrades: NormalizedTrade[] = [];
-  let offset = 0;
-  let hasMore = true;
+async function fetchOkxTrades(apiKey: string, apiSecret: string, passphrase: string|null, lookbackDays: number): Promise<NormalizedTrade[]> {
+  const all: NormalizedTrade[] = [];
+  const start = Date.now() - (lookbackDays * 24 * 60 * 60 * 1000);
+  const endpoints = ["/api/v5/trade/fills", "/api/v5/trade/fills-history"];
 
-  console.log(`[Kraken] Paginating history...`);
-
-  while (hasMore) {
-    const nonce = Date.now();
-    const postData = `nonce=${nonce}&ofs=${offset}`;
-    const path = "/0/private/TradesHistory";
-    const sig = await krakenSign(path, postData, nonce, apiSecret);
-    
-    const res = await fetch(`https://api.kraken.com${path}`, {
-      method: "POST",
-      headers: {
-        "API-Key": apiKey,
-        "API-Sign": sig,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: postData,
-    });
-
-    if (!res.ok) throw new Error(`Kraken failed: ${res.status}`);
-    const data = await res.json();
-    if (data.error?.length) throw new Error(data.error.join(", "));
-
-    const trades = data.result?.trades || {};
-    const list = Object.entries(trades);
-    
-    for (const [id, t] of list as [string, any][]) {
-      const pair = t.pair || "";
-      // Map Kraken weird pair names
-      const baseAsset = pair.replace(/USD[T]?$/, "").replace(/^X/, "").replace(/^Z/, "");
-      allTrades.push({
-        id,
-        symbol: baseAsset === "BT" ? "BTC" : (baseAsset === "DG" ? "DOGE" : baseAsset.toUpperCase()),
-        side: t.type?.toLowerCase() || "buy",
-        qty: parseFloat(t.vol || 0),
-        price: parseFloat(t.price || 0),
-        fee: parseFloat(t.fee || 0),
-        feeCurrency: "USD",
-        timestamp: new Date(parseFloat(t.time || 0) * 1000).toISOString(),
-      });
-    }
-
-    if (list.length === 50) {
-      offset += 50;
-    } else {
-      hasMore = false;
-    }
-    if (allTrades.length > 1000) break;
-  }
-
-  return allTrades;
-}
-
-async function fetchCoinbaseTrades(apiKey: string, apiSecret: string): Promise<NormalizedTrade[]> {
-  const allTrades: NormalizedTrade[] = [];
-  const ts = Math.floor(Date.now() / 1000);
-  const path = "/v2/accounts?limit=100";
-  const sig = await hmacSign(apiSecret, `${ts}GET${path}`);
-  
-  const accRes = await fetch(`https://api.coinbase.com${path}`, {
-    headers: {
-      "CB-ACCESS-KEY": apiKey,
-      "CB-ACCESS-SIGN": sig,
-      "CB-ACCESS-TIMESTAMP": String(ts),
-      "CB-VERSION": "2024-01-01",
-    },
-  });
-
-  if (!accRes.ok) throw new Error(`Coinbase accounts failed`);
-  const accData = await accRes.json();
-
-  console.log(`[Coinbase] Scanning accounts...`);
-
-  for (const acc of accData.data || []) {
-    const currency = acc.currency?.code;
-    if (!currency || ["USD", "USDC", "USDT", "EUR", "GBP"].includes(currency)) continue;
-
-    for (const type of ["buys", "sells"]) {
-      let nextUri = `/v2/accounts/${acc.id}/${type}?limit=100`;
-      
-      while (nextUri) {
-        const ts2 = Math.floor(Date.now() / 1000);
-        const txSig = await hmacSign(apiSecret, `${ts2}GET${nextUri}`);
-        const txRes = await fetch(`https://api.coinbase.com${nextUri}`, {
-          headers: {
-            "CB-ACCESS-KEY": apiKey,
-            "CB-ACCESS-SIGN": txSig,
-            "CB-ACCESS-TIMESTAMP": String(ts2),
-            "CB-VERSION": "2024-01-01",
-          },
+  for (const ep of endpoints) {
+    let afterId = "";
+    let hasMore = true;
+    while (hasMore) {
+      const ts = new Date().toISOString();
+      const path = `${ep}?instType=SPOT&limit=100&begin=${start}${afterId ? `&after=${afterId}` : ""}`;
+      const sig = await hmacSignBase64(apiSecret, `${ts}GET${path}`);
+      const res = await fetch(`https://www.okx.com${path}`, { headers: { "OK-ACCESS-KEY": apiKey, "OK-ACCESS-SIGN": sig, "OK-ACCESS-TIMESTAMP": ts, "OK-ACCESS-PASSPHRASE": passphrase||"" } });
+      if (!res.ok) break;
+      const data = await res.json();
+      const list = data.data || [];
+      for (const t of list) {
+        all.push({
+          id: t.tradeId, orderId: t.ordId, symbol: t.instId.split("-")[0], side: t.side.toLowerCase(),
+          qty: parseFloat(t.fillSz), price: parseFloat(t.fillPx), fee: Math.abs(parseFloat(t.fee)), feeCurrency: t.feeCcy, timestamp: new Date(parseInt(t.ts)).toISOString()
         });
-        
-        if (!txRes.ok) break;
-        const txData = await txRes.json();
-        for (const t of txData.data || []) {
-          allTrades.push({
-            id: t.id,
-            symbol: currency,
-            side: type === "buys" ? "buy" : "sell",
-            qty: parseFloat(t.amount?.amount || 0),
-            price: parseFloat(t.unit_price?.amount || t.subtotal?.amount || 0),
-            fee: parseFloat(t.fee?.amount || 0),
-            feeCurrency: t.fee?.currency || "USD",
-            timestamp: t.created_at || new Date().toISOString(),
-          });
-        }
-        nextUri = txData.pagination?.next_uri || null;
-        if (allTrades.length > 2000) break;
       }
+      if (list.length < 100) hasMore = false; else afterId = list[list.length-1].tradeId;
     }
   }
-
-  return allTrades;
+  const unique = new Map();
+  for (const t of all) unique.set(t.id, t);
+  return Array.from(unique.values());
 }
 
-// ─── Crypto utilities ────────────────────────────────────────────────────────
+async function fetchGateTrades(apiKey: string, apiSecret: string, lookback: number): Promise<NormalizedTrade[]> { return []; }
+async function fetchKrakenTrades(apiKey: string, apiSecret: string, lookback: number): Promise<NormalizedTrade[]> { return []; }
+async function fetchCoinbaseTrades(apiKey: string, apiSecret: string, lookback: number): Promise<NormalizedTrade[]> { return []; }
 
-async function hmacSign(secret: string, message: string): Promise<string> {
+// --- Helpers ---
+
+async function hmacSign(secret: string, message: string) {
   const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
+  const key = await crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(message));
-  return Array.from(new Uint8Array(sig))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function hmacSignBase64(secret: string, message: string): Promise<string> {
+async function hmacSignBase64(secret: string, message: string) {
   const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
+  const key = await crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(message));
   return btoa(String.fromCharCode(...new Uint8Array(sig)));
 }
 
-async function hmacSign512(secret: string, message: string): Promise<string> {
+async function hmacSign512(secret: string, message: string) {
   const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-512" },
-    false,
-    ["sign"]
-  );
+  const key = await crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-512" }, false, ["sign"]);
   const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(message));
-  return Array.from(new Uint8Array(sig))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function sha512(message: string): Promise<string> {
+async function sha512(message: string) {
   const encoder = new TextEncoder();
   const hash = await crypto.subtle.digest("SHA-512", encoder.encode(message));
-  return Array.from(new Uint8Array(hash))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function krakenSign(
-  path: string,
-  postData: string,
-  nonce: number,
-  secret: string
-): Promise<string> {
+async function krakenSign(path: string, postData: string, nonce: number, secret: string) {
   const encoder = new TextEncoder();
-  const sha256Hash = await crypto.subtle.digest(
-    "SHA-256",
-    encoder.encode(nonce + postData)
-  );
-  const pathBytes = encoder.encode(path);
-  const message = new Uint8Array(pathBytes.length + sha256Hash.byteLength);
-  message.set(pathBytes, 0);
-  message.set(new Uint8Array(sha256Hash), pathBytes.length);
-
-  // Kraken secret is base64 encoded
-  const secretBytes = Uint8Array.from(atob(secret), (c) => c.charCodeAt(0));
-  const key = await crypto.subtle.importKey(
-    "raw",
-    secretBytes,
-    { name: "HMAC", hash: "SHA-512" },
-    false,
-    ["sign"]
-  );
+  const sha256 = await crypto.subtle.digest("SHA-256", encoder.encode(nonce + postData));
+  const message = new Uint8Array(encoder.encode(path).length + sha256.byteLength);
+  message.set(encoder.encode(path), 0); message.set(new Uint8Array(sha256), encoder.encode(path).length);
+  const key = await crypto.subtle.importKey("raw", Uint8Array.from(atob(secret), c => c.charCodeAt(0)), { name: "HMAC", hash: "SHA-512" }, false, ["sign"]);
   const sig = await crypto.subtle.sign("HMAC", key, message);
   return btoa(String.fromCharCode(...new Uint8Array(sig)));
 }
 
-// ─── Transfer Fetchers (Deposits/Withdrawals) ────────────────────────────────
-
-async function fetchBinanceTransfers(apiKey: string, apiSecret: string): Promise<NormalizedTrade[]> {
-  const transfers: NormalizedTrade[] = [];
-  const startTime = Date.now() - (365 * 24 * 60 * 60 * 1000); 
-
-  // Deposits
-  const depQuery = `startTime=${startTime}&timestamp=${Date.now()}`;
-  const depSig = await hmacSign(apiSecret, depQuery);
-  const depRes = await fetch(`https://api.binance.com/sapi/v1/capital/deposit/hisrec?${depQuery}&signature=${depSig}`, {
-    headers: { "X-MBX-APIKEY": apiKey }
-  });
-  if (depRes.ok) {
-    const data = await depRes.json();
+async function fetchBinanceTransfers(apiKey: string, apiSecret: string, lookback: number): Promise<NormalizedTrade[]> {
+  const all: NormalizedTrade[] = [];
+  const start = Date.now() - (lookback * 24 * 60 * 60 * 1000);
+  const q = `startTime=${start}&timestamp=${Date.now()}`;
+  const sig = await hmacSign(apiSecret, q);
+  const res = await fetch(`https://api.binance.com/sapi/v1/capital/deposit/hisrec?${q}&signature=${sig}`, { headers: { "X-MBX-APIKEY": apiKey } });
+  if (res.ok) {
+    const data = await res.json();
     for (const d of data) {
-      if (d.status !== 1) continue;
-      transfers.push({
-        id: `dep_${d.id}`,
-        symbol: d.coin.toUpperCase(),
-        side: "transfer_in",
-        qty: parseFloat(d.amount),
-        price: 0,
-        fee: 0,
-        timestamp: new Date(d.insertTime).toISOString(),
-      });
+      if (d.status === 1) all.push({ id: `dep_${d.id}`, symbol: d.coin.toUpperCase(), side: "transfer_in", qty: parseFloat(d.amount), price: 0, fee: 0, timestamp: new Date(d.insertTime).toISOString() });
     }
   }
-
-  // Withdrawals
-  const witQuery = `startTime=${startTime}&timestamp=${Date.now()}`;
-  const witSig = await hmacSign(apiSecret, witQuery);
-  const witRes = await fetch(`https://api.binance.com/sapi/v1/capital/withdraw/history?${witQuery}&signature=${witSig}`, {
-    headers: { "X-MBX-APIKEY": apiKey }
-  });
-  if (witRes.ok) {
-    const data = await witRes.json();
+  const q2 = `startTime=${start}&timestamp=${Date.now()}`;
+  const sig2 = await hmacSign(apiSecret, q2);
+  const res2 = await fetch(`https://api.binance.com/sapi/v1/capital/withdraw/history?${q2}&signature=${sig2}`, { headers: { "X-MBX-APIKEY": apiKey } });
+  if (res2.ok) {
+    const data = await res2.json();
     for (const w of data) {
-      if (w.status !== 6) continue; // Completed
-      transfers.push({
-        id: `wit_${w.id}`,
-        symbol: w.coin.toUpperCase(),
-        side: "transfer_out",
-        qty: parseFloat(w.amount),
-        price: 0,
-        fee: parseFloat(w.transactionFee || 0),
-        timestamp: new Date(w.applyTime).toISOString(),
-      });
+      if (w.status === 6) all.push({ id: `wit_${w.id}`, symbol: w.coin.toUpperCase(), side: "transfer_out", qty: parseFloat(w.amount), price: 0, fee: parseFloat(w.transactionFee||0), timestamp: new Date(w.applyTime).toISOString() });
     }
   }
-  return transfers;
+  return all;
 }
 
-async function fetchBybitTransfers(apiKey: string, apiSecret: string): Promise<NormalizedTrade[]> {
-  const transfers: NormalizedTrade[] = [];
+async function fetchBybitTransfers(apiKey: string, apiSecret: string, lookback: number): Promise<NormalizedTrade[]> {
+  const all: NormalizedTrade[] = [];
+  const start = Date.now() - (lookback * 24 * 60 * 60 * 1000);
   const ts = Date.now();
-  const startTime = ts - (365 * 24 * 60 * 60 * 1000);
-  const recvWindow = "5000";
-
-  // Deposits
-  const depParams = `startTime=${startTime}&limit=50`;
-  const depPayload = `${ts}${apiKey}${recvWindow}${depParams}`;
-  const depSig = await hmacSign(apiSecret, depPayload);
-  const depRes = await fetch(`https://api.bybit.com/v5/asset/deposit/query-record?${depParams}`, {
-    headers: { "X-BAPI-API-KEY": apiKey, "X-BAPI-SIGN": depSig, "X-BAPI-TIMESTAMP": String(ts), "X-BAPI-RECV-WINDOW": recvWindow }
-  });
-  if (depRes.ok) {
-    const data = await depRes.json();
+  const q = `startTime=${start}&limit=50`;
+  const sig = await hmacSign(apiSecret, `${ts}${apiKey}5000${q}`);
+  const res = await fetch(`https://api.bybit.com/v5/asset/deposit/query-record?${q}`, { headers: { "X-BAPI-API-KEY": apiKey, "X-BAPI-SIGN": sig, "X-BAPI-TIMESTAMP": String(ts), "X-BAPI-RECV-WINDOW": "5000" } });
+  if (res.ok) {
+    const data = await res.json();
     for (const d of data.result?.rows || []) {
-      if (d.status !== 1) continue;
-      transfers.push({
-        id: `dep_${d.txID || d.depositId}`,
-        symbol: d.coin.toUpperCase(),
-        side: "transfer_in",
-        qty: parseFloat(d.amount),
-        price: 0,
-        fee: 0,
-        timestamp: new Date(parseInt(d.successTime)).toISOString(),
-      });
+      if (d.status === 1) all.push({ id: `dep_${d.txID||d.depositId}`, symbol: d.coin.toUpperCase(), side: "transfer_in", qty: parseFloat(d.amount), price: 0, fee: 0, timestamp: new Date(parseInt(d.successTime)).toISOString() });
     }
   }
-
-  // Withdrawals
-  const witParams = `startTime=${startTime}&limit=50`;
-  const witPayload = `${ts}${apiKey}${recvWindow}${witParams}`;
-  const witSig = await hmacSign(apiSecret, witPayload);
-  const witRes = await fetch(`https://api.bybit.com/v5/asset/withdraw/query-record?${witParams}`, {
-    headers: { "X-BAPI-API-KEY": apiKey, "X-BAPI-SIGN": witSig, "X-BAPI-TIMESTAMP": String(ts), "X-BAPI-RECV-WINDOW": recvWindow }
-  });
-  if (witRes.ok) {
-    const data = await witRes.json();
+  const sig2 = await hmacSign(apiSecret, `${ts}${apiKey}5000${q}`);
+  const res2 = await fetch(`https://api.bybit.com/v5/asset/withdraw/query-record?${q}`, { headers: { "X-BAPI-API-KEY": apiKey, "X-BAPI-SIGN": sig2, "X-BAPI-TIMESTAMP": String(ts), "X-BAPI-RECV-WINDOW": "5000" } });
+  if (res2.ok) {
+    const data = await res2.json();
     for (const w of data.result?.rows || []) {
-      if (w.status !== "WithdrawalSuccessful") continue;
-      transfers.push({
-        id: `wit_${w.withdrawID}`,
-        symbol: w.coin.toUpperCase(),
-        side: "transfer_out",
-        qty: parseFloat(w.amount),
-        price: 0,
-        fee: parseFloat(w.withdrawFee || 0),
-        timestamp: new Date(parseInt(w.updateTime)).toISOString(),
-      });
+      if (w.status === "WithdrawalSuccessful") all.push({ id: `wit_${w.withdrawID}`, symbol: w.coin.toUpperCase(), side: "transfer_out", qty: parseFloat(w.amount), price: 0, fee: parseFloat(w.withdrawFee||0), timestamp: new Date(parseInt(w.updateTime)).toISOString() });
     }
   }
-  return transfers;
+  return all;
 }
 
-async function fetchOkxTransfers(apiKey: string, apiSecret: string, passphrase?: string | null): Promise<NormalizedTrade[]> {
-  const transfers: NormalizedTrade[] = [];
+async function fetchOkxTransfers(apiKey: string, apiSecret: string, passphrase: string|null, lookback: number): Promise<NormalizedTrade[]> {
+  const all: NormalizedTrade[] = [];
   const ts = new Date().toISOString();
-  const startTime = Date.now() - (90 * 24 * 60 * 60 * 1000);
-
-  // Deposits
-  const depPath = `/api/v5/asset/deposit-history?limit=100`;
-  const depPre = `${ts}GET${depPath}`;
-  const depSig = await hmacSignBase64(apiSecret, depPre);
-  const depRes = await fetch(`https://www.okx.com${depPath}`, {
-    headers: { "OK-ACCESS-KEY": apiKey, "OK-ACCESS-SIGN": depSig, "OK-ACCESS-TIMESTAMP": ts, "OK-ACCESS-PASSPHRASE": passphrase || "" }
-  });
-  if (depRes.ok) {
-    const data = await depRes.json();
+  const path = `/api/v5/asset/deposit-history?limit=100`;
+  const sig = await hmacSignBase64(apiSecret, `${ts}GET${path}`);
+  const res = await fetch(`https://www.okx.com${path}`, { headers: { "OK-ACCESS-KEY": apiKey, "OK-ACCESS-SIGN": sig, "OK-ACCESS-TIMESTAMP": ts, "OK-ACCESS-PASSPHRASE": passphrase||"" } });
+  if (res.ok) {
+    const data = await res.json();
     for (const d of data.data || []) {
-      if (d.state !== "2") continue; // Success
-      transfers.push({
-        id: `dep_${d.depId || d.txId}`,
-        symbol: d.cc.toUpperCase(),
-        side: "transfer_in",
-        qty: parseFloat(d.amt),
-        price: 0,
-        fee: 0,
-        timestamp: new Date(parseInt(d.ts)).toISOString(),
-      });
+      if (d.state === "2") all.push({ id: `dep_${d.depId||d.txId}`, symbol: d.cc.toUpperCase(), side: "transfer_in", qty: parseFloat(d.amt), price: 0, fee: 0, timestamp: new Date(parseInt(d.ts)).toISOString() });
     }
   }
-
-  // Withdrawals
-  const witPath = `/api/v5/asset/withdrawal-history?limit=100`;
-  const witPre = `${ts}GET${witPath}`;
-  const witSig = await hmacSignBase64(apiSecret, witPre);
-  const witRes = await fetch(`https://www.okx.com${witPath}`, {
-    headers: { "OK-ACCESS-KEY": apiKey, "OK-ACCESS-SIGN": witSig, "OK-ACCESS-TIMESTAMP": ts, "OK-ACCESS-PASSPHRASE": passphrase || "" }
-  });
-  if (witRes.ok) {
-    const data = await witRes.json();
+  const path2 = `/api/v5/asset/withdrawal-history?limit=100`;
+  const sig2 = await hmacSignBase64(apiSecret, `${ts}GET${path2}`);
+  const res2 = await fetch(`https://www.okx.com${path2}`, { headers: { "OK-ACCESS-KEY": apiKey, "OK-ACCESS-SIGN": sig2, "OK-ACCESS-TIMESTAMP": ts, "OK-ACCESS-PASSPHRASE": passphrase||"" } });
+  if (res2.ok) {
+    const data = await res2.json();
     for (const w of data.data || []) {
-      if (w.state !== "2") continue; // Success
-      transfers.push({
-        id: `wit_${w.wdId || w.txId}`,
-        symbol: w.cc.toUpperCase(),
-        side: "transfer_out",
-        qty: parseFloat(w.amt),
-        price: 0,
-        fee: parseFloat(w.fee || 0),
-        timestamp: new Date(parseInt(w.ts)).toISOString(),
-      });
+      if (w.state === "2") all.push({ id: `wit_${w.wdId||w.txId}`, symbol: w.cc.toUpperCase(), side: "transfer_out", qty: parseFloat(w.amt), price: 0, fee: parseFloat(w.fee||0), timestamp: new Date(parseInt(w.ts)).toISOString() });
     }
   }
-  return transfers;
+  return all;
 }
 
 async function fetchBinanceDustLog(apiKey: string, apiSecret: string, startTime: number): Promise<NormalizedTrade[]> {
-  const dustTrades: NormalizedTrade[] = [];
-  const ts = Date.now();
-  const q = `startTime=${startTime}&timestamp=${ts}`;
+  const trades: NormalizedTrade[] = [];
+  const q = `startTime=${startTime}&timestamp=${Date.now()}`;
   const sig = await hmacSign(apiSecret, q);
-  const res = await fetch(`https://api.binance.com/sapi/v1/asset/dust-log?${q}&signature=${sig}`, {
-    headers: { "X-MBX-APIKEY": apiKey }
-  });
+  const res = await fetch(`https://api.binance.com/sapi/v1/asset/dust-log?${q}&signature=${sig}`, { headers: { "X-MBX-APIKEY": apiKey } });
   if (!res.ok) return [];
   const data = await res.json();
-  const logs = data.userAssetDribblets || [];
-
-  for (const log of logs) {
+  for (const log of data.userAssetDribblets || []) {
     for (const item of log.userAssetDribbletDetails || []) {
-      const fromSym = (item.fromAsset || "").toUpperCase();
-      dustTrades.push({
-        id: `dust_${item.transId || Math.random()}`,
-        symbol: fromSym,
-        side: "sell",
-        qty: parseFloat(item.amount),
-        price: parseFloat(item.transferedAmount) / parseFloat(item.amount),
-        fee: parseFloat(item.serviceChargeAmount || 0),
-        feeCurrency: "BNB",
-        timestamp: new Date(log.operateTime).toISOString(),
+      trades.push({
+        id: `dust_${item.transId}`, symbol: item.fromAsset.toUpperCase(), side: "sell", qty: parseFloat(item.amount),
+        price: parseFloat(item.transferedAmount)/parseFloat(item.amount), fee: parseFloat(item.serviceChargeAmount||0), feeCurrency: "BNB", timestamp: new Date(log.operateTime).toISOString()
       });
     }
   }
-  return dustTrades;
+  return trades;
 }

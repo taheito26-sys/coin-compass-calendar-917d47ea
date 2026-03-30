@@ -89,6 +89,13 @@ interface Connection {
   sync_count: number;
 }
 
+interface SyncOptions {
+  period: number;
+  types: string[];
+  preview: boolean;
+  coins: string[];
+}
+
 const AUTO_SYNC_KEY = "exchange_auto_sync";
 const AUTO_SYNC_INTERVAL_KEY = "exchange_auto_sync_interval";
 
@@ -132,10 +139,15 @@ export default function ExchangeConnect() {
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [syncResult, setSyncResult] = useState<{ ok: boolean; synced: number; skipped: number } | null>(null);
 
-  // Sync All state
-  const [syncingAll, setSyncingAll] = useState(false);
-  const [syncAllProgress, setSyncAllProgress] = useState<{ current: number; total: number; exchange: string } | null>(null);
-  const [syncAllResults, setSyncAllResults] = useState<{ exchange: string; synced: number; skipped: number; error?: string }[]>([]);
+  // Global Sync Options
+  const [syncOptions, setSyncOptions] = useState<SyncOptions>({
+    period: 90,
+    types: ["buy", "sell", "transfer_in", "transfer_out"],
+    preview: false,
+    coins: [],
+  });
+  const [showAdvanced, setShowAdvanced] = useState<string | null>(null); // exchangeId
+  const [previewData, setPreviewData] = useState<any[] | null>(null);
 
   // Auto-sync local state for timer management
   const autoSyncTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -144,6 +156,10 @@ export default function ExchangeConnect() {
 
   const autoSyncEnabled = state.autoSyncEnabled;
   const autoSyncInterval = state.autoSyncInterval;
+
+  const [syncingAll, setSyncingAll] = useState(false);
+  const [syncAllProgress, setSyncAllProgress] = useState<{ current: number; total: number; exchange: string } | null>(null);
+  const [syncAllResults, setSyncAllResults] = useState<{ exchange: string; synced: number; skipped: number; error?: string }[]>([]);
 
   const loadConnections = useCallback(async () => {
     try {
@@ -209,16 +225,28 @@ export default function ExchangeConnect() {
     setTesting(null);
   };
 
-  const syncExchange = async (exId: string, silent = false) => {
+  const syncExchange = async (exId: string, silent = false, customOptions?: SyncOptions) => {
     if (!silent) setSyncing(exId);
     setSyncResult(null);
+    setPreviewData(null);
+    
+    const options = customOptions || syncOptions;
+
     try {
-      const res = await apiFetch(`/sync/${exId}`, { method: "POST" });
+      const res = await apiFetch(`/sync/${exId}`, { 
+        method: "POST",
+        body: JSON.stringify(options),
+      });
       const data = await res.json() as any;
       if (data.ok) {
         if (!silent) {
-          setSyncResult({ ok: true, synced: data.synced, skipped: data.skipped });
-          toast(`Synced ${data.synced} trades from ${exId} (${data.skipped} skipped)`, "good");
+          if (options.preview) {
+             setPreviewData(data.previewData || []);
+             toast(`${exId}: Previewed ${data.synced} potential trades`, "good");
+          } else {
+            setSyncResult({ ok: true, synced: data.synced, skipped: data.skipped });
+            toast(`Synced ${data.synced} trades from ${exId} (${data.skipped} skipped)`, "good");
+          }
         }
         return { ok: true, synced: data.synced || 0, skipped: data.skipped || 0 };
       } else {
@@ -520,9 +548,13 @@ export default function ExchangeConnect() {
                     style={{ fontSize: 10, padding: "4px 10px", background: "var(--brand)", color: "#fff", border: "none", borderRadius: 6 }}>
                     {isSyncing ? "⏳ Syncing…" : "🔄 Sync"}
                   </button>
-                  <button className="btn secondary" onClick={() => testConnection(ex.id)} disabled={isTesting}
+                  <button className="btn secondary" onClick={() => setShowAdvanced(ex.id)}
                     style={{ fontSize: 10, padding: "4px 10px" }}>
-                    {isTesting ? "Testing…" : "Test"}
+                    ⚙️
+                  </button>
+                  <button className="btn secondary" onClick={() => testConnection(ex.id)} disabled={isTesting}
+                    style={{ fontSize: 10, padding: "4px 8px" }}>
+                    {isTesting ? "…" : "Test"}
                   </button>
                   <button onClick={() => deleteConnection(ex.id)}
                     style={{ fontSize: 10, padding: "4px 8px", background: "none", border: "1px solid var(--line)", borderRadius: 6, color: "var(--bad)", cursor: "pointer" }}>
@@ -619,6 +651,136 @@ export default function ExchangeConnect() {
           </div>
         </div>
       )}
+      {/* Advanced Sync Modal */}
+      {showAdvanced && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
+          display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
+          padding: 20,
+        }}>
+          <div className="panel" style={{ width: "100%", maxWidth: 600, maxHeight: "90vh", overflowY: "auto" }}>
+            <div className="panel-head">
+              <h2>⚙️ Advanced Sync: {showAdvanced}</h2>
+              <button className="btn secondary" onClick={() => setShowAdvanced(null)}>✕</button>
+            </div>
+            <div className="panel-body" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                <div>
+                  <label className="form-label">Scan History (Period)</label>
+                  <select
+                    className="inp"
+                    value={syncOptions.period}
+                    onChange={e => setSyncOptions({ ...syncOptions, period: parseInt(e.target.value) })}
+                  >
+                    <option value={30}>Last 30 Days</option>
+                    <option value={90}>Last 90 Days (Recommended)</option>
+                    <option value={365}>Last 365 Days (Deep Scan)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="form-label">Default Execution</label>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button 
+                      className={`btn ${!syncOptions.preview ? "" : "secondary"}`}
+                      style={{ flex: 1, padding: "4px", fontSize: 11 }}
+                      onClick={() => setSyncOptions({ ...syncOptions, preview: false })}
+                    >Import Directly</button>
+                    <button 
+                      className={`btn ${syncOptions.preview ? "" : "secondary"}`}
+                      style={{ flex: 1, padding: "4px", fontSize: 11 }}
+                      onClick={() => setSyncOptions({ ...syncOptions, preview: true })}
+                    >Preview First</button>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="form-label">Operation Types to Ingest</label>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
+                  {["buy", "sell", "transfer_in", "transfer_out"].map(type => (
+                    <label key={type} style={{
+                      display: "flex", alignItems: "center", gap: 6, fontSize: 11,
+                      padding: "4px 10px", background: "var(--panel2)", borderRadius: 6,
+                      border: `1px solid ${syncOptions.types.includes(type) ? "var(--brand)" : "var(--line)"}`,
+                      cursor: "pointer",
+                    }}>
+                      <input 
+                        type="checkbox"
+                        checked={syncOptions.types.includes(type)}
+                        onChange={e => {
+                          const next = e.target.checked 
+                            ? [...syncOptions.types, type]
+                            : syncOptions.types.filter(t => t !== type);
+                          setSyncOptions({ ...syncOptions, types: next });
+                        }}
+                      />
+                      {type.replace("_", " ").toUpperCase()}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+                <button
+                  className="btn"
+                  style={{ flex: 1, background: "var(--brand)", color: "#fff" }}
+                  onClick={() => {
+                    syncExchange(showAdvanced);
+                    if (!syncOptions.preview) setShowAdvanced(null);
+                  }}
+                >
+                  🚀 Run Sync Now
+                </button>
+                <button className="btn secondary" onClick={() => setShowAdvanced(null)}>Close</button>
+              </div>
+
+              {previewData && (
+                <div style={{ marginTop: 20 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8, color: "var(--good)" }}>
+                    🔍 Preview Results ({previewData.length} operations detected)
+                  </div>
+                  <div className="tableWrap" style={{ maxHeight: 300, overflowY: "auto" }}>
+                    <table style={{ fontSize: 10 }}>
+                      <thead>
+                        <tr>
+                          <th>TIME</th><th>TYPE</th><th>ASSET</th><th>QTY</th><th>PRICE</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {previewData.slice(0, 50).map((p, idx) => (
+                          <tr key={idx}>
+                            <td>{new Date(p.timestamp).toLocaleDateString()}</td>
+                            <td style={{ color: p.side.includes("buy") || p.side.includes("in") ? "var(--good)" : "var(--bad)" }}>{p.side.toUpperCase()}</td>
+                            <td><strong>{p.symbol}</strong></td>
+                            <td>{fmtQty(p.qty)}</td>
+                            <td>${fmtPx(p.price)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 8 }}>
+                    * This is a dry run. Nothing has been added to your database yet. Run without 'Preview' to commit.
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+// Low-fi helpers for fmt
+function fmtQty(v: number) {
+  if (v < 0.0001) return v.toFixed(8);
+  if (v < 1) return v.toFixed(5);
+  return v.toLocaleString(undefined, { maximumFractionDigits: 4 });
+}
+function fmtPx(v: number) {
+  if (v < 1) return v.toFixed(6);
+  return v.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }

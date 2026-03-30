@@ -209,6 +209,36 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
   const [editThreshold, setEditThreshold] = useState("");
   const [editType, setEditType] = useState<AlertType>("price_above");
 
+  // User Preferences from Database
+  const [minImportValue, setMinImportValue] = useState(100);
+  const [loadingPrefs, setLoadingPrefs] = useState(false);
+
+  useEffect(() => {
+    async function loadPrefs() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase.from("user_preferences").select("key, value").eq("user_id", user.id).eq("key", "minImportValue").single();
+      if (data) setMinImportValue(parseFloat(data.value) || 100);
+    }
+    loadPrefs();
+  }, []);
+
+  const saveMinImport = async () => {
+    setLoadingPrefs(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { error } = await supabase.from("user_preferences").upsert({
+        user_id: user.id,
+        key: "minImportValue",
+        value: String(minImportValue),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "user_id,key" });
+      if (error) toast(error.message, "bad");
+      else toast("Sync threshold saved to cloud ✓", "good");
+    }
+    setLoadingPrefs(false);
+  };
+
   const alerts = state.alerts || [];
 
   const addAlert = () => {
@@ -298,7 +328,7 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
         <div className="panel" style={{ minWidth: 0 }}>
           <div className="panel-head"><h2>🚀 Tracking Threshold</h2></div>
           <div className="panel-body">
-            <div className="form-field" style={{ minWidth: 0 }}>
+            <div className="form-field" style={{ minWidth: 0, borderBottom: "1px solid var(--line)", paddingBottom: 12, marginBottom: 12 }}>
               <label className="form-label" style={{ whiteSpace: "normal", wordBreak: "break-word", lineHeight: "1.25" }}>
                 Minimum Asset Value ({state.base})
               </label>
@@ -324,8 +354,29 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
                   <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontSize: 10, fontWeight: 800, color: "var(--muted)" }}>{state.base}</span>
                 </div>
               </div>
-              <p className="muted" style={{ marginTop: 8, fontSize: 11, whiteSpace: "normal", wordBreak: "break-word", lineHeight: "1.4" }}>
+              <p className="muted" style={{ marginTop: 8, fontSize: 11, lineBreak: "auto", wordBreak: "break-word", lineHeight: "1.4" }}>
                 Assets with a total value less than this will be hidden from dashboard and summaries.
+              </p>
+            </div>
+
+            <div className="form-field" style={{ minWidth: 0 }}>
+              <label className="form-label" style={{ whiteSpace: "normal", wordBreak: "break-word", lineHeight: "1.25" }}>
+                Minimum API Sync Value (USD)
+              </label>
+              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                <input 
+                  className="inp" 
+                  type="number"
+                  value={minImportValue}
+                  onChange={e => setMinImportValue(parseFloat(e.target.value) || 0)}
+                  style={{ flex: 1 }}
+                />
+                <button className="btn secondary" onClick={saveMinImport} disabled={loadingPrefs} style={{ padding: "8px 16px", fontSize: 11 }}>
+                  {loadingPrefs ? "Saving..." : "Save to Cloud"}
+                </button>
+              </div>
+              <p className="muted" style={{ marginTop: 8, fontSize: 11, lineBreak: "auto", wordBreak: "break-word", lineHeight: "1.4" }}>
+                Trades (Buy/Sell) below this USD value will be ignored during API sync. <strong>Recommended: $100</strong> to avoid dust clutter.
               </p>
             </div>
           </div>
