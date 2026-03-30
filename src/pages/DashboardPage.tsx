@@ -17,6 +17,12 @@ const COIN_COLORS = [
   "#6366f1", "#84cc16", "#0ea5e9", "#d946ef", "#fb923c",
 ];
 
+interface CardDef {
+  id: string;
+  label: string;
+  colSpan?: number;
+}
+
 const ALL_CARDS: CardDef[] = [
   { id: "kpis", label: "KPI Summary", colSpan: 2 },
   { id: "allocation", label: "Coin Allocation" },
