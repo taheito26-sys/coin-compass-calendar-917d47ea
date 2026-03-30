@@ -260,6 +260,7 @@ Deno.serve(async (req) => {
       }
     }
 
+
     // POST /exchange-sync
     if (req.method === "POST" && (!action || action === "exchange-sync")) {
       const body = await req.json();
@@ -730,11 +731,13 @@ async function syncExchangeTrades(
     sourceType: "api_sync",
   }));
 
-  const { trades: finalTrades, summary: compactionStats } = compactTrades(compactionInput, {
+  const { trades: finalTrades, summary: compactionStats } = compactTrades(compactionInput as any, {
     timeWindowSeconds: 60,
     priceTolerancePercent: 0.15,
     isCsvImport: false,
+    excludeStablecoins: true,
   });
+
 
   const duplicateCompactionCount = compactionStats.raw_trades - compactionStats.compacted_trades;
 
@@ -1623,137 +1626,8 @@ async function fetchOkxTransfers(
   return { trades: all, stats };
 }
 
-async function compactAllTransactions(supabase: any, userId: string) {
-  safeLog("log", "compact_all_start", { user: userPrefix(userId) });
 
-  // 1. Fetch ALL transactions for the user
-  const { data: txs, error } = await supabase
-    .from("transactions")
-    .select("*")
-    .eq("user_id", userId);
 
-  if (error) {
-    throw new AppError({
-      message: "Failed to fetch transactions for compaction",
-      status: 500,
-      stage: "sync",
-      hint: error.message,
-    });
-  }
-
-  if (!txs || txs.length === 0) {
-    return { ok: true, message: "No transactions to compact", original: 0, compacted: 0 };
-  }
-
-  const originalCount = txs.length;
-
-  type RollupAccumulator = {
-    rows: any[];
-    qty: number;
-    totalValue: number;
-    totalFee: number;
-    earliestTs: string;
-  };
-
-  // Root cause: event compaction intentionally keeps distinct trading decisions.
-  // For users who explicitly run "Compact History", we now roll up to one row per coin+side+venue.
-  const rollups = new Map<string, RollupAccumulator>();
-  for (const tx of txs as any[]) {
-    const type = String(tx.type || "").toLowerCase();
-    if (!["buy", "sell", "transfer_in", "transfer_out"].includes(type)) continue;
-
-    const assetId = String(tx.asset_id || "");
-    const venue = String(tx.venue || "unknown");
-    const feeCurrency = String(tx.fee_currency || "USD").toUpperCase();
-    const key = [assetId, type, venue, feeCurrency].join("|");
-
-    const qty = Number(tx.qty || 0);
-    const unitPrice = Number(tx.unit_price || 0);
-    const fee = Number(tx.fee_amount || 0);
-    const ts = new Date(tx.timestamp).toISOString();
-
-    const existing = rollups.get(key);
-    if (existing) {
-      existing.rows.push(tx);
-      existing.qty += qty;
-      existing.totalValue += qty * unitPrice;
-      existing.totalFee += fee;
-      if (new Date(ts).getTime() < new Date(existing.earliestTs).getTime()) {
-        existing.earliestTs = ts;
-      }
-      continue;
-    }
-
-    rollups.set(key, {
-      rows: [tx],
-      qty,
-      totalValue: qty * unitPrice,
-      totalFee: fee,
-      earliestTs: ts,
-    });
-  }
-
-  const finalTxs = Array.from(rollups.entries()).map(([key, acc]) => {
-    const [assetId, type, venue, feeCurrency] = key.split("|");
-    const sourceRows = acc.rows.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-    const anchor = sourceRows[0];
-    const avgPrice = acc.qty > 0 ? acc.totalValue / acc.qty : Number(anchor.unit_price || 0);
-    const sourceIds = sourceRows.map((r) => String(r.id));
-    const tags: string[] = Array.isArray(anchor.tags) ? [...anchor.tags] : [];
-    const filteredTags = tags.filter((tag) => !tag.startsWith("coin_rollup_v1:"));
-    filteredTags.push(`coin_rollup_v1:${JSON.stringify({ source_ids: sourceIds, merged_count: sourceIds.length })}`);
-
-    return {
-      user_id: userId,
-      asset_id: assetId,
-      timestamp: acc.earliestTs,
-      type,
-      qty: acc.qty,
-      unit_price: avgPrice,
-      fee_amount: acc.totalFee,
-      fee_currency: feeCurrency,
-      venue: venue === "unknown" ? null : venue,
-      note: anchor.note,
-      source: anchor.source,
-      external_id: `coin_rollup:${userId}:${assetId}:${type}:${venue}:${feeCurrency}`,
-      tags: filteredTags,
-    };
-  });
-
-  const mergedCount = originalCount - finalTxs.length;
-
-  if (mergedCount <= 0) {
-    return { ok: true, message: "No rows eligible for coin-level rollup.", original: originalCount, compacted: 0 };
-  }
-
-  // 3. Clear audit trail first (references) to avoid constraint errors
-  const { error: fpError } = await supabase.from("import_row_fingerprints").delete().eq("user_id", userId);
-  if (fpError) console.error("Could not clear fingerprints", fpError);
-
-  const { error: irError } = await supabase.from("import_rows").delete().eq("user_id", userId);
-  if (irError) console.error("Could not clear import_rows", irError);
-
-  // 4. Perform Atomic Swap (Delete ALL and Re-insert Compacted)
-  const { error: delError } = await supabase.from("transactions").delete().eq("user_id", userId);
-  if (delError) throw new Error(`Compaction failed during deletion: ${delError.message}`);
-
-  // Re-insert in batches of 500 to stay within limits
-  for (let i = 0; i < finalTxs.length; i += 500) {
-    const batch = finalTxs.slice(i, i + 500);
-    const { error: insError } = await supabase.from("transactions").insert(batch);
-    if (insError) throw new Error(`Compaction failed during re-insertion: ${insError.message}`);
-  }
-
-  console.log(`[compaction] success: original=${originalCount}, merged=${mergedCount}, mode=coin_rollup`);
-
-  return {
-    ok: true,
-    message: `Successfully rolled up ${mergedCount} entries into ${finalTxs.length} coin-level rows.`,
-    original: originalCount,
-    compacted: mergedCount,
-    finalCount: finalTxs.length
-  };
-}
 
 async function hmacSign(secret: string, message: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -1812,4 +1686,100 @@ async function krakenSign(path: string, postData: string, nonce: number, secret:
   );
   const sig = await crypto.subtle.sign("HMAC", key, message);
   return btoa(String.fromCharCode(...new Uint8Array(sig)));
+}
+
+async function compactAllTransactions(supabase: any, userId: string) {
+  // 1. Fetch all transactions for this user
+  const { data, error } = await supabase
+    .from("transactions")
+    .select(`
+      id,
+      timestamp,
+      type,
+      qty,
+      unit_price,
+      fee_amount,
+      fee_currency,
+      venue,
+      note,
+      external_id,
+      asset_id,
+      asset:assets (
+        symbol
+      )
+    `)
+    .eq("user_id", userId);
+    
+  if (error) throw error;
+  if (!data?.length) return { ok: true, message: "No transactions found." };
+  
+  // 2. Map to NormalizedTrade for compaction engine
+  const normalized: NormalizedTrade[] = data.map((tx: any) => ({
+    id: tx.id,
+    symbol: tx.asset?.symbol || "UNKNOWN",
+    side: tx.type,
+    qty: Number(tx.qty),
+    price: Number(tx.unit_price),
+    fee: Number(tx.fee_amount),
+    feeCurrency: tx.fee_currency,
+    timestamp: tx.timestamp,
+    venue: tx.venue,
+    external_id: tx.external_id,
+  }));
+  
+  // 3. Run compaction with strict rules
+  const { trades: compacted, summary } = compactTrades(normalized, {
+    timeWindowSeconds: 120, 
+    priceTolerancePercent: 0.15,
+    excludeStablecoins: true
+  });
+  
+  if (summary.compacted_trades === summary.raw_trades) {
+    return { ok: true, message: "History is already compact." };
+  }
+  
+  // 4. Surgically identify merged groups
+  const toDelete: string[] = [];
+  const toInsert: any[] = [];
+  
+  for (const ct of compacted) {
+    if (ct.compaction_metadata && ct.compaction_metadata.number_of_fills_merged > 1) {
+      // These fills were merged into one trade
+      toDelete.push(...ct.compaction_metadata.source_trade_ids);
+      
+      const originalSample = data.find((d: any) => d.id === ct.compaction_metadata?.source_trade_ids[0]);
+      
+      toInsert.push({
+        user_id: userId,
+        asset_id: originalSample.asset_id,
+        timestamp: ct.timestamp,
+        type: ct.side,
+        qty: ct.qty,
+        unit_price: ct.price,
+        fee_amount: ct.fee,
+        fee_currency: ct.feeCurrency,
+        venue: ct.venue,
+        note: `Compacted trade (${ct.compaction_metadata.number_of_fills_merged} fills)`,
+        external_id: ct.external_id,
+        source: "compaction",
+        tags: [`compaction_v1:${JSON.stringify(ct.compaction_metadata)}`]
+      });
+    }
+  }
+  
+  if (toDelete.length > 0) {
+    // Delete original fills
+    const { error: delError } = await supabase.from("transactions").delete().in("id", toDelete);
+    if (delError) throw delError;
+    
+    // Insert compacted trades
+    const { error: insError } = await supabase.from("transactions").insert(toInsert);
+    if (insError) throw insError;
+  }
+  
+  return { 
+    ok: true, 
+    message: `Surgical compaction complete: ${toDelete.length} fills replaced by ${toInsert.length} trades.`,
+    stats: summary
+  };
 }

@@ -61,6 +61,7 @@ export interface CompactionOptions {
   timeWindowSeconds: number;
   priceTolerancePercent: number;
   isCsvImport?: boolean;
+  excludeStablecoins?: boolean;
 }
 
 const NATIVE_KEYS: Array<keyof NormalizedTrade> = [
@@ -71,8 +72,16 @@ const NATIVE_KEYS: Array<keyof NormalizedTrade> = [
   "parentOrderId",
 ];
 
+const STABLECOINS = new Set([
+  "USDT", "USDC", "USDD", "USDE", "BUSD", "PYUSD", "USDP", "FDUSD", "TUSD", "DAI", "USD"
+]);
+
 function normalizeDay(ts: string): string {
-  return new Date(ts).toISOString().slice(0, 10);
+  try {
+    return new Date(ts).toISOString().slice(0, 10);
+  } catch {
+    return "unknown";
+  }
 }
 
 function fnv1aHash(input: string): string {
@@ -112,9 +121,15 @@ function canHeuristicCompact(anchor: NormalizedTrade, trade: NormalizedTrade, op
   if ((anchor.sourceType || "") !== (trade.sourceType || "")) return false;
   if (!sameFeeCurrency(anchor.feeCurrency, trade.feeCurrency)) return false;
 
-  if (normalizeDay(anchor.timestamp) !== normalizeDay(trade.timestamp)) return false;
+  const day1 = normalizeDay(anchor.timestamp);
+  const day2 = normalizeDay(trade.timestamp);
+  if (day1 === "unknown" || day1 !== day2) return false;
 
-  const diffSeconds = Math.abs(new Date(anchor.timestamp).getTime() - new Date(trade.timestamp).getTime()) / 1000;
+  const t1 = new Date(anchor.timestamp).getTime();
+  const t2 = new Date(trade.timestamp).getTime();
+  if (isNaN(t1) || isNaN(t2)) return false;
+
+  const diffSeconds = Math.abs(t1 - t2) / 1000;
   if (diffSeconds > options.timeWindowSeconds) return false;
 
   return withinPriceTolerance(anchor.price, trade.price, options.priceTolerancePercent);
@@ -131,9 +146,11 @@ function buildExternalId(anchor: NormalizedTrade, method: "native_id" | "heurist
     : "0";
 
   if (method === "native_id") {
+    // Identity-level external ID
     return `evt:${venue}:${symbol}:${side}:${connection}:${eventIdentity}:${bucket}`;
   }
 
+  // Heuristic digest (order-independent)
   const digest = fnv1aHash([
     venue,
     symbol,
@@ -147,7 +164,7 @@ function buildExternalId(anchor: NormalizedTrade, method: "native_id" | "heurist
 
 export function compactTrades(
   trades: NormalizedTrade[],
-  options: CompactionOptions = { timeWindowSeconds: 60, priceTolerancePercent: 0.15 }
+  options: CompactionOptions = { timeWindowSeconds: 60, priceTolerancePercent: 0.15, excludeStablecoins: true }
 ): { trades: CompactedTrade[]; summary: CompactionSummary } {
   if (trades.length === 0) {
     return {
@@ -156,7 +173,21 @@ export function compactTrades(
     };
   }
 
-  const sorted = [...trades].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  // 0. Preliminary filtering: Stablecoins (if requested)
+  let filtered = trades;
+  if (options.excludeStablecoins) {
+    filtered = trades.filter(t => !STABLECOINS.has(t.symbol.toUpperCase()));
+  }
+
+  if (filtered.length === 0) {
+    return {
+      trades: [],
+      summary: { raw_trades: trades.length, compacted_trades: 0, skipped_trades: 0, duplicate_trades: 0 },
+    };
+  }
+
+  // 1. Sort by time for sequential grouping
+  const sorted = [...filtered].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
   const groups: CompactedTrade[][] = [];
 
@@ -168,7 +199,7 @@ export function compactTrades(
       const anchor = group[0];
       const anchorNativeIdentity = toNativeIdentity(anchor);
 
-      // Level 1 (preferred): strict native identity match + exchange/account safety.
+      // Condition 1: Native Identity Match (Order ID / Trade Group ID)
       if (tradeNativeIdentity || anchorNativeIdentity) {
         if (
           tradeNativeIdentity &&
@@ -180,10 +211,11 @@ export function compactTrades(
           target = group;
           break;
         }
+        // If one has identity and other doesn't, or they don't match, they are distinct.
         continue;
       }
 
-      // Level 2 fallback only when both trades have no native identity.
+      // Condition 2: Heuristic Match (Same parameters + tight window)
       if (canHeuristicCompact(anchor, trade, options)) {
         target = group;
         break;
@@ -195,10 +227,11 @@ export function compactTrades(
   }
 
   const compacted = groups.map((group) => {
-    if (group.length === 1) return group[0];
+    const anchor = group[0];
+    if (group.length === 1) return anchor;
 
     const totalQty = group.reduce((sum, t) => sum + t.qty, 0);
-    const totalValue = group.reduce((sum, t) => sum + t.qty * t.price, 0);
+    const totalValue = group.reduce((sum, t) => sum + (t.qty * t.price), 0);
     const totalFee = group.reduce((sum, t) => sum + t.fee, 0);
     const timestamps = group.map((t) => new Date(t.timestamp).getTime());
     const prices = group.map((t) => t.price);
@@ -206,9 +239,10 @@ export function compactTrades(
     const earliestTs = new Date(Math.min(...timestamps)).toISOString();
     const latestTs = new Date(Math.max(...timestamps)).toISOString();
 
-    const anchor = group[0];
     const nativeIdentity = toNativeIdentity(anchor);
     const method: "native_id" | "heuristic" = nativeIdentity ? "native_id" : "heuristic";
+    
+    // For heuristic logging/id, use a stable identity from grouping keys
     const heuristicIdentity = [
       anchor.venue || "",
       anchor.symbol,
@@ -219,6 +253,7 @@ export function compactTrades(
       normalizeDay(anchor.timestamp),
       (anchor.feeCurrency || "").toUpperCase(),
     ].join("|");
+    
     const eventIdentity = nativeIdentity || `heuristic:${fnv1aHash(heuristicIdentity)}`;
 
     const metadata: CompactionMetadata = {
@@ -239,7 +274,7 @@ export function compactTrades(
     return {
       ...anchor,
       qty: totalQty,
-      price: totalQty > 0 ? totalValue / totalQty : anchor.price,
+      price: totalQty > 0 ? (totalValue / totalQty) : anchor.price,
       fee: totalFee,
       timestamp: earliestTs,
       external_id: buildExternalId(anchor, method, eventIdentity, options.timeWindowSeconds),
@@ -252,10 +287,11 @@ export function compactTrades(
   return {
     trades: compacted,
     summary: {
-      raw_trades: sorted.length,
+      raw_trades: filtered.length,
       compacted_trades: compacted.length,
       skipped_trades: skipped,
       duplicate_trades: 0,
     },
   };
 }
+
