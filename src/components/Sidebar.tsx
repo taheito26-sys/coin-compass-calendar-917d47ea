@@ -18,11 +18,11 @@ export default function Sidebar({ page, onNav, onLogout }: { page: string; onNav
     <aside className="sidebar">
       <div className="brand">
         <div className="logo">
-          <img src="/logo.png" alt="Royal Qatar Logo" style={{ width: 32, height: 32, borderRadius: 6, objectFit: "cover" }} />
+          <img src="/logo.png" alt="Tracker Logo" style={{ width: 32, height: 32, borderRadius: 6, objectFit: "cover" }} />
         </div>
         <div>
-          <div className="brand-name">Royal Qatar</div>
-          <div className="brand-ver">v2 · Royal Portfolio</div>
+          <div className="brand-name">Crypto Tracker</div>
+          <div className="brand-ver">v2 · Tracker Pro</div>
         </div>
       </div>
       <nav className="nav">

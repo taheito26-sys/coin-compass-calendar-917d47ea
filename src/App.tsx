@@ -45,7 +45,7 @@ function AppShell({
 }) {
   const [page, setPage] = useState("dashboard");
   const { toastMsg } = useCrypto();
-  const [title, sub] = PAGE_TITLES[page] || ["Royal Qatar", ""];
+  const [title, sub] = PAGE_TITLES[page] || ["Crypto Tracker", ""];
 
   return (
     <>
@@ -101,7 +101,7 @@ function AuthGate() {
 
 export default function App() {
   useEffect(() => {
-    document.title = "Royal Qatar Pro — Portfolio & Intelligence";
+    document.title = "Crypto Tracker Pro — Portfolio & Intelligence";
   }, []);
 
   return (

@@ -112,7 +112,7 @@ export default function AuthScreen() {
         <div style={{ color: "#ffffff" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
             <img src="/logo.png" alt="Logo" style={{ width: 48, height: 48, borderRadius: 12, boxShadow: "0 8px 16px rgba(0,0,0,0.5)" }} />
-            <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: "-0.5px" }}>Royal Qatar Pro</div>
+            <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: "-0.5px" }}>Crypto Tracker Pro</div>
           </div>
           
           <div
