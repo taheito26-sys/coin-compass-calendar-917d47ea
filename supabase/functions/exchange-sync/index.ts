@@ -665,7 +665,7 @@ async function fetchOkxTrades(
   passphrase?: string | null
 ): Promise<NormalizedTrade[]> {
   const allTrades: NormalizedTrade[] = [];
-  const lookbackMs = 365 * 24 * 60 * 60 * 1000;
+  const lookbackMs = 90 * 24 * 60 * 60 * 1000; // OKX fills-history limit is 3 months
   const beginMs = Date.now() - lookbackMs;
   let afterId = "";
   let hasMore = true;
@@ -1088,7 +1088,7 @@ async function fetchBybitTransfers(apiKey: string, apiSecret: string): Promise<N
 async function fetchOkxTransfers(apiKey: string, apiSecret: string, passphrase?: string | null): Promise<NormalizedTrade[]> {
   const transfers: NormalizedTrade[] = [];
   const ts = new Date().toISOString();
-  const startTime = Date.now() - (365 * 24 * 60 * 60 * 1000);
+  const startTime = Date.now() - (90 * 24 * 60 * 60 * 1000);
 
   // Deposits
   const depPath = `/api/v5/asset/deposit-history?limit=100`;
