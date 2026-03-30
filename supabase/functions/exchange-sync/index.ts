@@ -440,7 +440,7 @@ async function fetchBybitTrades(apiKey: string, apiSecret: string, lookbackDays:
     let hasMore = true;
     while (hasMore) {
       const ts = Date.now();
-      const params = `category=spot&limit=100&startTime=${windowStart}&endTime=${end}${cursor ? `&cursor=${cursor}` : ""}`;
+      const params = `category=spot&startTime=${windowStart}&endTime=${end}&limit=100${cursor ? `&cursor=${cursor}` : ""}`;
       const sig = await hmacSign(apiSecret, `${ts}${apiKey}5000${params}`);
       const res = await fetch(`https://api.bybit.com/v5/execution/list?${params}`, {
         headers: { "X-BAPI-API-KEY": apiKey, "X-BAPI-SIGN": sig, "X-BAPI-TIMESTAMP": String(ts), "X-BAPI-RECV-WINDOW": "5000" }
@@ -480,7 +480,8 @@ async function fetchOkxTrades(apiKey: string, apiSecret: string, passphrase: str
     while (hasMore && pages < 20) {
       pages++;
       const ts = new Date().toISOString();
-      const path = `${ep}?instType=SPOT&limit=100&begin=${start}${afterId ? `&after=${afterId}` : ""}`;
+      const extra = ep.includes("history") ? `&begin=${start}` : "";
+      const path = `${ep}?instType=SPOT&limit=100${extra}${afterId ? `&after=${afterId}` : ""}`;
       const sig = await hmacSignBase64(apiSecret, `${ts}GET${path}`);
       
       try {
@@ -528,9 +529,105 @@ async function fetchOkxTrades(apiKey: string, apiSecret: string, passphrase: str
   return Array.from(unique.values()).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 }
 
-async function fetchGateTrades(apiKey: string, apiSecret: string, lookback: number): Promise<NormalizedTrade[]> { return []; }
-async function fetchKrakenTrades(apiKey: string, apiSecret: string, lookback: number): Promise<NormalizedTrade[]> { return []; }
-async function fetchCoinbaseTrades(apiKey: string, apiSecret: string, lookback: number): Promise<NormalizedTrade[]> { return []; }
+async function fetchGateTrades(apiKey: string, apiSecret: string, lookbackDays: number): Promise<NormalizedTrade[]> {
+  const all: NormalizedTrade[] = [];
+  const startTs = Math.floor((Date.now() - (lookbackDays * 24 * 60 * 60 * 1000)) / 1000);
+  const ts = Math.floor(Date.now() / 1000);
+  
+  // Gate.io v4 signing
+  const method = "GET";
+  const url = "/api/v4/spot/my_trades";
+  const query = `limit=1000&from=${startTs}`;
+  const hashedBody = await sha512(""); // Empty body for GET
+  const payload = `${method}\n${url}\n${query}\n${hashedBody}\n${ts}`;
+  const sig = await hmacSign512(apiSecret, payload);
+
+  const res = await fetch(`https://api.gateio.ws${url}?${query}`, {
+    headers: {
+      "KEY": apiKey,
+      "SIGN": sig,
+      "Timestamp": String(ts)
+    }
+  });
+
+  if (!res.ok) {
+    console.error(`[Gate.io] Error: ${res.status}`);
+    return [];
+  }
+
+  const list = await res.json();
+  for (const t of (list as any[])) {
+    all.push({
+      id: String(t.id), orderId: String(t.order_id), symbol: t.currency_pair.split("_")[0], side: t.side,
+      qty: parseFloat(t.amount), price: parseFloat(t.price), fee: parseFloat(t.fee), feeCurrency: t.fee_currency, timestamp: new Date(t.create_time * 1000).toISOString()
+    });
+  }
+  return all;
+}
+
+async function fetchKrakenTrades(apiKey: string, apiSecret: string, lookbackDays: number): Promise<NormalizedTrade[]> {
+  const all: NormalizedTrade[] = [];
+  const startTs = Math.floor((Date.now() - (lookbackDays * 24 * 60 * 60 * 1000)) / 1000);
+  const nonce = Date.now() * 1000;
+  const path = "/0/private/TradesHistory";
+  const body = `nonce=${nonce}&start=${startTs}`;
+  const sig = await krakenSign(path, `nonce=${nonce}&start=${startTs}`, nonce, apiSecret);
+
+  const res = await fetch(`https://api.kraken.com${path}`, {
+    method: "POST",
+    headers: {
+      "API-Key": apiKey,
+      "API-Sign": sig,
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body
+  });
+
+  if (!res.ok) return [];
+  const data = await res.json();
+  const trades = data.result?.trades || {};
+  for (const tid in trades) {
+    const t = trades[tid];
+    all.push({
+      id: tid, orderId: t.ordertxid, symbol: t.pair.replace(/XBT$|USD$|EUR$|USDT$/, ""), side: t.type === "buy" ? "buy" : "sell",
+      qty: parseFloat(t.vol), price: parseFloat(t.price), fee: parseFloat(t.fee), feeCurrency: "USD", timestamp: new Date(t.time * 1000).toISOString()
+    });
+  }
+  return all;
+}
+
+async function fetchCoinbaseTrades(apiKey: string, apiSecret: string, lookbackDays: number): Promise<NormalizedTrade[]> {
+  const all: NormalizedTrade[] = [];
+  const ts = Math.floor(Date.now() / 1000).toString();
+  const startTs = new Date(Date.now() - (lookbackDays * 24 * 60 * 60 * 1000)).toISOString();
+  
+  // Coinbase Advanced Trade signing
+  const method = "GET";
+  const path = "/api/v3/brokerage/orders/historical/fills";
+  const query = `start_sequence_timestamp=${startTs}&limit=100`;
+  const message = ts + method + path + "?" + query;
+  const sig = await hmacSign(apiSecret, message);
+
+  const res = await fetch(`https://api.coinbase.com${path}?${query}`, {
+    headers: {
+      "CB-ACCESS-KEY": apiKey,
+      "CB-ACCESS-SIGN": sig,
+      "CB-ACCESS-TIMESTAMP": ts,
+      "Content-Type": "application/json"
+    }
+  });
+
+  if (!res.ok) return [];
+  const data = await res.json();
+  const fills = data.fills || [];
+  for (const f of fills) {
+    all.push({
+      id: f.entry_id, orderId: f.order_id, symbol: f.product_id.split("-")[0], side: f.side.toLowerCase(),
+      qty: parseFloat(f.size), price: parseFloat(f.price), fee: parseFloat(f.commission), feeCurrency: "USD", timestamp: f.trade_time
+    });
+  }
+  return all;
+}
 
 // --- Helpers ---
 
