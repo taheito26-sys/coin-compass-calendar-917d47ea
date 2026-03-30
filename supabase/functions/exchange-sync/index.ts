@@ -351,8 +351,13 @@ async function syncExchangeTrades(
       throw new Error(`Unsupported exchange: ${exchange}`);
   }
 
+  // Combine trades and transfers
+  const allHistory = [...trades, ...transfers];
 
-  if (!trades.length) return { ok: true, synced: 0, skipped: 0 };
+  if (!allHistory.length) {
+    console.log(`[sync] ${exchange}: No new trades or transfers found`);
+    return { ok: true, synced: 0, skipped: 0 };
+  }
 
   // Fetch user preference for minimum import value
   const { data: prefRows } = await supabase
@@ -368,7 +373,7 @@ async function syncExchangeTrades(
 
   // --- Smart Trade Compaction Logic ---
   // 1. Sort by time
-  const sorted = [...allHistory]
+  const sorted = allHistory
     .map(t => ({ ...t, symbol: t.symbol.toUpperCase() }))
     .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
@@ -380,16 +385,24 @@ async function syncExchangeTrades(
     // Strategy: 
     // - If orderId matches exactly, it's definitely the same operation.
     // - Otherwise, fallback to a 15-minute sliding window (if same symbol/side).
-    const existing = clusters.findLast(c => {
+    let existingIndex = -1;
+    for (let i = clusters.length - 1; i >= 0; i--) {
+      const c = clusters[i];
       const isSameOp = t.orderId && c.orderId && t.orderId === c.orderId;
       const isClose = c.symbol === t.symbol && c.side === t.side && (tTime - c._lastTs) < 15 * 60 * 1000;
-      return isSameOp || isClose;
-    });
+      if (isSameOp || isClose) {
+        existingIndex = i;
+        break;
+      }
+    }
 
-    if (existing) {
+    if (existingIndex !== -1) {
+      const existing = clusters[existingIndex];
       const totalQty = existing.qty + t.qty;
-      // Weighted average price
-      existing.price = (existing.price * existing.qty + t.price * t.qty) / totalQty;
+      // Weighted average price (only if totalQty > 0 to avoid NaN)
+      if (totalQty > 0) {
+        existing.price = (existing.price * existing.qty + t.price * t.qty) / totalQty;
+      }
       existing.qty = totalQty;
       existing.fee += t.fee;
       existing._lastTs = tTime; // Update sliding window
@@ -404,8 +417,11 @@ async function syncExchangeTrades(
 
   for (const trade of clusters) {
     // Filter out "dust" trades based on user preference
+    // NEW: Only filter for Buy/Sell. DO NOT filter transfers (deposits/withdrawals).
+    const isTrade = trade.side === "buy" || trade.side === "sell";
     const totalValue = trade.qty * trade.price;
-    if (totalValue < minValThreshold) {
+    
+    if (isTrade && totalValue < minValThreshold) {
       dustSkipped++;
       skipped++;
       continue;
@@ -505,10 +521,14 @@ async function fetchBinanceTrades(
   const allTrades: NormalizedTrade[] = [];
   const quotes = ["USDT", "USDC", "BUSD", "TUSD", "FDUSD", "DAI", "BTC", "ETH", "BNB", "USD", "EUR", "GBP"];
 
-  console.log(`[Binance] Deep scan for ${assetsToScan.length} assets...`);
+  // Max lookback window: 365 days
+  const startTime = Date.now() - (365 * 24 * 60 * 60 * 1000);
 
-  // Max lookback window: 180 days
-  const startTime = Date.now() - (180 * 24 * 60 * 60 * 1000);
+  // Fetch dust conversions first
+  const dustTrades = await fetchBinanceDustLog(apiKey, apiSecret, startTime);
+  allTrades.push(...dustTrades);
+
+  console.log(`[Binance] Deep scan for ${assetsToScan.length} assets...`);
 
   for (const asset of assetsToScan) {
     if (quotes.includes(asset)) continue;
@@ -551,7 +571,7 @@ async function fetchBybitTrades(apiKey: string, apiSecret: string): Promise<Norm
   const allTrades: NormalizedTrade[] = [];
   const recvWindow = "5000";
   const now = Date.now();
-  const maxHistory = 180 * 24 * 60 * 60 * 1000; // 180 days
+  const maxHistory = 365 * 24 * 60 * 60 * 1000; // 365 days
   const windowSize = 7 * 24 * 60 * 60 * 1000; // 7 days per window (Bybit API limit)
 
   // Iterate through 7-day windows from oldest to newest
@@ -645,7 +665,7 @@ async function fetchOkxTrades(
   passphrase?: string | null
 ): Promise<NormalizedTrade[]> {
   const allTrades: NormalizedTrade[] = [];
-  const lookbackMs = 90 * 24 * 60 * 60 * 1000;
+  const lookbackMs = 365 * 24 * 60 * 60 * 1000;
   const beginMs = Date.now() - lookbackMs;
   let afterId = "";
   let hasMore = true;
@@ -963,7 +983,7 @@ async function krakenSign(
 
 async function fetchBinanceTransfers(apiKey: string, apiSecret: string): Promise<NormalizedTrade[]> {
   const transfers: NormalizedTrade[] = [];
-  const startTime = Date.now() - (180 * 24 * 60 * 60 * 1000); 
+  const startTime = Date.now() - (365 * 24 * 60 * 60 * 1000); 
 
   // Deposits
   const depQuery = `startTime=${startTime}&timestamp=${Date.now()}`;
@@ -1014,7 +1034,7 @@ async function fetchBinanceTransfers(apiKey: string, apiSecret: string): Promise
 async function fetchBybitTransfers(apiKey: string, apiSecret: string): Promise<NormalizedTrade[]> {
   const transfers: NormalizedTrade[] = [];
   const ts = Date.now();
-  const startTime = ts - (180 * 24 * 60 * 60 * 1000);
+  const startTime = ts - (365 * 24 * 60 * 60 * 1000);
   const recvWindow = "5000";
 
   // Deposits
@@ -1068,7 +1088,7 @@ async function fetchBybitTransfers(apiKey: string, apiSecret: string): Promise<N
 async function fetchOkxTransfers(apiKey: string, apiSecret: string, passphrase?: string | null): Promise<NormalizedTrade[]> {
   const transfers: NormalizedTrade[] = [];
   const ts = new Date().toISOString();
-  const startTime = Date.now() - (180 * 24 * 60 * 60 * 1000);
+  const startTime = Date.now() - (365 * 24 * 60 * 60 * 1000);
 
   // Deposits
   const depPath = `/api/v5/asset/deposit-history?limit=100`;
@@ -1116,4 +1136,34 @@ async function fetchOkxTransfers(apiKey: string, apiSecret: string, passphrase?:
     }
   }
   return transfers;
+}
+
+async function fetchBinanceDustLog(apiKey: string, apiSecret: string, startTime: number): Promise<NormalizedTrade[]> {
+  const dustTrades: NormalizedTrade[] = [];
+  const ts = Date.now();
+  const q = `startTime=${startTime}&timestamp=${ts}`;
+  const sig = await hmacSign(apiSecret, q);
+  const res = await fetch(`https://api.binance.com/sapi/v1/asset/dust-log?${q}&signature=${sig}`, {
+    headers: { "X-MBX-APIKEY": apiKey }
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  const logs = data.userAssetDribblets || [];
+
+  for (const log of logs) {
+    for (const item of log.userAssetDribbletDetails || []) {
+      const fromSym = (item.fromAsset || "").toUpperCase();
+      dustTrades.push({
+        id: `dust_${item.transId || Math.random()}`,
+        symbol: fromSym,
+        side: "sell",
+        qty: parseFloat(item.amount),
+        price: parseFloat(item.transferedAmount) / parseFloat(item.amount),
+        fee: parseFloat(item.serviceChargeAmount || 0),
+        feeCurrency: "BNB",
+        timestamp: new Date(log.operateTime).toISOString(),
+      });
+    }
+  }
+  return dustTrades;
 }
