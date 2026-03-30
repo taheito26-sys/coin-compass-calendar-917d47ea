@@ -451,50 +451,66 @@ async function fetchBinanceTrades(apiKey: string, apiSecret: string): Promise<No
 }
 
 async function fetchBybitTrades(apiKey: string, apiSecret: string): Promise<NormalizedTrade[]> {
+  const allTrades: NormalizedTrade[] = [];
   const ts = Date.now();
   const recvWindow = "5000";
-  const startTime = Date.now() - (180 * 24 * 60 * 60 * 1000); // Max 180 days for v5 execution list
-  const params = `category=spot&limit=100&startTime=${startTime}`;
-  const payload = `${ts}${apiKey}${recvWindow}${params}`;
-  const sig = await hmacSign(apiSecret, payload);
-  const res = await fetch(
-    `https://api.bybit.com/v5/execution/list?${params}`,
-    {
-      headers: {
-        "X-BAPI-API-KEY": apiKey,
-        "X-BAPI-SIGN": sig,
-        "X-BAPI-TIMESTAMP": String(ts),
-        "X-BAPI-RECV-WINDOW": recvWindow,
-      },
-    }
-  );
-  if (!res.ok) throw new Error(`Bybit trades failed: ${res.status}`);
-  const data = await res.json();
-  if (data.retCode !== 0) throw new Error(data.retMsg);
+  const startTime = Date.now() - (180 * 24 * 60 * 60 * 1000);
+  let cursor = "";
+  let hasMore = true;
 
-  return (data.result?.list || []).map((t: any) => {
-    // Better base asset extraction (handles BTCUSDT, ETHUSDC, etc.)
-    const rawSymbol = (t.symbol || "").toUpperCase();
-    let baseAsset = rawSymbol;
-    const quotes = ["USDT", "USDC", "USDD", "USDE", "BUSD", "BTC", "ETH", "EUR", "GBP", "USD", "DAI"];
-    for (const q of quotes) {
-      if (rawSymbol.length > q.length && rawSymbol.endsWith(q)) {
-        baseAsset = rawSymbol.slice(0, -q.length);
-        break;
+  while (hasMore) {
+    const params = `category=spot&limit=100&startTime=${startTime}${cursor ? `&cursor=${cursor}` : ""}`;
+    const payload = `${ts}${apiKey}${recvWindow}${params}`;
+    const sig = await hmacSign(apiSecret, payload);
+    
+    const res = await fetch(
+      `https://api.bybit.com/v5/execution/list?${params}`,
+      {
+        headers: {
+          "X-BAPI-API-KEY": apiKey,
+          "X-BAPI-SIGN": sig,
+          "X-BAPI-TIMESTAMP": String(ts),
+          "X-BAPI-RECV-WINDOW": recvWindow,
+        },
       }
+    );
+
+    if (!res.ok) throw new Error(`Bybit trades failed: ${res.status}`);
+    const data = await res.json();
+    if (data.retCode !== 0) throw new Error(data.retMsg);
+
+    const list = data.result?.list || [];
+    for (const t of list) {
+      const rawSymbol = (t.symbol || "").toUpperCase();
+      let baseAsset = rawSymbol;
+      const quotes = ["USDT", "USDC", "USDD", "USDE", "BUSD", "BTC", "ETH", "EUR", "GBP", "USD", "DAI"];
+      for (const q of quotes) {
+        if (rawSymbol.length > q.length && rawSymbol.endsWith(q)) {
+          baseAsset = rawSymbol.slice(0, -q.length);
+          break;
+        }
+      }
+
+      allTrades.push({
+        id: t.execId || t.orderId || String(Date.now()),
+        symbol: baseAsset,
+        side: t.side?.toLowerCase() === "buy" ? "buy" : "sell",
+        qty: parseFloat(t.execQty || 0),
+        price: parseFloat(t.execPrice || 0),
+        fee: parseFloat(t.execFee || 0),
+        feeCurrency: t.feeCurrency || "USDT",
+        timestamp: new Date(parseInt(t.execTime || Date.now())).toISOString(),
+      });
     }
 
-    return {
-      id: t.execId || t.orderId || String(Date.now()),
-      symbol: baseAsset,
-      side: t.side?.toLowerCase() === "buy" ? "buy" : "sell",
-      qty: parseFloat(t.execQty || 0),
-      price: parseFloat(t.execPrice || 0),
-      fee: parseFloat(t.execFee || 0),
-      feeCurrency: t.feeCurrency || "USDT",
-      timestamp: new Date(parseInt(t.execTime || Date.now())).toISOString(),
-    };
-  });
+    cursor = data.result?.nextPageCursor || "";
+    hasMore = !!cursor && list.length > 0;
+    
+    // Safety break to prevent infinite loops or excessive API calls in edge case
+    if (allTrades.length > 1000) break;
+  }
+
+  return allTrades;
 }
 
 async function fetchOkxTrades(
