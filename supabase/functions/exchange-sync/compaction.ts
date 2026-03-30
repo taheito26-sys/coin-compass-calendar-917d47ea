@@ -1,15 +1,9 @@
 /**
- * compaction.ts
- * 
- * High-precision Trade-Event Compaction module.
- * Consolidates micro-fills into logical trade events based on:
- * Level 1: Native Exchange IDs (order_id, etc.)
- * Level 2: Deterministic Heuristics (time, symbol, side, price tolerance)
+ * Trade-event compaction (event-identity first, bias for safety).
  */
 
 export interface NormalizedTrade {
-  id: string; // Internal unique ID or native ID
-  orderId?: string;
+  id: string;
   symbol: string;
   side: "buy" | "sell" | "transfer_in" | "transfer_out";
   qty: number;
@@ -21,16 +15,34 @@ export interface NormalizedTrade {
   source?: string;
   external_id?: string;
   fingerprint_hash?: string;
+
+  // Event identity candidates (Level 1)
+  orderId?: string;
+  orderLinkId?: string;
+  executionGroupId?: string;
+  tradeGroupId?: string;
+  parentOrderId?: string;
+
+  // Heuristic guardrails
+  connectionId?: string;
+  batchId?: string;
+  sourceType?: string;
 }
 
 export interface CompactionMetadata {
-  num_fills: number;
-  source_ids: string[];
+  // Required audit fields
+  number_of_fills_merged: number;
+  source_trade_ids: string[];
   min_timestamp: string;
   max_timestamp: string;
   min_price: number;
   max_price: number;
   total_fee: number;
+  compaction_method: "native_id" | "heuristic";
+
+  // Back-compat aliases
+  num_fills: number;
+  source_ids: string[];
   method: "native_id" | "heuristic";
 }
 
@@ -47,151 +59,203 @@ export interface CompactionSummary {
 
 export interface CompactionOptions {
   timeWindowSeconds: number;
-  priceTolerancePercent: number; // e.g. 0.15
+  priceTolerancePercent: number;
   isCsvImport?: boolean;
 }
 
-/**
- * Compacts a list of trades into logical events.
- * deterministic heuristic grouping is only used if Level 1 native IDs are missing.
- */
+const NATIVE_KEYS: Array<keyof NormalizedTrade> = [
+  "orderId",
+  "orderLinkId",
+  "executionGroupId",
+  "tradeGroupId",
+  "parentOrderId",
+];
+
+function normalizeDay(ts: string): string {
+  return new Date(ts).toISOString().slice(0, 10);
+}
+
+function fnv1aHash(input: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i += 1) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+
+function toNativeIdentity(t: NormalizedTrade): string | null {
+  for (const key of NATIVE_KEYS) {
+    const value = String(t[key] || "").trim();
+    if (value) return `${key}:${value}`;
+  }
+  return null;
+}
+
+function sameFeeCurrency(a?: string, b?: string): boolean {
+  return (a || "").trim().toUpperCase() === (b || "").trim().toUpperCase();
+}
+
+function withinPriceTolerance(a: number, b: number, tolerancePercent: number): boolean {
+  const maxPrice = Math.max(a, b);
+  if (maxPrice <= 0) return a === b;
+  const diff = Math.abs(a - b) / maxPrice;
+  return diff <= tolerancePercent / 100;
+}
+
+function canHeuristicCompact(anchor: NormalizedTrade, trade: NormalizedTrade, options: CompactionOptions): boolean {
+  if (anchor.symbol !== trade.symbol) return false;
+  if (anchor.side !== trade.side) return false;
+  if ((anchor.venue || "") !== (trade.venue || "")) return false;
+  if ((anchor.connectionId || "") !== (trade.connectionId || "")) return false;
+  if ((anchor.batchId || "") !== (trade.batchId || "")) return false;
+  if ((anchor.sourceType || "") !== (trade.sourceType || "")) return false;
+  if (!sameFeeCurrency(anchor.feeCurrency, trade.feeCurrency)) return false;
+
+  if (normalizeDay(anchor.timestamp) !== normalizeDay(trade.timestamp)) return false;
+
+  const diffSeconds = Math.abs(new Date(anchor.timestamp).getTime() - new Date(trade.timestamp).getTime()) / 1000;
+  if (diffSeconds > options.timeWindowSeconds) return false;
+
+  return withinPriceTolerance(anchor.price, trade.price, options.priceTolerancePercent);
+}
+
+function buildExternalId(anchor: NormalizedTrade, method: "native_id" | "heuristic", eventIdentity: string, timeWindowSeconds: number): string {
+  const venue = (anchor.venue || "unknown").toLowerCase();
+  const symbol = (anchor.symbol || "unknown").toUpperCase();
+  const side = anchor.side;
+  const connection = (anchor.connectionId || "unknown").toLowerCase();
+  const anchorMs = new Date(anchor.timestamp).getTime();
+  const bucket = Number.isFinite(anchorMs)
+    ? String(Math.floor(anchorMs / (timeWindowSeconds * 1000)))
+    : "0";
+
+  if (method === "native_id") {
+    return `evt:${venue}:${symbol}:${side}:${connection}:${eventIdentity}:${bucket}`;
+  }
+
+  const digest = fnv1aHash([
+    venue,
+    symbol,
+    side,
+    connection,
+    eventIdentity,
+    bucket,
+  ].join("|"));
+  return `evt:${venue}:${symbol}:${side}:${connection}:h:${digest}:${bucket}`;
+}
+
 export function compactTrades(
   trades: NormalizedTrade[],
   options: CompactionOptions = { timeWindowSeconds: 60, priceTolerancePercent: 0.15 }
 ): { trades: CompactedTrade[]; summary: CompactionSummary } {
   if (trades.length === 0) {
-    return { 
-      trades: [], 
-      summary: { raw_trades: 0, compacted_trades: 0, skipped_trades: 0, duplicate_trades: 0 } 
+    return {
+      trades: [],
+      summary: { raw_trades: 0, compacted_trades: 0, skipped_trades: 0, duplicate_trades: 0 },
     };
   }
 
-  // 1. Sort by timestamp ascending for stable processing
-  const sorted = [...trades].sort((a, b) => 
-    new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-  );
+  const sorted = [...trades].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
-  const rawCount = sorted.length;
   const groups: CompactedTrade[][] = [];
 
-  // Grouping helper
-  const findTargetGroup = (trade: NormalizedTrade): CompactedTrade[] | null => {
-    // Level 1: Native Identity
-    const nativeId = trade.orderId;
-    if (nativeId) {
-      for (const group of groups) {
-        if (group[0].orderId === nativeId && group[0].venue === trade.venue) {
-          return group;
-        }
-      }
-    }
-
-    // Level 2: Deterministic Heuristic
-    // Must match ALL conditions per requirement
-    const tradeTs = new Date(trade.timestamp).getTime();
-    const tradeDateStr = new Date(trade.timestamp).toISOString().split("T")[0];
+  for (const trade of sorted) {
+    const tradeNativeIdentity = toNativeIdentity(trade);
+    let target: CompactedTrade[] | null = null;
 
     for (const group of groups) {
       const anchor = group[0];
-      const anchorTs = new Date(anchor.timestamp).getTime();
-      const anchorDateStr = new Date(anchor.timestamp).toISOString().split("T")[0];
+      const anchorNativeIdentity = toNativeIdentity(anchor);
 
-      // Absolute non-compact conditions
-      if (anchor.symbol !== trade.symbol) continue;
-      if (anchor.side !== trade.side) continue;
-      if (anchor.venue !== trade.venue) continue;
-      if (anchor.feeCurrency !== trade.feeCurrency) continue;
-      if (anchorDateStr !== tradeDateStr) continue; // Same calendar date rule
-
-      // Time window rule
-      const diffSeconds = Math.abs(tradeTs - anchorTs) / 1000;
-      if (diffSeconds > options.timeWindowSeconds) continue;
-
-      // Price tolerance rule: abs(priceA - priceB) / max(priceA, priceB) <= threshold
-      const maxPrice = Math.max(anchor.price, trade.price);
-      if (maxPrice > 0) {
-        const priceDiff = Math.abs(anchor.price - trade.price) / maxPrice;
-        if (priceDiff > (options.priceTolerancePercent / 100)) continue;
+      // Level 1 (preferred): strict native identity match + exchange/account safety.
+      if (tradeNativeIdentity || anchorNativeIdentity) {
+        if (
+          tradeNativeIdentity &&
+          anchorNativeIdentity &&
+          tradeNativeIdentity === anchorNativeIdentity &&
+          (anchor.venue || "") === (trade.venue || "") &&
+          (anchor.connectionId || "") === (trade.connectionId || "")
+        ) {
+          target = group;
+          break;
+        }
+        continue;
       }
 
-      // If we got here, it's a match for Level 2
-      // But only if neither has a native ID or they both have the same native ID
-      // (Actually, if they had the same native ID we would have caught it in Level 1)
-      // Per hierarchy: Only use Level 2 if Level 1 is missing
-      if (!trade.orderId && !anchor.orderId) {
-        return group;
+      // Level 2 fallback only when both trades have no native identity.
+      if (canHeuristicCompact(anchor, trade, options)) {
+        target = group;
+        break;
       }
     }
 
-    return null;
-  };
-
-  for (const trade of sorted) {
-    const group = findTargetGroup(trade);
-    if (group) {
-      group.push(trade as CompactedTrade);
-    } else {
-      groups.push([trade as CompactedTrade]);
-    }
+    if (target) target.push(trade as CompactedTrade);
+    else groups.push([trade as CompactedTrade]);
   }
 
-  // 2. Reduce groups into single compacted trades
-  const result: CompactedTrade[] = groups.map(group => {
+  const compacted = groups.map((group) => {
     if (group.length === 1) return group[0];
 
     const totalQty = group.reduce((sum, t) => sum + t.qty, 0);
-    const totalValue = group.reduce((sum, t) => sum + (t.qty * t.price), 0);
+    const totalValue = group.reduce((sum, t) => sum + t.qty * t.price, 0);
     const totalFee = group.reduce((sum, t) => sum + t.fee, 0);
-    const avgPrice = totalQty > 0 ? totalValue / totalQty : group[0].price;
-
-    const timestamps = group.map(t => new Date(t.timestamp).getTime());
-    const prices = group.map(t => t.price);
+    const timestamps = group.map((t) => new Date(t.timestamp).getTime());
+    const prices = group.map((t) => t.price);
 
     const earliestTs = new Date(Math.min(...timestamps)).toISOString();
     const latestTs = new Date(Math.max(...timestamps)).toISOString();
 
+    const anchor = group[0];
+    const nativeIdentity = toNativeIdentity(anchor);
+    const method: "native_id" | "heuristic" = nativeIdentity ? "native_id" : "heuristic";
+    const heuristicIdentity = [
+      anchor.venue || "",
+      anchor.symbol,
+      anchor.side,
+      anchor.connectionId || "",
+      anchor.batchId || "",
+      anchor.sourceType || "",
+      normalizeDay(anchor.timestamp),
+      (anchor.feeCurrency || "").toUpperCase(),
+    ].join("|");
+    const eventIdentity = nativeIdentity || `heuristic:${fnv1aHash(heuristicIdentity)}`;
+
     const metadata: CompactionMetadata = {
-      num_fills: group.length,
-      source_ids: group.map(t => t.id).filter(Boolean) as string[],
+      number_of_fills_merged: group.length,
+      source_trade_ids: group.map((t) => t.id).filter(Boolean),
       min_timestamp: earliestTs,
       max_timestamp: latestTs,
       min_price: Math.min(...prices),
       max_price: Math.max(...prices),
       total_fee: totalFee,
-      method: group[0].orderId ? "native_id" : "heuristic"
+      compaction_method: method,
+
+      num_fills: group.length,
+      source_ids: group.map((t) => t.id).filter(Boolean),
+      method,
     };
 
-    // Build deterministic external_id if Level 2 or no native ID
-    let finalExternalId = group[0].orderId || group[0].external_id;
-    if (!finalExternalId) {
-      // Deterministic hash of grouping fields
-      const anchor = group[0];
-      const dateStr = new Date(anchor.timestamp).toISOString().split("T")[0];
-      // Time bucket anchor (rounded to window) to ensure stability
-      const ts = new Date(anchor.timestamp).getTime();
-      const bucket = Math.floor(ts / (options.timeWindowSeconds * 1000));
-      
-      finalExternalId = `compact_${anchor.venue}_${anchor.symbol}_${anchor.side}_${dateStr}_${bucket}`;
-    }
-
     return {
-      ...group[0],
+      ...anchor,
       qty: totalQty,
-      price: avgPrice,
+      price: totalQty > 0 ? totalValue / totalQty : anchor.price,
       fee: totalFee,
       timestamp: earliestTs,
-      external_id: finalExternalId,
-      compaction_metadata: metadata
+      external_id: buildExternalId(anchor, method, eventIdentity, options.timeWindowSeconds),
+      compaction_metadata: metadata,
     };
   });
 
+  const skipped = groups.filter((g) => g.length === 1).length;
+
   return {
-    trades: result,
+    trades: compacted,
     summary: {
-      raw_trades: rawCount,
-      compacted_trades: result.length,
-      skipped_trades: 0, 
-      duplicate_trades: 0, // Deduplication happens later in pipeline
-    }
+      raw_trades: sorted.length,
+      compacted_trades: compacted.length,
+      skipped_trades: skipped,
+      duplicate_trades: 0,
+    },
   };
 }

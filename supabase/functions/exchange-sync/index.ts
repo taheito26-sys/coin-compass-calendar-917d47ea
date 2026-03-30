@@ -92,6 +92,10 @@ class UpstreamError extends AppError {
 interface NormalizedTrade {
   id: string;
   orderId?: string;
+  orderLinkId?: string;
+  executionGroupId?: string;
+  tradeGroupId?: string;
+  parentOrderId?: string;
   symbol: string;
   side: "buy" | "sell" | "transfer_in" | "transfer_out";
   qty: number;
@@ -99,6 +103,10 @@ interface NormalizedTrade {
   fee: number;
   feeCurrency?: string;
   timestamp: string;
+  venue?: string;
+  connectionId?: string;
+  batchId?: string;
+  sourceType?: string;
 }
 
 interface FetchStats {
@@ -494,6 +502,7 @@ Deno.serve(async (req) => {
           preview: !!body.preview,
           coins: Array.isArray(body.coins) ? body.coins : [],
           minUsdValue: Number(body.minUsdValue ?? 100),
+          connectionId: conn.id,
         };
 
         const result = await syncExchangeTrades(
@@ -722,7 +731,7 @@ async function syncExchangeTrades(
   apiKey: string,
   apiSecret: string,
   passphrase?: string | null,
-  options: { period: number; types: string[]; preview: boolean; coins: string[]; minUsdValue: number } = {
+  options: { period: number; types: string[]; preview: boolean; coins: string[]; minUsdValue: number; connectionId?: string } = {
     period: 90,
     types: ["buy", "sell", "transfer_in", "transfer_out"],
     preview: false,
@@ -807,13 +816,22 @@ async function syncExchangeTrades(
     (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
   );
 
-  const { trades: finalTrades, summary: compactionStats } = compactTrades(sortedTrades, {
+  const syncBatchId = `${exchange}:${userId}:${Math.floor(Date.now() / 1000)}`;
+  const compactionInput = sortedTrades.map((t) => ({
+    ...t,
+    venue: exchange,
+    connectionId: options.connectionId || `${exchange}:${userId}`,
+    batchId: syncBatchId,
+    sourceType: "api_sync",
+  }));
+
+  const { trades: finalTrades, summary: compactionStats } = compactTrades(compactionInput, {
     timeWindowSeconds: 60,
     priceTolerancePercent: 0.15,
     isCsvImport: false,
   });
 
-  const duplicateCompactionCount = sortedTrades.length - finalTrades.length;
+  const duplicateCompactionCount = compactionStats.raw_trades - compactionStats.compacted_trades;
 
   safeLog("log", "sync_fetch_stats", {
     exchange,
@@ -837,6 +855,9 @@ async function syncExchangeTrades(
         normalizedTrades: tradeResult.stats.normalizedTrades + transferResult.stats.normalizedTrades,
         invalidTrades: tradeResult.stats.invalidTrades + transferResult.stats.invalidTrades,
         duplicateTrades: duplicateCompactionCount,
+        rawTrades: compactionStats.raw_trades,
+        compactedTrades: compactionStats.compacted_trades,
+        skippedTrades: compactionStats.skipped_trades,
         assetResolutionFailures: 0,
         insertFailures: 0,
         fetchedPages: tradeResult.stats.fetchedPages + transferResult.stats.fetchedPages,
@@ -852,7 +873,7 @@ async function syncExchangeTrades(
   let insertFailures = 0;
 
   for (const trade of finalTrades) {
-    const externalId = `${exchange}_${trade.id}`;
+    const externalId = trade.external_id || `${exchange}_${trade.id}`;
 
     const { data: existing, error: existingError } = await supabase
       .from("transactions")
@@ -975,6 +996,9 @@ async function syncExchangeTrades(
       normalizedTrades: tradeResult.stats.normalizedTrades + transferResult.stats.normalizedTrades,
       invalidTrades: tradeResult.stats.invalidTrades + transferResult.stats.invalidTrades,
       duplicateTrades: duplicateCompactionCount,
+      rawTrades: compactionStats.raw_trades,
+      compactedTrades: compactionStats.compacted_trades,
+      skippedTrades: compactionStats.skipped_trades,
       existingDuplicateTrades,
       assetResolutionFailures,
       insertFailures,

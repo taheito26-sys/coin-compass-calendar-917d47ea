@@ -79,7 +79,7 @@ function CompactionBadge({ fills }: { fills: number }) {
       background: "var(--brand)15", color: "var(--brand)",
       border: "1px solid var(--brand)30",
     }}>
-      🪄 COMPACTED ({fills} fills)
+      Compacted from {fills} fills
     </span>
   );
 }
@@ -378,13 +378,8 @@ export default function LedgerPage() {
         }
       }
       let parsed = parsedBase;
-      if (isWorkerConfigured()) {
-        const fpHashes = parsedBase.rows.map(r => r.fingerprintHash).filter(Boolean);
-        const lookup = await lookupImportRows({ fingerprint_hashes: fpHashes, native_ids: [] });
-        parsed = { ...parsedBase, rows: applyLookup(parsedBase.rows, lookup) };
-      }
 
-      // v2.1: Trade-Event Compaction
+      // v2.1: Trade-Event Compaction (must run before deduplication)
       const normalizedForCompaction: NormalizedTrade[] = parsed.rows.map(r => ({
         id: r.fingerprintHash,
         orderId: r.orderId,
@@ -397,6 +392,9 @@ export default function LedgerPage() {
         timestamp: new Date(r.timestamp).toISOString(),
         venue: r.sourceExchange,
         external_id: r.tradeId || r.fingerprintHash,
+        connectionId: "csv_import",
+        batchId: hash,
+        sourceType: "csv_import",
       }));
 
       const { trades: compactedLocal, summary } = compactTrades(normalizedForCompaction, {
@@ -421,6 +419,13 @@ export default function LedgerPage() {
       });
 
       parsed = { ...parsed, rows: finalPreviewRows };
+
+      if (isWorkerConfigured()) {
+        const fpHashes = parsed.rows.map(r => r.fingerprintHash).filter(Boolean);
+        const nativeIds = parsed.rows.map(r => r.nativeId).filter((v): v is string => !!v);
+        const lookup = await lookupImportRows({ fingerprint_hashes: fpHashes, native_ids: nativeIds });
+        parsed = { ...parsed, rows: applyLookup(parsed.rows, lookup) };
+      }
 
       const already = parsed.rows.filter(r => r.status === "alreadyImported").length;
       setIsDeltaImport(already > 0);
@@ -673,7 +678,7 @@ export default function LedgerPage() {
                   <div>
                     <h3 style={{ margin: 0 }}>Import Preview: {fileName}</h3>
                     <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--muted)" }}>
-                      Detected {importResult.rows.length} logical trades from {compactionStats?.raw_trades ?? importResult.rows.length} raw fills.
+                      Detected {importResult.rows.length} logical trades from {compactionStats?.raw_trades ?? importResult.rows.length} raw fills · invalid rows: {importResult.skippedCount} · duplicate rows: {importResult.rows.filter(r => r.status === "alreadyImported" || (r.message || "").includes("Duplicate row in file")).length} · compacted trades: {compactionStats?.compacted_trades ?? importResult.rows.length}.
                     </p>
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
@@ -696,7 +701,7 @@ export default function LedgerPage() {
                           <td>
                             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                               <TypeBadge type={row.side} />
-                              {row.compactionMetadata && <CompactionBadge fills={row.compactionMetadata.num_fills} />}
+                              {row.compactionMetadata && <CompactionBadge fills={row.compactionMetadata.number_of_fills_merged ?? row.compactionMetadata.num_fills} />}
                             </div>
                           </td>
                           <td className="mono"><strong>{row.assetSymbol}</strong></td>
@@ -740,7 +745,7 @@ export default function LedgerPage() {
                   </div>
                   <div className="stat-item" style={{ background: "var(--panel2)", padding: 12, borderRadius: 8, border: "1px solid var(--line)" }}>
                     <div style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700 }}>COMPACTED TRADES</div>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: "var(--brand)" }}>{importCounts.persisted}</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: "var(--brand)" }}>{compactionStats?.compacted_trades ?? importCounts.persisted}</div>
                   </div>
                 </div>
 
