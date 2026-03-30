@@ -363,7 +363,12 @@ export default function ExchangeConnect() {
               fontWeight: 700, display: "flex", alignItems: "center", gap: 5,
             }}
           >
-            {syncingAll ? "⏳" : "🔄"} {syncingAll ? "Syncing All…" : `Sync All (${connectedExchanges.length})`}
+            {syncingAll ? (
+              <span className="syncing-icon">🔄</span>
+            ) : (
+              <span>🔄</span>
+            )} 
+            {syncingAll ? "Syncing All…" : `Sync All (${connectedExchanges.length})`}
           </button>
 
           {/* Sync All progress bar */}
@@ -544,8 +549,18 @@ export default function ExchangeConnect() {
               {connected && (
                 <div style={{ display: "flex", gap: 4, marginTop: 8 }} onClick={e => e.stopPropagation()}>
                   <button className="btn" onClick={() => syncExchange(ex.id)} disabled={!!syncing || syncingAll}
-                    style={{ fontSize: 10, padding: "4px 10px", background: "var(--brand)", color: "#fff", border: "none", borderRadius: 6 }}>
-                    {isSyncing ? "⏳ Syncing…" : "🔄 Sync"}
+                    style={{ fontSize: 10, padding: "4px 10px", background: "var(--brand)", color: "#fff", border: "none", borderRadius: 6, display: "flex", alignItems: "center", gap: 4 }}>
+                    {isSyncing ? (
+                      <>
+                        <span className="syncing-icon" style={{ fontSize: 12 }}>🔄</span>
+                        Syncing…
+                      </>
+                    ) : (
+                      <>
+                        <span>🔄</span>
+                        Sync
+                      </>
+                    )}
                   </button>
                   <button className="btn secondary" onClick={() => setShowAdvanced(ex.id)}
                     style={{ fontSize: 10, padding: "4px 10px" }}>

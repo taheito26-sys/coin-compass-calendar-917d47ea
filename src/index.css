@@ -1447,3 +1447,21 @@ table { table-layout: auto; }
 .zen-mode .bad { filter: none; }
 .zen-mode .zen-hide { display: none !important; }
 .zen-mode .zen-show { display: inline !important; }
+
+/* ─── SYNC ANIMATIONS ─── */
+@keyframes sync-flash {
+  0% { color: var(--brand); filter: drop-shadow(0 0 2px var(--brand)); }
+  33% { color: var(--warn); filter: drop-shadow(0 0 5px var(--warn)); }
+  66% { color: var(--good); filter: drop-shadow(0 0 5px var(--good)); }
+  100% { color: var(--brand); filter: drop-shadow(0 0 2px var(--brand)); }
+}
+
+@keyframes sync-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.syncing-icon {
+  animation: sync-flash 2s infinite linear, sync-spin 1.2s infinite linear;
+  display: inline-block;
+}
