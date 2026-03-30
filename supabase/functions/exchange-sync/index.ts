@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { compactTrades, type NormalizedTrade } from "../_shared/compaction.ts";
 import { AppError, UpstreamError, type SyncStage, type ExchangeId, type FetchStats, type FetchResult, type ExchangeRequestParams, type ExchangeResponse } from "../_shared/types.ts";
+import { normalizeTradeEconomics, parseInstrumentSymbol } from "../_shared/instrument-normalization.ts";
 
 
 
@@ -138,6 +139,52 @@ function normalizeBaseSymbol(rawSymbol: string): string {
     }
   }
   return upper;
+}
+
+type InstrumentAwareTrade = NormalizedTrade & {
+  rawSymbol?: string;
+  multiplier?: number;
+  grossValue?: number;
+};
+
+function normalizeInstrumentTradeEconomics(
+  exchange: string,
+  trade: InstrumentAwareTrade
+): InstrumentAwareTrade | null {
+  const parsed = parseInstrumentSymbol(trade.symbol);
+  const normalizedEconomics = normalizeTradeEconomics(trade.qty, trade.price, parsed.multiplier);
+
+  if (!normalizedEconomics.invariantHolds) {
+    safeLog("warn", "MULTIPLIER_NORMALIZATION_INVARIANT_FAILED", {
+      exchange,
+      id: trade.id,
+      rawSymbol: parsed.rawSymbol,
+      canonicalSymbol: parsed.canonicalSymbol,
+      multiplier: parsed.multiplier,
+      invariantDelta: normalizedEconomics.invariantDelta,
+    });
+    return null;
+  }
+
+  if (parsed.hadMultiplier) {
+    safeLog("log", "MULTIPLIER_NORMALIZATION_APPLIED", {
+      exchange,
+      id: trade.id,
+      rawSymbol: parsed.rawSymbol,
+      canonicalSymbol: parsed.canonicalSymbol,
+      multiplier: parsed.multiplier,
+    });
+  }
+
+  return {
+    ...trade,
+    symbol: parsed.canonicalSymbol,
+    qty: normalizedEconomics.canonicalQty,
+    price: normalizedEconomics.canonicalPrice,
+    rawSymbol: parsed.rawSymbol,
+    multiplier: parsed.multiplier,
+    grossValue: normalizedEconomics.canonicalGrossValue,
+  };
 }
 
 function toIsoFromMs(raw: unknown): string {
@@ -703,7 +750,14 @@ async function syncExchangeTrades(
     ? options.minUsdValue
     : 100;
 
-  const combined = [...tradeResult.trades, ...transferResult.trades]
+  const normalizedTrades = [...tradeResult.trades, ...transferResult.trades]
+    .map((t) => normalizeInstrumentTradeEconomics(exchange, t as InstrumentAwareTrade))
+    .filter((t): t is InstrumentAwareTrade => !!t);
+
+  const normalizationInvariantFailures =
+    (tradeResult.trades.length + transferResult.trades.length) - normalizedTrades.length;
+
+  const combined = normalizedTrades
     .filter((t) => options.types.includes(t.side))
     .filter((t) => options.coins.length === 0 || options.coins.includes(t.symbol.toUpperCase()))
     .filter((t) => {
@@ -747,6 +801,7 @@ async function syncExchangeTrades(
     tradeStats: tradeResult.stats,
     transferStats: transferResult.stats,
     filteredTrades: sortedTrades.length,
+    normalizationInvariantFailures,
     compactedDuplicates: duplicateCompactionCount,
     clusterCount: finalTrades.length,
     minUsdValue,
@@ -762,6 +817,7 @@ async function syncExchangeTrades(
         fetchedTrades: tradeResult.stats.fetchedTrades + transferResult.stats.fetchedTrades,
         normalizedTrades: tradeResult.stats.normalizedTrades + transferResult.stats.normalizedTrades,
         invalidTrades: tradeResult.stats.invalidTrades + transferResult.stats.invalidTrades,
+        normalizationInvariantFailures,
         duplicateTrades: duplicateCompactionCount,
         rawTrades: compactionStats.raw_trades,
         compactedTrades: compactionStats.compacted_trades,
@@ -855,6 +911,14 @@ async function syncExchangeTrades(
     if (trade.compaction_metadata) {
       tags.push(`compaction_v1:${JSON.stringify(trade.compaction_metadata)}`);
     }
+    const instrumentTrade = trade as InstrumentAwareTrade;
+    if ((instrumentTrade.multiplier || 1) > 1) {
+      tags.push(`instrument_multiplier_v1:${JSON.stringify({
+        rawSymbol: instrumentTrade.rawSymbol || trade.symbol,
+        canonicalSymbol: trade.symbol,
+        multiplier: instrumentTrade.multiplier,
+      })}`);
+    }
 
     const { error: insertError } = await supabase.from("transactions").insert({
       user_id: userId,
@@ -903,6 +967,7 @@ async function syncExchangeTrades(
       fetchedTrades: tradeResult.stats.fetchedTrades + transferResult.stats.fetchedTrades,
       normalizedTrades: tradeResult.stats.normalizedTrades + transferResult.stats.normalizedTrades,
       invalidTrades: tradeResult.stats.invalidTrades + transferResult.stats.invalidTrades,
+      normalizationInvariantFailures,
       duplicateTrades: duplicateCompactionCount,
       rawTrades: compactionStats.raw_trades,
       compactedTrades: compactionStats.compacted_trades,
