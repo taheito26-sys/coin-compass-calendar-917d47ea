@@ -1786,9 +1786,16 @@ async function compactAllTransactions(supabase: any, userId: string) {
     };
   });
 
-  // 3. Perform Atomic Swap (Delete ALL and Re-insert Compacted)
-  // Warning: This is destructive. We use a transaction-like approach.
-  // Since we are in an Edge Function, we'll do delete then insert.
+  // 3. Clear audit trail first (references) to avoid constraint errors
+  // Fingerprints and rows reference transactions by ID, so they must be removed
+  // before we delete from the transactions table.
+  const { error: fpError } = await supabase.from("import_row_fingerprints").delete().eq("user_id", userId);
+  if (fpError) console.error("Could not clear fingerprints", fpError);
+
+  const { error: irError } = await supabase.from("import_rows").delete().eq("user_id", userId);
+  if (irError) console.error("Could not clear import_rows", irError);
+
+  // 4. Perform Atomic Swap (Delete ALL and Re-insert Compacted)
   const { error: delError } = await supabase.from("transactions").delete().eq("user_id", userId);
   if (delError) throw new Error(`Compaction failed during deletion: ${delError.message}`);
 
@@ -1799,7 +1806,7 @@ async function compactAllTransactions(supabase: any, userId: string) {
     if (insError) throw new Error(`Compaction failed during re-insertion: ${insError.message}`);
   }
 
-  safeLog("log", "compact_all_success", { user: userPrefix(userId), original: originalCount, merged: mergedCount });
+  console.log(`[compaction] success: original=${originalCount}, merged=${mergedCount}`);
 
   return {
     ok: true,
