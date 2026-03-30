@@ -33,7 +33,7 @@ const ALL_COLUMNS = [
   { key: "rank",       label: "#",            default: true  },
   { key: "asset",      label: "Asset",        default: true  },
   { key: "amount",     label: "Amount",       default: true  },
-  { key: "sparkline",  label: "Price Graph",  default: true  },
+  { key: "sparkline",  label: "PRICE GRAPH",  default: true  },
   { key: "change1h",   label: "1h %",         default: true  },
   { key: "change24h",  label: "24h %",        default: true  },
   { key: "change7d",   label: "7d %",         default: true  },
@@ -477,7 +477,7 @@ export default function PortfolioPage() {
         borderRadius: "var(--lt-radius)", padding: 12,
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
-          <div style={{ cursor: "pointer" }} onClick={() => !isLot && setDrilldownSym(pos.sym)}>
+          <div style={{ cursor: "pointer" }} onClick={() => setDrilldownSym(pos.sym)}>
             <span className="mono" style={{ fontWeight: 900, fontSize: 15 }}>{pos.sym}</span>
             <span className="muted" style={{ fontSize: 10, marginLeft: 6 }}>{alloc.toFixed(1)}%</span>
           </div>
@@ -1010,7 +1010,11 @@ export default function PortfolioPage() {
                                   <span className="mono" style={{ fontWeight: 900 }}>{pos.sym}</span>
                                 </td>
                               ),
-                              sparkline: <td key="sparkline"><Sparkline data={sparkData.get(pos.coinId) ?? []} positive={pos.change7d >= 0} /></td>,
+                              sparkline: (
+                                <td key="sparkline" style={{ minWidth: 100, cursor: "pointer" }} onClick={() => setDrilldownSym(pos.sym)}>
+                                  <Sparkline data={sparkData.get(pos.coinId) ?? []} positive={pos.change7d >= 0} />
+                                </td>
+                              ),
                               amount:    <td key="amount"    className="mono">{fmtQty(pos.qty)}</td>,
                               change1h:  <td key="change1h"><ChangePill val={pos.change1h} /></td>,
                               change24h: <td key="change24h"><ChangePill val={pos.change24h} /></td>,
@@ -1073,7 +1077,7 @@ export default function PortfolioPage() {
                             };
 
                             const rows: React.ReactNode[] = [
-                              <tr key={pos.sym} style={{ cursor: "pointer" }} onClick={() => !isLotView && setDrilldownSym(pos.sym)}>
+                              <tr key={pos.sym} style={{ cursor: "pointer" }} onClick={() => setDrilldownSym(pos.sym)}>
                                 {colOrder.filter(k => visibleCols.has(k)).map(k => cellMap[k])}
                               </tr>,
                             ];

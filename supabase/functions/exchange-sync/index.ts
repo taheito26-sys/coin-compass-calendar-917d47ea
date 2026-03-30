@@ -336,6 +336,16 @@ Deno.serve(async (req) => {
       return json({ connections: data || [] });
     }
 
+    // POST /exchange-sync/compact-all
+    if (req.method === "POST" && action === "compact-all") {
+      try {
+        const result = await compactAllTransactions(supabase, user.id);
+        return json(result);
+      } catch (err) {
+        return toErrorResponse(err, undefined, "sync");
+      }
+    }
+
     // POST /exchange-sync
     if (req.method === "POST" && (!action || action === "exchange-sync")) {
       const body = await req.json();
@@ -1702,33 +1712,119 @@ async function fetchOkxTransfers(
   return { trades: all, stats };
 }
 
-// --- crypto helpers ---
-async function hmacSign(secret: string, message: string) {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(message));
-  return Array.from(new Uint8Array(sig))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+async function compactAllTransactions(supabase: any, userId: string) {
+  safeLog("log", "compact_all_start", { user: userPrefix(userId) });
+
+  // 1. Fetch ALL transactions for the user
+  const { data: txs, error } = await supabase
+    .from("transactions")
+    .select("*")
+    .eq("user_id", userId);
+
+  if (error) {
+    throw new AppError({
+      message: "Failed to fetch transactions for compaction",
+      status: 500,
+      stage: "sync",
+      hint: error.message,
+    });
+  }
+
+  if (!txs || txs.length === 0) {
+    return { ok: true, message: "No transactions to compact", original: 0, compacted: 0 };
+  }
+
+  const originalCount = txs.length;
+  const groups: Record<string, any[]> = {};
+  
+  // Group by Asset and Side
+  for (const t of txs) {
+    const key = `${t.asset_id}_${t.type}`;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(t);
+  }
+
+  const finalTxs: any[] = [];
+  let mergedCount = 0;
+
+  for (const group of Object.values(groups)) {
+    const sorted = group.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    const clusters: any[] = [];
+
+    for (const tx of sorted) {
+      const txTs = new Date(tx.timestamp).getTime();
+      const last = clusters[clusters.length - 1];
+
+      if (last) {
+        const diffMs = txTs - new Date(last.timestamp).getTime();
+        const sameOrder = tx.order_id && last.order_id && tx.order_id === last.order_id;
+        // Same asset (implied by group) and within 15 mins or same order
+        if (diffMs < 15 * 60 * 1000 || sameOrder) {
+          const totalQty = last.qty + tx.qty;
+          if (totalQty > 0) {
+            last.unit_price = (last.unit_price * last.qty + tx.unit_price * tx.qty) / totalQty;
+          }
+          last.qty = totalQty;
+          last.fee_amount = (last.fee_amount || 0) + (tx.fee_amount || 0);
+          last.note = (last.note || "") + (tx.note ? ` + ${tx.note}` : "");
+          // Keep the earliest ID to avoid breaking UI references if possible, 
+          // or we just trust the new state. We'll keep the first one.
+          mergedCount++;
+          continue;
+        }
+      }
+      clusters.push({ ...tx });
+    }
+    finalTxs.push(...clusters);
+  }
+
+  if (mergedCount === 0) {
+    return { ok: true, message: "No fragmented trades found to compact.", original: originalCount, compacted: 0 };
+  }
+
+  // 2. Perform Atomic Swap (Delete ALL and Re-insert Compacted)
+  // Warning: This is destructive. We use a transaction-like approach.
+  // Since we are in an Edge Function, we'll do delete then insert.
+  const { error: delError } = await supabase.from("transactions").delete().eq("user_id", userId);
+  if (delError) throw new Error(`Compaction failed during deletion: ${delError.message}`);
+
+  // Re-insert in batches of 500 to stay within limits
+  for (let i = 0; i < finalTxs.length; i += 500) {
+    const batch = finalTxs.slice(i, i + 500).map(t => {
+      const { id, created_at, ...rest } = t; // Let database generate new IDs or omit them
+      return rest;
+    });
+    const { error: insError } = await supabase.from("transactions").insert(batch);
+    if (insError) throw new Error(`Compaction failed during re-insertion: ${insError.message}`);
+  }
+
+  safeLog("log", "compact_all_success", { user: userPrefix(userId), original: originalCount, merged: mergedCount });
+
+  return {
+    ok: true,
+    message: `Successfully compacted ${mergedCount} fragmented entries.`,
+    original: originalCount,
+    compacted: mergedCount,
+    finalCount: finalTxs.length
+  };
 }
 
-async function hmacSignBase64(secret: string, message: string) {
+async function hmacSign(secret: string, message: string): Promise<string> {
   const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(message));
-  return btoa(String.fromCharCode(...new Uint8Array(sig)));
+  const keyData = encoder.encode(secret);
+  const messageData = encoder.encode(message);
+  const cryptoKey = await crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const signature = await crypto.subtle.sign("HMAC", cryptoKey, messageData);
+  return Array.from(new Uint8Array(signature)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function hmacSignBase64(secret: string, message: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(secret);
+  const messageData = encoder.encode(message);
+  const cryptoKey = await crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const signature = await crypto.subtle.sign("HMAC", cryptoKey, messageData);
+  return btoa(String.fromCharCode(...new Uint8Array(signature)));
 }
 
 async function hmacSign512(secret: string, message: string) {

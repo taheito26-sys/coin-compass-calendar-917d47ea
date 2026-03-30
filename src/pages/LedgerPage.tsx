@@ -9,6 +9,7 @@ import {
   isWorkerConfigured,
   lookupImportRows,
   checkFileImported,
+  apiFetch,
 } from "@/lib/api";
 import { getAssetCatalog, resolveAssetId, resolveOrCreateAsset } from "@/lib/assetResolver";
 import { useLedgerMutations, type WriteStatus } from "@/hooks/useLedgerMutations";
@@ -452,14 +453,40 @@ export default function LedgerPage() {
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span className="pill">{filteredTxs.length} entries</span>
               {stats.total > 0 && (
-                <button className="btn secondary" disabled={!canWrite || clearing} onClick={async () => {
-                  if (!confirm("Clear ALL data?")) return;
-                  setClearing(true);
-                  if ((await clearAllData()).success) toast("Data cleared", "good");
-                  setClearing(false);
-                }} style={{ fontSize: 11, padding: "4px 10px", color: "var(--bad)" }}>
-                  🗑 Clear All
-                </button>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button 
+                    className="btn secondary" 
+                    disabled={!canWrite || clearing} 
+                    onClick={async () => {
+                      if (!confirm("Compact all historical trades? This will merge fragmented fills into single VWAP entries. This action cannot be easily undone.")) return;
+                      setClearing(true);
+                      try {
+                        const res = await apiFetch("/compact-all", { method: "POST" });
+                        const result = await res.json();
+                        if (result.ok) {
+                          toast(result.message || "History compacted ✓", "good");
+                          await rehydrateFromBackend();
+                        } else {
+                          toast(result.error || "Compaction failed", "bad");
+                        }
+                      } catch (err: any) {
+                        toast(err.message || "Request failed", "bad");
+                      }
+                      setClearing(false);
+                    }} 
+                    style={{ fontSize: 11, padding: "4px 10px", color: "var(--brand)" }}
+                  >
+                    🪄 Compact History
+                  </button>
+                  <button className="btn secondary" disabled={!canWrite || clearing} onClick={async () => {
+                    if (!confirm("Clear ALL data?")) return;
+                    setClearing(true);
+                    if ((await clearAllData()).success) toast("Data cleared", "good");
+                    setClearing(false);
+                  }} style={{ fontSize: 11, padding: "4px 10px", color: "var(--bad)" }}>
+                    🗑 Clear All
+                  </button>
+                </div>
               )}
             </div>
           </div>

@@ -99,31 +99,7 @@ interface SyncOptions {
 const AUTO_SYNC_KEY = "exchange_auto_sync";
 const AUTO_SYNC_INTERVAL_KEY = "exchange_auto_sync_interval";
 
-async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
-  // Use the official Supabase functions.invoke helper.
-  // This automatically handles the base URL, auth headers, and apikey.
-  const { data, error } = await supabase.functions.invoke(`exchange-sync${path}`, {
-    method: options.method as any || "GET",
-    body: options.body ? JSON.parse(options.body as string) : undefined,
-    headers: options.headers as Record<string, string>,
-  });
-
-  if (error) {
-    console.error("[ExchangeConnect] Function error:", error);
-    // Return a fake Response object that matches what the callers expect
-    return {
-      ok: false,
-      status: (error as any).status || 500,
-      json: async () => ({ error: error.message || "Function call failed" }),
-    } as Response;
-  }
-
-  return {
-    ok: true,
-    status: 200,
-    json: async () => data,
-  } as Response;
-}
+import { apiFetch } from "@/lib/api";
 
 export default function ExchangeConnect() {
   const { state, setState, rehydrateFromBackend, toast } = useCrypto();
