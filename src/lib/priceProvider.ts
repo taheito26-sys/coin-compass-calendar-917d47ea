@@ -54,7 +54,7 @@ export const BINANCE_SYMBOLS: Record<string, string> = {
   PIXEL: "PIXELUSDT", PORTAL: "PORTALUSDT", AEVO: "AEVOUSDT",
   W: "WUSDT", ENA: "ENAUSDT", NOT: "NOTUSDT", IO: "IOUSDT",
   ZK: "ZKUSDT", ZRO: "ZROUSDT", LISTA: "LISTAUSDT", BOME: "BOMEUSDT",
-  BB: "BBUSDT", REZ: "REZUSDT", TON: "TONUSDT", PEOPLE: "PEOPLEUSDT",
+  BB: "BBUSDT", REZ: "REZUSDT", TON: "TONUSDT", TONCOIN: "TONUSDT", PEOPLE: "PEOPLEUSDT",
   LINA: "LINAUSDT", RUNE: "RUNEUSDT", GMX: "GMXUSDT", PENDLE: "PENDLEUSDT",
   SSV: "SSVUSDT", TWT: "TWTUSDT", CFX: "CFXUSDT", ACH: "ACHUSDT",
   JASMY: "JASMYUSDT", SUPER: "SUPERUSDT", MINA: "MINAUSDT",
@@ -107,7 +107,7 @@ export const KNOWN_IDS: Record<string, string> = {
   RAY: "raydium", BLUR: "blur",
   STRK: "starknet", MANTA: "manta-network", DYM: "dymension",
   PIXEL: "pixels", PORTAL: "portal-2",
-  ENA: "ethena", NOT: "notcoin", TON: "the-open-network",
+  ENA: "ethena", NOT: "notcoin", TON: "the-open-network", TONCOIN: "the-open-network",
   PEOPLE: "constitutiondao", RUNE: "thorchain", GMX: "gmx",
   PENDLE: "pendle", CFX: "conflux-token",
   JASMY: "jasmycoin", MINA: "mina-protocol",
@@ -135,6 +135,8 @@ export interface SpotPrice {
   source: "binance" | "coingecko";
 }
 
+import { resolveCoin } from "./marketData";
+
 export async function getSpotPrices(
   assets: { sym: string; coingeckoId?: string | null }[]
 ): Promise<Record<string, SpotPrice>> {
@@ -153,7 +155,17 @@ export async function getSpotPrices(
   const binancePairs: string[] = [];
   const pairToAsset = new Map<string, typeof nonStable[0]>();
   for (const a of nonStable) {
-    const pair = BINANCE_SYMBOLS[a.sym.toUpperCase()];
+    const key = a.sym.toUpperCase();
+    let pair = BINANCE_SYMBOLS[key];
+    
+    // Auto-discovery for Binance pairs not in the hardcoded map
+    if (!pair) {
+      const resolved = resolveCoin(key);
+      if (resolved && resolved.symbol) {
+        pair = `${resolved.symbol.toUpperCase()}USDT`;
+      }
+    }
+
     if (pair) {
       binancePairs.push(pair);
       pairToAsset.set(pair, a);
@@ -169,7 +181,7 @@ export async function getSpotPrices(
       if (r.ok) {
         const items: any[] = await r.json();
         for (const item of items) {
-          const sym = _reverseMap.get(item.symbol);
+          const sym = _reverseMap.get(item.symbol) || item.symbol.replace("USDT", "").toUpperCase();
           if (sym) {
             result[sym] = {
               price: parseFloat(item.lastPrice) || 0,
@@ -186,27 +198,38 @@ export async function getSpotPrices(
     }
   }
 
-  // CoinGecko fallback for missing
-  const missing = nonStable.filter(a => !result[a.sym.toUpperCase()] && a.coingeckoId);
+  // CoinGecko fallback for missing items or those not on Binance
+  const missing = nonStable.filter(a => !result[a.sym.toUpperCase()]);
   if (missing.length > 0) {
     try {
-      const ids = missing.map(a => a.coingeckoId!).join(",");
-      const r = await fetch(
-        `${COINGECKO_API}/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`,
-        { signal: AbortSignal.timeout(10000) }
-      );
-      if (r.ok) {
-        const data: Record<string, { usd?: number; usd_24h_change?: number }> = await r.json();
-        for (const a of missing) {
-          const cg = data[a.coingeckoId!];
-          if (cg?.usd != null) {
-            result[a.sym.toUpperCase()] = {
-              price: cg.usd,
-              change24h: cg.usd_24h_change ?? 0,
-              ts: now,
-              stale: false,
-              source: "coingecko",
-            };
+      const mapped = missing.map(a => {
+        const key = a.sym.toUpperCase();
+        return a.coingeckoId || KNOWN_IDS[key] || resolveCoin(key)?.id;
+      }).filter(Boolean);
+
+      if (mapped.length > 0) {
+        const ids = mapped.join(",");
+        const r = await fetch(
+          `${COINGECKO_API}/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`,
+          { signal: AbortSignal.timeout(10000) }
+        );
+        if (r.ok) {
+          const data: Record<string, { usd?: number; usd_24h_change?: number }> = await r.json();
+          for (const a of missing) {
+            const key = a.sym.toUpperCase();
+            const cgId = a.coingeckoId || KNOWN_IDS[key] || resolveCoin(key)?.id;
+            if (!cgId) continue;
+
+            const cg = data[cgId];
+            if (cg?.usd != null) {
+              result[key] = {
+                price: cg.usd,
+                change24h: cg.usd_24h_change ?? 0,
+                ts: now,
+                stale: false,
+                source: "coingecko",
+              };
+            }
           }
         }
       }

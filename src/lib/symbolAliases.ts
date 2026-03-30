@@ -18,8 +18,8 @@ const SYMBOL_ALIASES: Record<string, string> = {
   RNDR: "RENDER",
   WBTC: "WBTC",
   STETH: "STETH",
-  TON: "TONCOIN",
-  TONCOIN: "TONCOIN",
+  TON: "TON",
+  TONCOIN: "TON",
   ASI: "FET",
   FET: "FET",
   // Add more as needed
