@@ -283,8 +283,22 @@ async function testExchangeConnection(
   }
 }
 
-// ─── Sync trades ─────────────────────────────────────────────────────────────
+interface NormalizedTrade {
+  id: string;
+  orderId?: string;
+  symbol: string;
+  side: "buy" | "sell";
+  qty: number;
+  price: number;
+  fee: number;
+  feeCurrency?: string;
+  timestamp: string;
+}
 
+/**
+ * Standardizes trade data from various exchange formats into a unified internal format
+ * and applies compaction logic to merge fragmented fills into clean "Purchase Operations".
+ */
 async function syncExchangeTrades(
   supabase: any,
   userId: string,
@@ -293,7 +307,7 @@ async function syncExchangeTrades(
   apiSecret: string,
   passphrase?: string | null
 ): Promise<{ ok: boolean; synced: number; skipped: number }> {
-  let trades: any[] = [];
+  let trades: NormalizedTrade[] = [];
 
   console.log(`[sync] Fetching trades from ${exchange}...`);
 
@@ -320,40 +334,39 @@ async function syncExchangeTrades(
       throw new Error(`Unsupported exchange: ${exchange}`);
   }
 
-  console.log(`[sync] ${exchange}: fetched ${trades.length} trades`);
+  console.log(`[sync] ${exchange}: fetched ${trades.length} raw fills`);
 
   if (!trades.length) return { ok: true, synced: 0, skipped: 0 };
 
-  if (!trades.length) return { ok: true, synced: 0, skipped: 0 };
+  // --- Smart Trade Compaction Logic ---
+  // 1. Sort by time
+  const sorted = [...trades]
+    .map(t => ({ ...t, symbol: t.symbol.toUpperCase() }))
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
-  // --- Advanced Trade Compaction Logic ---
-  // Group trades that happen near each other (within 15 mins) into a single "Purchase Operation"
-  // This handles multiple fills, slight price variations, and fragmented executions.
-  const sorted = [...trades].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-  const clusters: NormalizedTrade[] = [];
+  const clusters: (NormalizedTrade & { _lastTs: number })[] = [];
 
   for (const t of sorted) {
     const tTime = new Date(t.timestamp).getTime();
-    // Look for an existing cluster to merge into
-    // Requirement: Same symbol, Same side, and happened within 15 minutes of the last cluster entry
-    const existing = clusters.findLast(c => 
-      c.symbol === t.symbol && 
-      c.side === t.side && 
-      (tTime - new Date(c.timestamp).getTime()) < 15 * 60 * 1000
-    );
+    
+    // Strategy: 
+    // - If orderId matches exactly, it's definitely the same operation.
+    // - Otherwise, fallback to a 15-minute sliding window (if same symbol/side).
+    const existing = clusters.findLast(c => {
+      const isSameOp = t.orderId && c.orderId && t.orderId === c.orderId;
+      const isClose = c.symbol === t.symbol && c.side === t.side && (tTime - c._lastTs) < 15 * 60 * 1000;
+      return isSameOp || isClose;
+    });
 
     if (existing) {
-      // Weighted average price: (P1*Q1 + P2*Q2) / (Q1 + Q2)
       const totalQty = existing.qty + t.qty;
-      const weightedPrice = (existing.price * existing.qty + t.price * t.qty) / totalQty;
-      
-      existing.price = weightedPrice;
+      // Weighted average price
+      existing.price = (existing.price * existing.qty + t.price * t.qty) / totalQty;
       existing.qty = totalQty;
       existing.fee += t.fee;
-      // We keep the original timestamp of the START of the operation
+      existing._lastTs = tTime; // Update sliding window
     } else {
-      // Start a new cluster
-      clusters.push({ ...t });
+      clusters.push({ ...t, _lastTs: tTime });
     }
   }
 
@@ -382,9 +395,10 @@ async function syncExchangeTrades(
       assetId = newAsset.id;
     }
 
-    // Check for duplicate
-    // For clusters, we use the specific ID of the FIRST trade in the cluster as the anchor
-    const externalId = `${exchange}_cluster_${trade.id}`;
+    // Stable ID for clusters: use first fill ID or order ID
+    const externalId = trade.orderId 
+      ? `${exchange}_order_${trade.orderId}`
+      : `${exchange}_cluster_${trade.id}`;
 
     const { data: existing } = await supabase
       .from("transactions")
@@ -422,16 +436,6 @@ async function syncExchangeTrades(
 
 // ─── Exchange-specific trade fetchers ────────────────────────────────────────
 
-interface NormalizedTrade {
-  id: string;
-  symbol: string;
-  side: string;
-  qty: number;
-  price: number;
-  fee: number;
-  feeCurrency: string;
-  timestamp: string;
-}
 
 async function fetchBinanceTrades(apiKey: string, apiSecret: string): Promise<NormalizedTrade[]> {
   // Get exchange info for symbols
@@ -472,18 +476,19 @@ async function fetchBinanceTrades(apiKey: string, apiSecret: string): Promise<No
       const trades = await res.json();
       if (!Array.isArray(trades)) continue;
 
-      for (const t of trades) {
-        allTrades.push({
-          id: String(t.id),
-          symbol: asset,
-          side: t.isBuyer ? "buy" : "sell",
-          qty: parseFloat(t.qty),
-          price: parseFloat(t.price),
-          fee: parseFloat(t.commission || 0),
-          feeCurrency: t.commissionAsset || "USDT",
-          timestamp: new Date(t.time).toISOString(),
-        });
-      }
+        for (const t of trades || []) {
+          allTrades.push({
+            id: String(t.id),
+            orderId: String(t.orderId),
+            symbol: asset.toUpperCase(),
+            side: t.isBuyer ? "buy" : "sell",
+            qty: parseFloat(t.qty || 0),
+            price: parseFloat(t.price || 0),
+            fee: parseFloat(t.commission || 0),
+            feeCurrency: t.commissionAsset || "USDT",
+            timestamp: new Date(t.time).toISOString(),
+          });
+        }
     }
   }
   return allTrades;
@@ -540,28 +545,29 @@ async function fetchBybitTrades(apiKey: string, apiSecret: string): Promise<Norm
         console.log(`[Bybit] Got ${list.length} trades in this page`);
       }
 
-      for (const t of list) {
-        const rawSymbol = (t.symbol || "").toUpperCase();
-        let baseAsset = rawSymbol;
-        const quotes = ["USDT", "USDC", "USDD", "USDE", "BUSD", "BTC", "ETH", "EUR", "GBP", "USD", "DAI"];
-        for (const q of quotes) {
-          if (rawSymbol.length > q.length && rawSymbol.endsWith(q)) {
-            baseAsset = rawSymbol.slice(0, -q.length);
-            break;
+        for (const t of list) {
+          const rawSymbol = (t.symbol || "").toUpperCase();
+          let baseAsset = rawSymbol;
+          const quotes = ["USDT", "USDC", "USDD", "USDE", "BUSD", "BTC", "ETH", "EUR", "GBP", "USD", "DAI"];
+          for (const q of quotes) {
+            if (rawSymbol.length > q.length && rawSymbol.endsWith(q)) {
+              baseAsset = rawSymbol.slice(0, -q.length);
+              break;
+            }
           }
-        }
 
-        allTrades.push({
-          id: t.execId || t.orderId || String(Date.now()),
-          symbol: baseAsset,
-          side: t.side?.toLowerCase() === "buy" ? "buy" : "sell",
-          qty: parseFloat(t.execQty || 0),
-          price: parseFloat(t.execPrice || 0),
-          fee: parseFloat(t.execFee || 0),
-          feeCurrency: t.feeCurrency || "USDT",
-          timestamp: new Date(parseInt(t.execTime || Date.now())).toISOString(),
-        });
-      }
+          allTrades.push({
+            id: t.execId || String(Date.now()),
+            orderId: t.orderId,
+            symbol: baseAsset.toUpperCase(),
+            side: t.side?.toLowerCase() === "buy" ? "buy" : "sell",
+            qty: parseFloat(t.execQty || 0),
+            price: parseFloat(t.execPrice || 0),
+            fee: parseFloat(t.execFee || 0),
+            feeCurrency: t.feeCurrency || "USDT",
+            timestamp: new Date(parseInt(t.execTime || Date.now())).toISOString(),
+          });
+        }
 
       cursor = data.result?.nextPageCursor || "";
       hasMore = !!cursor && list.length > 0;
@@ -626,6 +632,7 @@ async function fetchOkxTrades(
       const baseAsset = (t.instId || "").split("-")[0];
       allTrades.push({
         id: t.tradeId || t.billId || String(Date.now()),
+        orderId: t.ordId,
         symbol: baseAsset.toUpperCase(),
         side: t.side?.toLowerCase() || "buy",
         qty: parseFloat(t.fillSz || 0),
