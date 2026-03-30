@@ -750,7 +750,7 @@ export default function ExchangeConnect() {
                     <table style={{ fontSize: 10 }}>
                       <thead>
                         <tr>
-                          <th>TIME</th><th>TYPE</th><th>ASSET</th><th>QTY</th><th>PRICE</th>
+                          <th>TIME</th><th>TYPE</th><th>ASSET</th><th>QTY</th><th>PRICE</th><th>EVENT</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -761,6 +761,7 @@ export default function ExchangeConnect() {
                             <td><strong>{p.symbol}</strong></td>
                             <td>{fmtQty(p.qty)}</td>
                             <td>${fmtPx(p.price)}</td>
+                            <td>{p.compaction_metadata?.number_of_fills_merged > 1 ? `Compacted from ${p.compaction_metadata.number_of_fills_merged} fills` : "—"}</td>
                           </tr>
                         ))}
                       </tbody>
