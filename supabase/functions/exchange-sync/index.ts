@@ -311,9 +311,22 @@ async function syncExchangeTrades(
 
   console.log(`[sync] Fetching trades from ${exchange}...`);
 
+  // Get assets we already know about for this user to ensure we scan history even for moved/sold assets
+  const { data: userAssets } = await supabase
+    .from("transactions")
+    .select("assets(symbol, binance_symbol)")
+    .eq("user_id", userId)
+    .eq("venue", exchange);
+  
+  const knownSymbols = new Set<string>();
+  for (const row of userAssets || []) {
+    const s = row.assets?.symbol || row.assets?.binance_symbol;
+    if (s) knownSymbols.add(s.toUpperCase());
+  }
+
   switch (exchange) {
     case "binance":
-      trades = await fetchBinanceTrades(apiKey, apiSecret);
+      trades = await fetchBinanceTrades(apiKey, apiSecret, Array.from(knownSymbols));
       break;
     case "bybit":
       trades = await fetchBybitTrades(apiKey, apiSecret);
@@ -459,8 +472,12 @@ async function syncExchangeTrades(
   return { ok: true, synced, skipped };
 }
 
-async function fetchBinanceTrades(apiKey: string, apiSecret: string): Promise<NormalizedTrade[]> {
-  // Get exchange info for symbols
+async function fetchBinanceTrades(
+  apiKey: string, 
+  apiSecret: string, 
+  knownAssets: string[] = []
+): Promise<NormalizedTrade[]> {
+  // Get current balances
   const ts = Date.now();
   const query = `timestamp=${ts}`;
   const sig = await hmacSign(apiSecret, query);
@@ -471,46 +488,57 @@ async function fetchBinanceTrades(apiKey: string, apiSecret: string): Promise<No
   if (!accRes.ok) throw new Error(`Binance account fetch failed: ${accRes.status}`);
   const account = await accRes.json();
 
-  // Get non-zero balances to find relevant symbols
-  const balances = (account.balances || []).filter(
-    (b: any) => parseFloat(b.free) > 0 || parseFloat(b.locked) > 0
-  );
-  const assets = balances.map((b: any) => b.asset as string);
+  const currentAssets = (account.balances || [])
+    .filter((b: any) => parseFloat(b.free) > 0 || parseFloat(b.locked) > 0)
+    .map((b: any) => b.asset as string);
+
+  // Merge current holdings with previously known assets and major coins
+  const assetsToScan = Array.from(new Set([
+    ...currentAssets, 
+    ...knownAssets, 
+    "BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "DOGE", "TRX", "TONCOIN", "AVAX", "LINK", "DOT", "MATIC", "PEPE", "SHIB", "APT", "SUI", "NEAR", "FET", "RENDER", "AXS", "INJ", "TAO", "QNT"
+  ]));
 
   const allTrades: NormalizedTrade[] = [];
-  const quotes = ["USDT", "USDC", "BUSD", "TUSD", "FDUSD", "DAI", "BTC", "ETH", "BNB"];
+  const quotes = ["USDT", "USDC", "BUSD", "TUSD", "FDUSD", "DAI", "BTC", "ETH", "BNB", "USD", "EUR", "GBP"];
 
-  for (const asset of assets) {
+  console.log(`[Binance] Deep scan for ${assetsToScan.length} assets...`);
+
+  // Max lookback window: 180 days
+  const startTime = Date.now() - (180 * 24 * 60 * 60 * 1000);
+
+  for (const asset of assetsToScan) {
     if (quotes.includes(asset)) continue;
     
-    // Try common quote currencies for this asset
     const possibleSymbols = quotes.map(q => `${asset}${q}`);
     
     for (const symbol of possibleSymbols) {
       const ts2 = Date.now();
-      const q = `symbol=${symbol}&limit=1000&timestamp=${ts2}`;
+      // limit=1000 is max per symbol. We use startTime to catch older history.
+      const q = `symbol=${symbol}&limit=1000&startTime=${startTime}&timestamp=${ts2}`;
       const s = await hmacSign(apiSecret, q);
       const res = await fetch(
         `https://api.binance.com/api/v3/myTrades?${q}&signature=${s}`,
         { headers: { "X-MBX-APIKEY": apiKey } }
       );
+      
       if (!res.ok) continue;
       const trades = await res.json();
       if (!Array.isArray(trades)) continue;
 
-        for (const t of trades || []) {
-          allTrades.push({
-            id: String(t.id),
-            orderId: String(t.orderId),
-            symbol: asset.toUpperCase(),
-            side: t.isBuyer ? "buy" : "sell",
-            qty: parseFloat(t.qty || 0),
-            price: parseFloat(t.price || 0),
-            fee: parseFloat(t.commission || 0),
-            feeCurrency: t.commissionAsset || "USDT",
-            timestamp: new Date(t.time).toISOString(),
-          });
-        }
+      for (const t of trades) {
+        allTrades.push({
+          id: String(t.id),
+          orderId: String(t.orderId),
+          symbol: asset.toUpperCase(),
+          side: t.isBuyer ? "buy" : "sell",
+          qty: parseFloat(t.qty || 0),
+          price: parseFloat(t.price || 0),
+          fee: parseFloat(t.commission || 0),
+          feeCurrency: t.commissionAsset || "USDT",
+          timestamp: new Date(t.time).toISOString(),
+        });
+      }
     }
   }
   return allTrades;
