@@ -320,10 +320,33 @@ async function syncExchangeTrades(
 
   if (!trades.length) return { ok: true, synced: 0, skipped: 0 };
 
+  // --- Trade Compaction Logic ---
+  // Group trades that happen at the same time, price, and side to avoid fragmentation
+  const compacted: NormalizedTrade[] = [];
+  const groups = new Map<string, NormalizedTrade>();
+
+  for (const t of trades) {
+    // Minute-level grouping (Bybit/Binance often fill a single order in dozens of pieces within 1 second)
+    const minuteTs = t.timestamp.substring(0, 16); // "YYYY-MM-DDTHH:mm"
+    const key = `${t.symbol}|${t.side}|${t.price}|${minuteTs}`;
+    
+    if (groups.has(key)) {
+      const existing = groups.get(key)!;
+      existing.qty += t.qty;
+      existing.fee += t.fee;
+      // We append IDs to keep track for idempotency if needed, 
+      // but usually the first trade ID + key hash is enough
+    } else {
+      groups.set(key, { ...t });
+    }
+  }
+  
+  const finalTrades = Array.from(groups.values());
+
   let synced = 0;
   let skipped = 0;
 
-  for (const trade of trades) {
+  for (const trade of finalTrades) {
     // Resolve or create asset
     const { data: existingAsset } = await supabase
       .from("assets")
@@ -346,7 +369,10 @@ async function syncExchangeTrades(
     }
 
     // Check for duplicate by external_id
-    const externalId = `${exchange}_${trade.id}`;
+    // For compacted trades, we use a hash of the group key to maintain idempotency
+    const minuteTs = trade.timestamp.substring(0, 16);
+    const externalId = `${exchange}_compact_${trade.symbol}_${trade.side}_${trade.price}_${minuteTs}`;
+
     const { data: existing } = await supabase
       .from("transactions")
       .select("id")
