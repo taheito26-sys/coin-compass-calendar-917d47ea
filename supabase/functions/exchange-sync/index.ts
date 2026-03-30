@@ -295,6 +295,8 @@ async function syncExchangeTrades(
 ): Promise<{ ok: boolean; synced: number; skipped: number }> {
   let trades: any[] = [];
 
+  console.log(`[sync] Fetching trades from ${exchange}...`);
+
   switch (exchange) {
     case "binance":
       trades = await fetchBinanceTrades(apiKey, apiSecret);
@@ -317,6 +319,8 @@ async function syncExchangeTrades(
     default:
       throw new Error(`Unsupported exchange: ${exchange}`);
   }
+
+  console.log(`[sync] ${exchange}: fetched ${trades.length} trades`);
 
   if (!trades.length) return { ok: true, synced: 0, skipped: 0 };
 
@@ -478,64 +482,92 @@ async function fetchBinanceTrades(apiKey: string, apiSecret: string): Promise<No
 
 async function fetchBybitTrades(apiKey: string, apiSecret: string): Promise<NormalizedTrade[]> {
   const allTrades: NormalizedTrade[] = [];
-  const ts = Date.now();
   const recvWindow = "5000";
-  const startTime = Date.now() - (180 * 24 * 60 * 60 * 1000);
-  let cursor = "";
-  let hasMore = true;
+  const now = Date.now();
+  const maxHistory = 180 * 24 * 60 * 60 * 1000; // 180 days
+  const windowSize = 7 * 24 * 60 * 60 * 1000; // 7 days per window (Bybit API limit)
 
-  while (hasMore) {
-    const params = `category=spot&limit=100&startTime=${startTime}${cursor ? `&cursor=${cursor}` : ""}`;
-    const payload = `${ts}${apiKey}${recvWindow}${params}`;
-    const sig = await hmacSign(apiSecret, payload);
-    
-    const res = await fetch(
-      `https://api.bybit.com/v5/execution/list?${params}`,
-      {
-        headers: {
-          "X-BAPI-API-KEY": apiKey,
-          "X-BAPI-SIGN": sig,
-          "X-BAPI-TIMESTAMP": String(ts),
-          "X-BAPI-RECV-WINDOW": recvWindow,
-        },
-      }
-    );
+  // Iterate through 7-day windows from oldest to newest
+  let windowStart = now - maxHistory;
 
-    if (!res.ok) throw new Error(`Bybit trades failed: ${res.status}`);
-    const data = await res.json();
-    if (data.retCode !== 0) throw new Error(data.retMsg);
+  while (windowStart < now) {
+    const windowEnd = Math.min(windowStart + windowSize, now);
+    let cursor = "";
+    let hasMore = true;
 
-    const list = data.result?.list || [];
-    for (const t of list) {
-      const rawSymbol = (t.symbol || "").toUpperCase();
-      let baseAsset = rawSymbol;
-      const quotes = ["USDT", "USDC", "USDD", "USDE", "BUSD", "BTC", "ETH", "EUR", "GBP", "USD", "DAI"];
-      for (const q of quotes) {
-        if (rawSymbol.length > q.length && rawSymbol.endsWith(q)) {
-          baseAsset = rawSymbol.slice(0, -q.length);
-          break;
+    console.log(`[Bybit] Window: ${new Date(windowStart).toISOString().slice(0,10)} → ${new Date(windowEnd).toISOString().slice(0,10)}`);
+
+    while (hasMore) {
+      const ts = Date.now();
+      const params = `category=spot&limit=100&startTime=${windowStart}&endTime=${windowEnd}${cursor ? `&cursor=${cursor}` : ""}`;
+      const payload = `${ts}${apiKey}${recvWindow}${params}`;
+      const sig = await hmacSign(apiSecret, payload);
+
+      const res = await fetch(
+        `https://api.bybit.com/v5/execution/list?${params}`,
+        {
+          headers: {
+            "X-BAPI-API-KEY": apiKey,
+            "X-BAPI-SIGN": sig,
+            "X-BAPI-TIMESTAMP": String(ts),
+            "X-BAPI-RECV-WINDOW": recvWindow,
+          },
         }
+      );
+
+      if (!res.ok) {
+        const body = await res.text();
+        console.error(`[Bybit] API error: ${res.status} — ${body}`);
+        throw new Error(`Bybit trades failed: ${res.status}`);
+      }
+      const data = await res.json();
+      if (data.retCode !== 0) {
+        console.error(`[Bybit] retCode=${data.retCode}: ${data.retMsg}`);
+        throw new Error(data.retMsg);
       }
 
-      allTrades.push({
-        id: t.execId || t.orderId || String(Date.now()),
-        symbol: baseAsset,
-        side: t.side?.toLowerCase() === "buy" ? "buy" : "sell",
-        qty: parseFloat(t.execQty || 0),
-        price: parseFloat(t.execPrice || 0),
-        fee: parseFloat(t.execFee || 0),
-        feeCurrency: t.feeCurrency || "USDT",
-        timestamp: new Date(parseInt(t.execTime || Date.now())).toISOString(),
-      });
+      const list = data.result?.list || [];
+      if (list.length > 0) {
+        console.log(`[Bybit] Got ${list.length} trades in this page`);
+      }
+
+      for (const t of list) {
+        const rawSymbol = (t.symbol || "").toUpperCase();
+        let baseAsset = rawSymbol;
+        const quotes = ["USDT", "USDC", "USDD", "USDE", "BUSD", "BTC", "ETH", "EUR", "GBP", "USD", "DAI"];
+        for (const q of quotes) {
+          if (rawSymbol.length > q.length && rawSymbol.endsWith(q)) {
+            baseAsset = rawSymbol.slice(0, -q.length);
+            break;
+          }
+        }
+
+        allTrades.push({
+          id: t.execId || t.orderId || String(Date.now()),
+          symbol: baseAsset,
+          side: t.side?.toLowerCase() === "buy" ? "buy" : "sell",
+          qty: parseFloat(t.execQty || 0),
+          price: parseFloat(t.execPrice || 0),
+          fee: parseFloat(t.execFee || 0),
+          feeCurrency: t.feeCurrency || "USDT",
+          timestamp: new Date(parseInt(t.execTime || Date.now())).toISOString(),
+        });
+      }
+
+      cursor = data.result?.nextPageCursor || "";
+      hasMore = !!cursor && list.length > 0;
+
+      if (allTrades.length > 5000) {
+        console.log(`[Bybit] Safety limit reached at ${allTrades.length} trades`);
+        break;
+      }
     }
 
-    cursor = data.result?.nextPageCursor || "";
-    hasMore = !!cursor && list.length > 0;
-    
-    // Safety break to prevent infinite loops or excessive API calls in edge case
-    if (allTrades.length > 1000) break;
+    if (allTrades.length > 5000) break;
+    windowStart = windowEnd;
   }
 
+  console.log(`[Bybit] Total trades fetched: ${allTrades.length}`);
   return allTrades;
 }
 

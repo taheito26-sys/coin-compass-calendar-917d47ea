@@ -57,8 +57,8 @@ interface FifoState {
   txCountByAsset: Map<string, number>;
 }
 
-const IN_TYPES = new Set(["buy"]);
-const OUT_TYPES = new Set(["sell"]);
+const IN_TYPES = new Set(["buy", "transfer_in"]);
+const OUT_TYPES = new Set(["sell", "transfer_out"]);
 
 function runFifo(txs: CryptoTx[]): FifoState {
   const sorted = [...txs].sort((a, b) => a.ts - b.ts);
