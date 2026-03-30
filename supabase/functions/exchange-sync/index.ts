@@ -308,8 +308,9 @@ async function syncExchangeTrades(
   passphrase?: string | null
 ): Promise<{ ok: boolean; synced: number; skipped: number }> {
   let trades: NormalizedTrade[] = [];
+  let transfers: NormalizedTrade[] = [];
 
-  console.log(`[sync] Fetching trades from ${exchange}...`);
+  console.log(`[sync] Fetching trades and transfers from ${exchange}...`);
 
   // Get assets we already know about for this user to ensure we scan history even for moved/sold assets
   const { data: userAssets } = await supabase
@@ -327,12 +328,15 @@ async function syncExchangeTrades(
   switch (exchange) {
     case "binance":
       trades = await fetchBinanceTrades(apiKey, apiSecret, Array.from(knownSymbols));
+      transfers = await fetchBinanceTransfers(apiKey, apiSecret);
       break;
     case "bybit":
       trades = await fetchBybitTrades(apiKey, apiSecret);
+      transfers = await fetchBybitTransfers(apiKey, apiSecret);
       break;
     case "okx":
       trades = await fetchOkxTrades(apiKey, apiSecret, passphrase);
+      transfers = await fetchOkxTransfers(apiKey, apiSecret, passphrase);
       break;
     case "gate":
       trades = await fetchGateTrades(apiKey, apiSecret);
@@ -347,7 +351,6 @@ async function syncExchangeTrades(
       throw new Error(`Unsupported exchange: ${exchange}`);
   }
 
-  console.log(`[sync] ${exchange}: fetched ${trades.length} raw fills`);
 
   if (!trades.length) return { ok: true, synced: 0, skipped: 0 };
 
@@ -365,7 +368,7 @@ async function syncExchangeTrades(
 
   // --- Smart Trade Compaction Logic ---
   // 1. Sort by time
-  const sorted = [...trades]
+  const sorted = [...allHistory]
     .map(t => ({ ...t, symbol: t.symbol.toUpperCase() }))
     .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
@@ -954,4 +957,163 @@ async function krakenSign(
   );
   const sig = await crypto.subtle.sign("HMAC", key, message);
   return btoa(String.fromCharCode(...new Uint8Array(sig)));
+}
+
+// ─── Transfer Fetchers (Deposits/Withdrawals) ────────────────────────────────
+
+async function fetchBinanceTransfers(apiKey: string, apiSecret: string): Promise<NormalizedTrade[]> {
+  const transfers: NormalizedTrade[] = [];
+  const startTime = Date.now() - (180 * 24 * 60 * 60 * 1000); 
+
+  // Deposits
+  const depQuery = `startTime=${startTime}&timestamp=${Date.now()}`;
+  const depSig = await hmacSign(apiSecret, depQuery);
+  const depRes = await fetch(`https://api.binance.com/sapi/v1/capital/deposit/hisrec?${depQuery}&signature=${depSig}`, {
+    headers: { "X-MBX-APIKEY": apiKey }
+  });
+  if (depRes.ok) {
+    const data = await depRes.json();
+    for (const d of data) {
+      if (d.status !== 1) continue;
+      transfers.push({
+        id: `dep_${d.id}`,
+        symbol: d.coin.toUpperCase(),
+        side: "transfer_in",
+        qty: parseFloat(d.amount),
+        price: 0,
+        fee: 0,
+        timestamp: new Date(d.insertTime).toISOString(),
+      });
+    }
+  }
+
+  // Withdrawals
+  const witQuery = `startTime=${startTime}&timestamp=${Date.now()}`;
+  const witSig = await hmacSign(apiSecret, witQuery);
+  const witRes = await fetch(`https://api.binance.com/sapi/v1/capital/withdraw/history?${witQuery}&signature=${witSig}`, {
+    headers: { "X-MBX-APIKEY": apiKey }
+  });
+  if (witRes.ok) {
+    const data = await witRes.json();
+    for (const w of data) {
+      if (w.status !== 6) continue; // Completed
+      transfers.push({
+        id: `wit_${w.id}`,
+        symbol: w.coin.toUpperCase(),
+        side: "transfer_out",
+        qty: parseFloat(w.amount),
+        price: 0,
+        fee: parseFloat(w.transactionFee || 0),
+        timestamp: new Date(w.applyTime).toISOString(),
+      });
+    }
+  }
+  return transfers;
+}
+
+async function fetchBybitTransfers(apiKey: string, apiSecret: string): Promise<NormalizedTrade[]> {
+  const transfers: NormalizedTrade[] = [];
+  const ts = Date.now();
+  const startTime = ts - (180 * 24 * 60 * 60 * 1000);
+  const recvWindow = "5000";
+
+  // Deposits
+  const depParams = `startTime=${startTime}&limit=50`;
+  const depPayload = `${ts}${apiKey}${recvWindow}${depParams}`;
+  const depSig = await hmacSign(apiSecret, depPayload);
+  const depRes = await fetch(`https://api.bybit.com/v5/asset/deposit/query-record?${depParams}`, {
+    headers: { "X-BAPI-API-KEY": apiKey, "X-BAPI-SIGN": depSig, "X-BAPI-TIMESTAMP": String(ts), "X-BAPI-RECV-WINDOW": recvWindow }
+  });
+  if (depRes.ok) {
+    const data = await depRes.json();
+    for (const d of data.result?.rows || []) {
+      if (d.status !== 1) continue;
+      transfers.push({
+        id: `dep_${d.txID || d.depositId}`,
+        symbol: d.coin.toUpperCase(),
+        side: "transfer_in",
+        qty: parseFloat(d.amount),
+        price: 0,
+        fee: 0,
+        timestamp: new Date(parseInt(d.successTime)).toISOString(),
+      });
+    }
+  }
+
+  // Withdrawals
+  const witParams = `startTime=${startTime}&limit=50`;
+  const witPayload = `${ts}${apiKey}${recvWindow}${witParams}`;
+  const witSig = await hmacSign(apiSecret, witPayload);
+  const witRes = await fetch(`https://api.bybit.com/v5/asset/withdraw/query-record?${witParams}`, {
+    headers: { "X-BAPI-API-KEY": apiKey, "X-BAPI-SIGN": witSig, "X-BAPI-TIMESTAMP": String(ts), "X-BAPI-RECV-WINDOW": recvWindow }
+  });
+  if (witRes.ok) {
+    const data = await witRes.json();
+    for (const w of data.result?.rows || []) {
+      if (w.status !== "WithdrawalSuccessful") continue;
+      transfers.push({
+        id: `wit_${w.withdrawID}`,
+        symbol: w.coin.toUpperCase(),
+        side: "transfer_out",
+        qty: parseFloat(w.amount),
+        price: 0,
+        fee: parseFloat(w.withdrawFee || 0),
+        timestamp: new Date(parseInt(w.updateTime)).toISOString(),
+      });
+    }
+  }
+  return transfers;
+}
+
+async function fetchOkxTransfers(apiKey: string, apiSecret: string, passphrase?: string | null): Promise<NormalizedTrade[]> {
+  const transfers: NormalizedTrade[] = [];
+  const ts = new Date().toISOString();
+  const startTime = Date.now() - (180 * 24 * 60 * 60 * 1000);
+
+  // Deposits
+  const depPath = `/api/v5/asset/deposit-history?limit=100`;
+  const depPre = `${ts}GET${depPath}`;
+  const depSig = await hmacSignBase64(apiSecret, depPre);
+  const depRes = await fetch(`https://www.okx.com${depPath}`, {
+    headers: { "OK-ACCESS-KEY": apiKey, "OK-ACCESS-SIGN": depSig, "OK-ACCESS-TIMESTAMP": ts, "OK-ACCESS-PASSPHRASE": passphrase || "" }
+  });
+  if (depRes.ok) {
+    const data = await depRes.json();
+    for (const d of data.data || []) {
+      if (d.state !== "2") continue; // Success
+      transfers.push({
+        id: `dep_${d.depId || d.txId}`,
+        symbol: d.cc.toUpperCase(),
+        side: "transfer_in",
+        qty: parseFloat(d.amt),
+        price: 0,
+        fee: 0,
+        timestamp: new Date(parseInt(d.ts)).toISOString(),
+      });
+    }
+  }
+
+  // Withdrawals
+  const witPath = `/api/v5/asset/withdrawal-history?limit=100`;
+  const witPre = `${ts}GET${witPath}`;
+  const witSig = await hmacSignBase64(apiSecret, witPre);
+  const witRes = await fetch(`https://www.okx.com${witPath}`, {
+    headers: { "OK-ACCESS-KEY": apiKey, "OK-ACCESS-SIGN": witSig, "OK-ACCESS-TIMESTAMP": ts, "OK-ACCESS-PASSPHRASE": passphrase || "" }
+  });
+  if (witRes.ok) {
+    const data = await witRes.json();
+    for (const w of data.data || []) {
+      if (w.state !== "2") continue; // Success
+      transfers.push({
+        id: `wit_${w.wdId || w.txId}`,
+        symbol: w.cc.toUpperCase(),
+        side: "transfer_out",
+        qty: parseFloat(w.amt),
+        price: 0,
+        fee: parseFloat(w.fee || 0),
+        timestamp: new Date(parseInt(w.ts)).toISOString(),
+      });
+    }
+  }
+  return transfers;
 }
