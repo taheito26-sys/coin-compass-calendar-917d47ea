@@ -1815,10 +1815,13 @@ async function compactAllTransactions(supabase: any, userId: string) {
     };
   });
 
-<<<<<<< HEAD
+  const mergedCount = originalCount - finalTxs.length;
+
+  if (mergedCount <= 0) {
+    return { ok: true, message: "No rows eligible for coin-level rollup.", original: originalCount, compacted: 0 };
+  }
+
   // 3. Clear audit trail first (references) to avoid constraint errors
-  // Fingerprints and rows reference transactions by ID, so they must be removed
-  // before we delete from the transactions table.
   const { error: fpError } = await supabase.from("import_row_fingerprints").delete().eq("user_id", userId);
   if (fpError) console.error("Could not clear fingerprints", fpError);
 
@@ -1826,17 +1829,6 @@ async function compactAllTransactions(supabase: any, userId: string) {
   if (irError) console.error("Could not clear import_rows", irError);
 
   // 4. Perform Atomic Swap (Delete ALL and Re-insert Compacted)
-=======
-  const mergedCount = originalCount - finalTxs.length;
-
-  if (mergedCount <= 0) {
-    return { ok: true, message: "No rows eligible for coin-level rollup.", original: originalCount, compacted: 0 };
-  }
-
-  // 3. Perform Atomic Swap (Delete ALL and Re-insert Compacted)
-  // Warning: This is destructive. We use a transaction-like approach.
-  // Since we are in an Edge Function, we'll do delete then insert.
->>>>>>> 24efac34140a2346f2af7fbff4cb5fe9469aa005
   const { error: delError } = await supabase.from("transactions").delete().eq("user_id", userId);
   if (delError) throw new Error(`Compaction failed during deletion: ${delError.message}`);
 
@@ -1847,17 +1839,7 @@ async function compactAllTransactions(supabase: any, userId: string) {
     if (insError) throw new Error(`Compaction failed during re-insertion: ${insError.message}`);
   }
 
-<<<<<<< HEAD
-  console.log(`[compaction] success: original=${originalCount}, merged=${mergedCount}`);
-=======
-  safeLog("log", "compact_all_success", {
-    user: userPrefix(userId),
-    original: originalCount,
-    merged: mergedCount,
-    finalCount: finalTxs.length,
-    mode: "coin_rollup",
-  });
->>>>>>> 24efac34140a2346f2af7fbff4cb5fe9469aa005
+  console.log(`[compaction] success: original=${originalCount}, merged=${mergedCount}, mode=coin_rollup`);
 
   return {
     ok: true,
