@@ -677,6 +677,34 @@ async function testExchangeConnection(
   }
 }
 
+function normalizeIdentityNumber(value: number, precision = 12): string {
+  if (!Number.isFinite(value)) return "0";
+  return value.toFixed(precision).replace(/\.?0+$/, "");
+}
+
+function buildCanonicalExternalId(
+  exchange: ExchangeId,
+  userId: string,
+  trade: InstrumentAwareTrade
+): string {
+  const canonicalGrossValue = Number.isFinite(trade.grossValue)
+    ? Number(trade.grossValue)
+    : trade.qty * trade.price;
+
+  const components = [
+    exchange,
+    userId,
+    String(trade.symbol || "").toUpperCase(),
+    String(trade.side || ""),
+    new Date(trade.timestamp).toISOString(),
+    normalizeIdentityNumber(trade.qty),
+    normalizeIdentityNumber(trade.price),
+    normalizeIdentityNumber(canonicalGrossValue),
+  ];
+
+  return `canon:${components.join(":")}`;
+}
+
 async function syncExchangeTrades(
   supabase: any,
   userId: string,
@@ -837,7 +865,8 @@ async function syncExchangeTrades(
   let insertFailures = 0;
 
   for (const trade of finalTrades) {
-    const externalId = trade.external_id || `${exchange}_${trade.id}`;
+    const instrumentTrade = trade as InstrumentAwareTrade;
+    const externalId = trade.external_id || buildCanonicalExternalId(exchange, userId, instrumentTrade);
 
     const { data: existing, error: existingError } = await supabase
       .from("transactions")
@@ -911,7 +940,6 @@ async function syncExchangeTrades(
     if (trade.compaction_metadata) {
       tags.push(`compaction_v1:${JSON.stringify(trade.compaction_metadata)}`);
     }
-    const instrumentTrade = trade as InstrumentAwareTrade;
     if ((instrumentTrade.multiplier || 1) > 1) {
       tags.push(`instrument_multiplier_v1:${JSON.stringify({
         rawSymbol: instrumentTrade.rawSymbol || trade.symbol,

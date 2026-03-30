@@ -36,12 +36,11 @@ const QUOTE_CURRENCIES = [
  * Normalize a raw symbol to its canonical form.
  * - Uppercases
  * - Applies known aliases (XBT→BTC, etc.)
- * - Strips trailing digits from contract symbols (e.g., "1000PEPE" → "PEPE")
+ * - Preserves numeric prefixes (e.g., "1INCH") so multiplier handling can be
+ *   performed explicitly by instrument normalization logic.
  */
 export function normalizeSymbol(raw: string): string {
   let sym = raw.trim().toUpperCase();
-  // Remove leading multiplier prefixes like "1000" from "1000PEPE", "1000SHIB"
-  sym = sym.replace(/^\d+/, "");
   // Apply alias
   if (SYMBOL_ALIASES[sym]) sym = SYMBOL_ALIASES[sym];
   return sym;

@@ -51,8 +51,9 @@ function normalizeDecimals(val: number, precision = 12): string {
 }
 
 function toCanonical(row: NormalizedRow, exportType: string): CanonicalTransactionRow {
-  const parsedSymbol = parseInstrumentSymbol(normalizeSymbol(row.symbol).trim().toUpperCase());
-  const assetSymbol = parsedSymbol.canonicalSymbol;
+  const rawSymbol = String(row.symbol || "").trim().toUpperCase();
+  const parsedSymbol = parseInstrumentSymbol(rawSymbol);
+  const assetSymbol = normalizeSymbol(parsedSymbol.canonicalSymbol).trim().toUpperCase();
   const baseAsset = extractBaseFromPair(assetSymbol).trim().toUpperCase();
   const quoteAsset = guessQuoteFromPair(assetSymbol, baseAsset).trim().toUpperCase();
   const normalizedEconomics = normalizeTradeEconomics(row.qty, row.unitPrice, parsedSymbol.multiplier);
