@@ -582,11 +582,12 @@ async function fetchOkxTrades(
   let afterId = "";
   let hasMore = true;
 
-  console.log(`[OKX] Starting sync...`);
+  console.log(`[OKX] Deep scan (90-day history)...`);
 
   while (hasMore) {
     const ts = new Date().toISOString();
-    const path = `/api/v5/trade/fills?instType=SPOT&limit=100&begin=${beginMs}${afterId ? `&after=${afterId}` : ""}`;
+    // fills-history is required for data older than 3 days
+    const path = `/api/v5/trade/fills-history?instType=SPOT&limit=100&begin=${beginMs}${afterId ? `&after=${afterId}` : ""}`;
     const preSign = `${ts}GET${path}`;
     const sig = await hmacSignBase64(apiSecret, preSign);
 
@@ -602,14 +603,14 @@ async function fetchOkxTrades(
     if (!res.ok) {
       const body = await res.text();
       console.error(`[OKX] error: ${res.status} - ${body}`);
-      throw new Error(`OKX trades failed: ${res.status}`);
+      throw new Error(`OKX history failed: ${res.status}`);
     }
     const data = await res.json();
     if (data.code !== "0") throw new Error(data.msg);
 
     const list = data.data || [];
     if (list.length > 0) {
-      console.log(`[OKX] page trades: ${list.length}`);
+      console.log(`[OKX] found ${list.length} historical trades`);
     }
 
     for (const t of list) {
