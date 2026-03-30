@@ -69,6 +69,10 @@ export interface CryptoState {
   // UI
   layout: string;
   theme: string;
+  dashboardLayout: string[];
+  // Sync
+  autoSyncEnabled: boolean;
+  autoSyncInterval: number;
   // Sync status
   syncStatus?: "idle" | "loading" | "synced" | "error";
   syncError?: string;
@@ -97,13 +101,17 @@ export function defaultState(): CryptoState {
     apiUrl: "", market: { trending: [], top: [] },
     holdings: [], calendarEntries: [], importedFiles: [],
     layout: "flux", theme: "t1",
+    dashboardLayout: [],
+    autoSyncEnabled: false,
+    autoSyncInterval: 30,
     syncStatus: "idle",
   };
 }
 
-/** UI-only keys that are safe to persist in localStorage */
+/** UI-only keys that are safe to persist in localStorage for flash-less loading */
 const UI_KEYS = new Set([
   "base", "method", "watch", "layout", "theme", "alerts", "connections", "accounts",
+  "dashboardLayout", "autoSyncEnabled", "autoSyncInterval"
 ]);
 
 /**
@@ -129,6 +137,9 @@ export function loadState(): CryptoState {
           accounts: Array.isArray(parsed.accounts) && parsed.accounts.length ? parsed.accounts : base.accounts,
           layout: VALID_LAYOUTS.has(String(parsed.layout || "")) ? String(parsed.layout) : base.layout,
           theme: VALID_THEMES.has(String(parsed.theme || "")) ? String(parsed.theme) : base.theme,
+          dashboardLayout: Array.isArray(parsed.dashboardLayout) ? parsed.dashboardLayout : base.dashboardLayout,
+          autoSyncEnabled: typeof parsed.autoSyncEnabled === "boolean" ? parsed.autoSyncEnabled : base.autoSyncEnabled,
+          autoSyncInterval: typeof parsed.autoSyncInterval === "number" ? parsed.autoSyncInterval : base.autoSyncInterval,
           // Business data starts empty — hydrated from backend
           txs: [],
           lots: [],

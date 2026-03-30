@@ -119,7 +119,7 @@ async function apiFetch(path: string, options: RequestInit = {}): Promise<Respon
 }
 
 export default function ExchangeConnect() {
-  const { rehydrateFromBackend, toast } = useCrypto();
+  const { state, setState, rehydrateFromBackend, toast } = useCrypto();
   const [connections, setConnections] = useState<Connection[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedExchange, setSelectedExchange] = useState<string | null>(null);
@@ -137,12 +137,13 @@ export default function ExchangeConnect() {
   const [syncAllProgress, setSyncAllProgress] = useState<{ current: number; total: number; exchange: string } | null>(null);
   const [syncAllResults, setSyncAllResults] = useState<{ exchange: string; synced: number; skipped: number; error?: string }[]>([]);
 
-  // Auto-sync state
-  const [autoSyncEnabled, setAutoSyncEnabled] = useState(() => localStorage.getItem(AUTO_SYNC_KEY) === "true");
-  const [autoSyncInterval, setAutoSyncInterval] = useState(() => parseInt(localStorage.getItem(AUTO_SYNC_INTERVAL_KEY) || "30"));
+  // Auto-sync local state for timer management
   const autoSyncTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [lastAutoSync, setLastAutoSync] = useState<Date | null>(null);
   const [nextAutoSync, setNextAutoSync] = useState<Date | null>(null);
+
+  const autoSyncEnabled = state.autoSyncEnabled;
+  const autoSyncInterval = state.autoSyncInterval;
 
   const loadConnections = useCallback(async () => {
     try {
@@ -288,13 +289,11 @@ export default function ExchangeConnect() {
   }, [autoSyncEnabled, autoSyncInterval, connectedExchanges.length]);
 
   const toggleAutoSync = (enabled: boolean) => {
-    setAutoSyncEnabled(enabled);
-    localStorage.setItem(AUTO_SYNC_KEY, String(enabled));
+    setState(prev => ({ ...prev, autoSyncEnabled: enabled }));
   };
 
   const changeAutoSyncInterval = (mins: number) => {
-    setAutoSyncInterval(mins);
-    localStorage.setItem(AUTO_SYNC_INTERVAL_KEY, String(mins));
+    setState(prev => ({ ...prev, autoSyncInterval: mins }));
   };
 
   const deleteConnection = async (exId: string) => {

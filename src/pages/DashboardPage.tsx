@@ -17,15 +17,6 @@ const COIN_COLORS = [
   "#6366f1", "#84cc16", "#0ea5e9", "#d946ef", "#fb923c",
 ];
 
-const LAYOUT_KEY = "dashboard_card_layout";
-
-interface CardDef {
-  id: string;
-  label: string;
-  minH?: number;
-  colSpan?: 1 | 2;
-}
-
 const ALL_CARDS: CardDef[] = [
   { id: "kpis", label: "KPI Summary", colSpan: 2 },
   { id: "allocation", label: "Coin Allocation" },
@@ -39,31 +30,6 @@ const ALL_CARDS: CardDef[] = [
   { id: "watchlist", label: "Watchlist" },
   { id: "positions", label: "Top Positions", colSpan: 2 },
 ];
-
-// ─── Layout helpers ─────────────────────────────────────────────────────────
-
-function getDefaultLayout(): string[] {
-  return ALL_CARDS.map(c => c.id);
-}
-
-function loadLayout(): string[] {
-  try {
-    const saved = localStorage.getItem(LAYOUT_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved) as string[];
-      const valid = parsed.filter(id => ALL_CARDS.some(c => c.id === id));
-      for (const c of ALL_CARDS) {
-        if (!valid.includes(c.id)) valid.push(c.id);
-      }
-      return valid;
-    }
-  } catch { }
-  return getDefaultLayout();
-}
-
-function saveLayout(layout: string[]) {
-  localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout));
-}
 
 interface DonutSlice {
   label: string;
@@ -169,7 +135,7 @@ function DragHandle({ editing }: { editing: boolean }) {
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }) {
-  const { state } = useCrypto();
+  const { state, setState } = useCrypto();
   const portfolio = useUnifiedPortfolio();
   const { getPrice } = useLivePrices();
 
@@ -184,30 +150,41 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
   const realizedPnl = portfolio.realizedPnl;
   const totalPnlCombined = totalPnl + realizedPnl;
 
-  const [cardOrder, setCardOrder] = useState<string[]>(loadLayout);
+  const cardOrder = useMemo(() => {
+    const raw = state.dashboardLayout;
+    if (!raw || raw.length === 0) return ALL_CARDS.map(c => c.id);
+    const valid = raw.filter(id => ALL_CARDS.some(c => c.id === id));
+    for (const c of ALL_CARDS) {
+      if (!valid.includes(c.id)) valid.push(c.id);
+    }
+    return valid;
+  }, [state.dashboardLayout]);
+
   const [editing, setEditing] = useState(false);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
 
   const handleDragStart = (id: string) => { setDraggedId(id); };
   const handleDragOver = (e: React.DragEvent, id: string) => { e.preventDefault(); if (draggedId && draggedId !== id) setDragOverId(id); };
+  
   const handleDrop = (id: string) => {
     if (!draggedId || draggedId === id) return;
-    setCardOrder(prev => {
-      const next = [...prev];
-      const fromIdx = next.indexOf(draggedId);
-      const toIdx = next.indexOf(id);
-      if (fromIdx < 0 || toIdx < 0) return prev;
-      next.splice(fromIdx, 1);
-      next.splice(toIdx, 0, draggedId);
-      saveLayout(next);
-      return next;
-    });
+    const next = [...cardOrder];
+    const fromIdx = next.indexOf(draggedId);
+    const toIdx = next.indexOf(id);
+    if (fromIdx < 0 || toIdx < 0) return;
+    next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, draggedId);
+    
+    setState(prev => ({ ...prev, dashboardLayout: next }));
     setDraggedId(null);
     setDragOverId(null);
   };
+
   const handleDragEnd = () => { setDraggedId(null); setDragOverId(null); };
-  const resetLayout = () => { const def = getDefaultLayout(); setCardOrder(def); saveLayout(def); };
+  const resetLayout = () => { 
+    setState(prev => ({ ...prev, dashboardLayout: ALL_CARDS.map(c => c.id) }));
+  };
 
   const coinSlices = useMemo((): DonutSlice[] => {
     if (totalMV <= 0) return [];

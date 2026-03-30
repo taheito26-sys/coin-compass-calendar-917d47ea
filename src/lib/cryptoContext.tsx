@@ -202,6 +202,19 @@ export const CryptoProvider = forwardRef<HTMLDivElement, { children: React.React
         if (userPrefs.method) prefUpdates.method = userPrefs.method;
         if (userPrefs.layout) prefUpdates.layout = userPrefs.layout;
         if (userPrefs.theme) prefUpdates.theme = userPrefs.theme;
+        
+        if (userPrefs.watch) {
+          try { prefUpdates.watch = JSON.parse(userPrefs.watch); } catch { /* ignore */ }
+        }
+        if (userPrefs.dashboardLayout) {
+          try { prefUpdates.dashboardLayout = JSON.parse(userPrefs.dashboardLayout); } catch { /* ignore */ }
+        }
+        if (userPrefs.autoSyncEnabled) {
+          prefUpdates.autoSyncEnabled = userPrefs.autoSyncEnabled === "true";
+        }
+        if (userPrefs.autoSyncInterval) {
+          prefUpdates.autoSyncInterval = parseInt(userPrefs.autoSyncInterval) || 30;
+        }
 
         if (!cancelled) {
           setStateRaw((prev) => {
@@ -241,8 +254,12 @@ export const CryptoProvider = forwardRef<HTMLDivElement, { children: React.React
     const currentPrefs = JSON.stringify({
       base: state.base,
       method: state.method,
+      watch: state.watch,
       layout: state.layout,
       theme: state.theme,
+      dashboardLayout: state.dashboardLayout,
+      autoSyncEnabled: state.autoSyncEnabled,
+      autoSyncInterval: state.autoSyncInterval,
     });
 
     if (prevPrefsRef.current === currentPrefs) return;
@@ -257,8 +274,12 @@ export const CryptoProvider = forwardRef<HTMLDivElement, { children: React.React
       saveUserPreferences({
         base: state.base,
         method: state.method,
+        watch: JSON.stringify(state.watch),
         layout: state.layout,
         theme: state.theme,
+        dashboardLayout: JSON.stringify(state.dashboardLayout),
+        autoSyncEnabled: String(state.autoSyncEnabled),
+        autoSyncInterval: String(state.autoSyncInterval),
       }).catch((err) => {
         console.warn("[crypto-context] Failed to sync preferences:", err);
       });
