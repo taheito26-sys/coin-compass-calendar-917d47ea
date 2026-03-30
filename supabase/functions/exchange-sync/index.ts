@@ -452,17 +452,20 @@ async function fetchBinanceTrades(apiKey: string, apiSecret: string): Promise<No
 
 async function fetchBybitTrades(apiKey: string, apiSecret: string): Promise<NormalizedTrade[]> {
   const allTrades: NormalizedTrade[] = [];
-  const ts = Date.now();
   const recvWindow = "5000";
   const startTime = Date.now() - (180 * 24 * 60 * 60 * 1000);
   let cursor = "";
   let hasMore = true;
 
   while (hasMore) {
+    // Fresh timestamp for each request — Bybit requires this for valid HMAC signatures
+    const ts = Date.now();
     const params = `category=spot&limit=100&startTime=${startTime}${cursor ? `&cursor=${cursor}` : ""}`;
     const payload = `${ts}${apiKey}${recvWindow}${params}`;
     const sig = await hmacSign(apiSecret, payload);
     
+    console.log(`[Bybit] Fetching trades page, cursor=${cursor ? cursor.slice(0, 8) + "..." : "none"}, accumulated=${allTrades.length}`);
+
     const res = await fetch(
       `https://api.bybit.com/v5/execution/list?${params}`,
       {
@@ -475,11 +478,20 @@ async function fetchBybitTrades(apiKey: string, apiSecret: string): Promise<Norm
       }
     );
 
-    if (!res.ok) throw new Error(`Bybit trades failed: ${res.status}`);
+    if (!res.ok) {
+      const body = await res.text();
+      console.error(`[Bybit] API error: ${res.status} — ${body}`);
+      throw new Error(`Bybit trades failed: ${res.status}`);
+    }
     const data = await res.json();
-    if (data.retCode !== 0) throw new Error(data.retMsg);
+    if (data.retCode !== 0) {
+      console.error(`[Bybit] retCode=${data.retCode}: ${data.retMsg}`);
+      throw new Error(data.retMsg);
+    }
 
     const list = data.result?.list || [];
+    console.log(`[Bybit] Got ${list.length} trades in this page`);
+
     for (const t of list) {
       const rawSymbol = (t.symbol || "").toUpperCase();
       let baseAsset = rawSymbol;
@@ -506,10 +518,14 @@ async function fetchBybitTrades(apiKey: string, apiSecret: string): Promise<Norm
     cursor = data.result?.nextPageCursor || "";
     hasMore = !!cursor && list.length > 0;
     
-    // Safety break to prevent infinite loops or excessive API calls in edge case
-    if (allTrades.length > 1000) break;
+    // Safety break to prevent infinite loops
+    if (allTrades.length > 5000) {
+      console.log(`[Bybit] Safety limit reached at ${allTrades.length} trades`);
+      break;
+    }
   }
 
+  console.log(`[Bybit] Total trades fetched: ${allTrades.length}`);
   return allTrades;
 }
 
