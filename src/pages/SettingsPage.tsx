@@ -2,6 +2,7 @@ import { forwardRef, useMemo, useState, useEffect, useCallback, useRef } from "r
 import { useCrypto } from "@/lib/cryptoContext";
 import { uid, fmtPx } from "@/lib/cryptoState";
 import { cryptoDerived } from "@/lib/cryptoState";
+import { supabase } from "@/integrations/supabase/client";
 
 // ── Layout & theme metadata ───────────────────────────────────────────────
 
