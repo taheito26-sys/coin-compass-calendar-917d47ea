@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": false,
+    "noImplicitAny": false,
+    "allowImportingTsExtensions": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "https://esm.sh/@supabase/supabase-js@2.49.1": ["./_types/supabase-esm-shim.d.ts"]
+    }
+  },
+  "include": ["./**/*.ts", "./_types/**/*.d.ts"]
+}
