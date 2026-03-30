@@ -73,6 +73,12 @@ export interface CanonicalTransactionRow {
   txHash: string;
 
   rawRow: Record<string, string>;
+  instrumentMetadata?: {
+    rawSymbol: string;
+    multiplier: number;
+    hadMultiplier: boolean;
+    invariantDelta: number;
+  };
 
   // v2.1: Trade-Event Compaction audit trail
   compactionMetadata?: CompactionMetadata;
