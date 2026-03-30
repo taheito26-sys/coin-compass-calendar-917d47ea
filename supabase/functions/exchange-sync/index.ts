@@ -318,26 +318,38 @@ async function syncExchangeTrades(
 
   if (allHistory.length === 0) return { ok: true, synced: 0, skipped: 0 };
 
-  // Compaction Logic
+  // Compaction Logic: Merges fragmented fills (cluster trades)
   const sorted = allHistory.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
   const clusters: (NormalizedTrade & { _lastTs: number })[] = [];
 
   for (const t of sorted) {
     const tTime = new Date(t.timestamp).getTime();
     let existingIndex = -1;
+    
+    // Find a cluster of same symbol/side within 15 minutes
     for (let i = clusters.length - 1; i >= 0; i--) {
       const c = clusters[i];
-      const isSameOp = t.orderId && c.orderId && t.orderId === c.orderId;
-      const isClose = c.symbol === t.symbol && c.side === t.side && (tTime - c._lastTs) < 15 * 60 * 1000;
-      if (isSameOp || isClose) { existingIndex = i; break; }
+      if (c.symbol === t.symbol && c.side === t.side) {
+        const diffMs = Math.abs(tTime - c._lastTs);
+        const sameOrder = t.orderId && c.orderId && t.orderId === c.orderId;
+        if (sameOrder || diffMs < 15 * 60 * 1000) {
+          existingIndex = i;
+          break;
+        }
+      }
     }
+
     if (existingIndex !== -1) {
       const existing = clusters[existingIndex];
       const totalQty = existing.qty + t.qty;
-      if (totalQty > 0) existing.price = (existing.price * existing.qty + t.price * t.qty) / totalQty;
+      if (totalQty > 0) {
+        // Calculate VWAP
+        existing.price = (existing.price * existing.qty + t.price * t.qty) / totalQty;
+      }
       existing.qty = totalQty;
-      existing.fee += t.fee;
-      existing._lastTs = tTime;
+      existing.fee += (t.fee || 0);
+      existing._lastTs = Math.max(existing._lastTs, tTime);
+      // Keep original timestamp
     } else {
       clusters.push({ ...t, _lastTs: tTime });
     }
@@ -448,32 +460,66 @@ async function fetchBybitTrades(apiKey: string, apiSecret: string, lookbackDays:
 
 async function fetchOkxTrades(apiKey: string, apiSecret: string, passphrase: string|null, lookbackDays: number): Promise<NormalizedTrade[]> {
   const all: NormalizedTrade[] = [];
-  const start = Date.now() - (lookbackDays * 24 * 60 * 60 * 1000);
+  
+  // OKX fills-history strictly caps at 90 days. We use 85 for safety margin.
+  const safeLookbackDays = Math.min(lookbackDays, 85);
+  const start = Date.now() - (safeLookbackDays * 24 * 60 * 60 * 1000);
+  
   const endpoints = ["/api/v5/trade/fills", "/api/v5/trade/fills-history"];
 
   for (const ep of endpoints) {
     let afterId = "";
     let hasMore = true;
-    while (hasMore) {
+    let pages = 0;
+    while (hasMore && pages < 20) {
+      pages++;
       const ts = new Date().toISOString();
       const path = `${ep}?instType=SPOT&limit=100&begin=${start}${afterId ? `&after=${afterId}` : ""}`;
       const sig = await hmacSignBase64(apiSecret, `${ts}GET${path}`);
-      const res = await fetch(`https://www.okx.com${path}`, { headers: { "OK-ACCESS-KEY": apiKey, "OK-ACCESS-SIGN": sig, "OK-ACCESS-TIMESTAMP": ts, "OK-ACCESS-PASSPHRASE": passphrase||"" } });
-      if (!res.ok) break;
-      const data = await res.json();
-      const list = data.data || [];
-      for (const t of list) {
-        all.push({
-          id: t.tradeId, orderId: t.ordId, symbol: t.instId.split("-")[0], side: t.side.toLowerCase(),
-          qty: parseFloat(t.fillSz), price: parseFloat(t.fillPx), fee: Math.abs(parseFloat(t.fee)), feeCurrency: t.feeCcy, timestamp: new Date(parseInt(t.ts)).toISOString()
+      
+      try {
+        const res = await fetch(`https://www.okx.com${path}`, { 
+          headers: { 
+            "OK-ACCESS-KEY": apiKey, 
+            "OK-ACCESS-SIGN": sig, 
+            "OK-ACCESS-TIMESTAMP": ts, 
+            "OK-ACCESS-PASSPHRASE": passphrase||"" 
+          } 
         });
+        
+        if (!res.ok) {
+          const body = await res.text();
+          console.error(`[OKX] API error (${ep}): ${res.status} — ${body}`);
+          // If this is history endpoint and it fails, don't stop entirely, try next?
+          break;
+        }
+        
+        const data = await res.json();
+        const list = data.data || [];
+        for (const t of list) {
+          if (!t.instId) continue;
+          all.push({
+            id: t.tradeId, 
+            orderId: t.ordId, 
+            symbol: t.instId.split("-")[0], 
+            side: (t.side || "").toLowerCase() as any,
+            qty: parseFloat(t.fillSz || 0), 
+            price: parseFloat(t.fillPx || 0), 
+            fee: Math.abs(parseFloat(t.fee || 0)), 
+            feeCurrency: t.feeCcy, 
+            timestamp: new Date(parseInt(t.ts)).toISOString()
+          });
+        }
+        if (list.length < 100) hasMore = false; else afterId = list[list.length-1].tradeId;
+      } catch (err) {
+        console.error(`[OKX] Network error:`, err);
+        break;
       }
-      if (list.length < 100) hasMore = false; else afterId = list[list.length-1].tradeId;
     }
   }
   const unique = new Map();
   for (const t of all) unique.set(t.id, t);
-  return Array.from(unique.values());
+  return Array.from(unique.values()).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 }
 
 async function fetchGateTrades(apiKey: string, apiSecret: string, lookback: number): Promise<NormalizedTrade[]> { return []; }

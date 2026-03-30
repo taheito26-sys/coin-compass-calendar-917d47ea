@@ -492,8 +492,8 @@ export default function ExchangeConnect() {
       {/* Exchange Grid */}
       <div style={{
         display: "grid",
-        gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
-        gap: 8,
+        gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+        gap: 12,
       }}>
         {EXCHANGES.map(ex => {
           const conn = getConnection(ex.id);
@@ -553,7 +553,7 @@ export default function ExchangeConnect() {
                     ⚙️
                   </button>
                   <button className="btn secondary" onClick={() => testConnection(ex.id)} disabled={isTesting}
-                    style={{ fontSize: 10, padding: "4px 8px" }}>
+                    style={{ fontSize: 10, padding: "4px 8px", flex: 1 }}>
                     {isTesting ? "…" : "Test"}
                   </button>
                   <button onClick={() => deleteConnection(ex.id)}
