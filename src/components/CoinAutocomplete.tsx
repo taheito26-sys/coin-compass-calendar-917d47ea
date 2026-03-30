@@ -18,14 +18,13 @@ export default function CoinAutocomplete({ value, onChange, placeholder = "BTC" 
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
-        // Only close if we didn't click inside the portal (which is in document.body)
         const portalContent = document.getElementById("coin-autocomplete-portal");
         if (portalContent && portalContent.contains(e.target as Node)) return;
         setOpen(false);
       }
     };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
+    document.addEventListener("mousedown", h, true);
+    return () => document.removeEventListener("mousedown", h, true);
   }, []);
 
   useEffect(() => {
@@ -35,14 +34,15 @@ export default function CoinAutocomplete({ value, onChange, placeholder = "BTC" 
       if (wrapRef.current) {
         const rect = wrapRef.current.getBoundingClientRect();
         setCoords({
-          top: rect.bottom + window.scrollY,
-          left: rect.left + window.scrollX,
+          top: rect.bottom,
+          left: rect.left,
           width: rect.width
         });
       }
     };
 
     updateCoords();
+    // Listening on all scroll events in capture phase to catch scrolls in internal containers
     window.addEventListener("scroll", updateCoords, true);
     window.addEventListener("resize", updateCoords);
     return () => {
@@ -81,33 +81,34 @@ export default function CoinAutocomplete({ value, onChange, placeholder = "BTC" 
         <div 
           id="coin-autocomplete-portal"
           style={{
-            position: "absolute", 
+            position: "fixed", 
             top: coords.top + 2, 
             left: coords.left, 
             width: coords.width, 
-            zIndex: 99999,
+            zIndex: 1000000, // Very high to sit on top of everything
             background: "var(--panel)", 
             border: "1px solid var(--line)",
             borderRadius: "var(--lt-radius-sm, 8px)",
             maxHeight: 240, 
             overflowY: "auto",
-            boxShadow: "0 8px 30px rgba(0,0,0,.25)",
+            boxShadow: "0 12px 40px rgba(0,0,0,.3)",
           }}
         >
           {matches.map((c, i) => (
             <div
               key={c.id}
+              onMouseDown={(e) => e.stopPropagation()} // Prevent closing on click
               onClick={() => { onChange(c.symbol.toUpperCase()); setOpen(false); }}
               style={{
-                padding: "6px 10px", cursor: "pointer", fontSize: 11,
+                padding: "8px 12px", cursor: "pointer", fontSize: 11,
                 background: i === selected ? "var(--brand3)" : "transparent",
                 borderBottom: "1px solid var(--line2)",
                 display: "flex", justifyContent: "space-between", alignItems: "center",
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <img src={c.image} alt="" style={{ width: 16, height: 16, borderRadius: 8 }} />
-                <span style={{ fontWeight: 700, color: "var(--text)" }}>{c.symbol.toUpperCase()}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <img src={c.image} alt="" style={{ width: 18, height: 18, borderRadius: 9 }} />
+                <span style={{ fontWeight: 800, color: "var(--text)" }}>{c.symbol.toUpperCase()}</span>
                 <span style={{ color: "var(--muted)", fontSize: 10 }}>{c.name}</span>
               </div>
               <span className="mono" style={{ color: "var(--muted)", fontSize: 10 }}>#{c.market_cap_rank}</span>
