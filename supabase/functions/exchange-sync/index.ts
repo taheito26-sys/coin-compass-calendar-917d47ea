@@ -324,33 +324,43 @@ async function syncExchangeTrades(
 
   if (!trades.length) return { ok: true, synced: 0, skipped: 0 };
 
-  // --- Trade Compaction Logic ---
-  // Group trades that happen at the same time, price, and side to avoid fragmentation
-  const compacted: NormalizedTrade[] = [];
-  const groups = new Map<string, NormalizedTrade>();
+  if (!trades.length) return { ok: true, synced: 0, skipped: 0 };
 
-  for (const t of trades) {
-    // Minute-level grouping (Bybit/Binance often fill a single order in dozens of pieces within 1 second)
-    const minuteTs = t.timestamp.substring(0, 16); // "YYYY-MM-DDTHH:mm"
-    const key = `${t.symbol}|${t.side}|${t.price}|${minuteTs}`;
-    
-    if (groups.has(key)) {
-      const existing = groups.get(key)!;
-      existing.qty += t.qty;
+  // --- Advanced Trade Compaction Logic ---
+  // Group trades that happen near each other (within 15 mins) into a single "Purchase Operation"
+  // This handles multiple fills, slight price variations, and fragmented executions.
+  const sorted = [...trades].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  const clusters: NormalizedTrade[] = [];
+
+  for (const t of sorted) {
+    const tTime = new Date(t.timestamp).getTime();
+    // Look for an existing cluster to merge into
+    // Requirement: Same symbol, Same side, and happened within 15 minutes of the last cluster entry
+    const existing = clusters.findLast(c => 
+      c.symbol === t.symbol && 
+      c.side === t.side && 
+      (tTime - new Date(c.timestamp).getTime()) < 15 * 60 * 1000
+    );
+
+    if (existing) {
+      // Weighted average price: (P1*Q1 + P2*Q2) / (Q1 + Q2)
+      const totalQty = existing.qty + t.qty;
+      const weightedPrice = (existing.price * existing.qty + t.price * t.qty) / totalQty;
+      
+      existing.price = weightedPrice;
+      existing.qty = totalQty;
       existing.fee += t.fee;
-      // We append IDs to keep track for idempotency if needed, 
-      // but usually the first trade ID + key hash is enough
+      // We keep the original timestamp of the START of the operation
     } else {
-      groups.set(key, { ...t });
+      // Start a new cluster
+      clusters.push({ ...t });
     }
   }
-  
-  const finalTrades = Array.from(groups.values());
 
   let synced = 0;
   let skipped = 0;
 
-  for (const trade of finalTrades) {
+  for (const trade of clusters) {
     // Resolve or create asset
     const { data: existingAsset } = await supabase
       .from("assets")
@@ -372,10 +382,9 @@ async function syncExchangeTrades(
       assetId = newAsset.id;
     }
 
-    // Check for duplicate by external_id
-    // For compacted trades, we use a hash of the group key to maintain idempotency
-    const minuteTs = trade.timestamp.substring(0, 16);
-    const externalId = `${exchange}_compact_${trade.symbol}_${trade.side}_${trade.price}_${minuteTs}`;
+    // Check for duplicate
+    // For clusters, we use the specific ID of the FIRST trade in the cluster as the anchor
+    const externalId = `${exchange}_cluster_${trade.id}`;
 
     const { data: existing } = await supabase
       .from("transactions")
