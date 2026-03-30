@@ -137,7 +137,15 @@ export default function ExchangeConnect() {
   const [testing, setTesting] = useState<string | null>(null);
   const [syncing, setSyncing] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
-  const [syncResult, setSyncResult] = useState<{ ok: boolean; synced: number; skipped: number } | null>(null);
+  
+  // High-fidelity sync results tracking
+  const [syncResults, setSyncResults] = useState<Record<string, { 
+    ok: boolean; 
+    synced: number; 
+    skipped: number; 
+    error?: string;
+    stats?: any;
+  }>>({});
 
   // Global Sync Options
   const [syncOptions, setSyncOptions] = useState<SyncOptions>({
@@ -227,7 +235,6 @@ export default function ExchangeConnect() {
 
   const syncExchange = async (exId: string, silent = false, customOptions?: SyncOptions) => {
     if (!silent) setSyncing(exId);
-    setSyncResult(null);
     setPreviewData(null);
     
     const options = customOptions || syncOptions;
@@ -239,26 +246,35 @@ export default function ExchangeConnect() {
       });
       const data = await res.json() as any;
       if (data.ok) {
+        const result = { 
+          ok: true, 
+          synced: data.synced, 
+          skipped: data.skipped,
+          stats: data.stats
+        };
+        
+        setSyncResults(prev => ({ ...prev, [exId]: result }));
+
         if (!silent) {
           if (options.preview) {
              setPreviewData(data.previewData || []);
              toast(`${exId}: Previewed ${data.synced} potential trades`, "good");
           } else {
-            setSyncResult({ ok: true, synced: data.synced, skipped: data.skipped });
-            toast(`Synced ${data.synced} trades from ${exId} (${data.skipped} skipped)`, "good");
+            toast(`Synced ${data.synced} trades from ${exId}`, "good");
           }
         }
-        return { ok: true, synced: data.synced || 0, skipped: data.skipped || 0 };
+        return result;
       } else {
-        if (!silent) {
-          setSyncResult({ ok: false, synced: 0, skipped: 0 });
-          toast(data.error || "Sync failed", "bad");
-        }
-        return { ok: false, synced: 0, skipped: 0, error: data.error || "Sync failed" };
+        const errResult = { ok: false, synced: 0, skipped: 0, error: data.error || "Sync failed" };
+        setSyncResults(prev => ({ ...prev, [exId]: errResult }));
+        if (!silent) toast(data.error || "Sync failed", "bad");
+        return errResult;
       }
     } catch (err: any) {
+      const netErr = { ok: false, synced: 0, skipped: 0, error: err?.message || "Network error" };
+      setSyncResults(prev => ({ ...prev, [exId]: netErr }));
       if (!silent) toast(err?.message || "Sync failed", "bad");
-      return { ok: false, synced: 0, skipped: 0, error: err?.message || "Network error" };
+      return netErr;
     } finally {
       if (!silent) setSyncing(null);
     }
@@ -268,24 +284,15 @@ export default function ExchangeConnect() {
   const syncAll = async () => {
     if (connectedExchanges.length === 0) return;
     setSyncingAll(true);
-    setSyncAllResults([]);
-    const results: typeof syncAllResults = [];
+    setSyncResults({}); // Reset for new bulk run
 
     for (let i = 0; i < connectedExchanges.length; i++) {
       const exId = connectedExchanges[i];
       setSyncAllProgress({ current: i + 1, total: connectedExchanges.length, exchange: exId });
-      const result = await syncExchange(exId, true);
-      results.push({ exchange: exId, synced: result.synced, skipped: result.skipped, error: result.error });
-      setSyncAllResults([...results]);
+      await syncExchange(exId, true);
     }
 
-    const totalSynced = results.reduce((s, r) => s + r.synced, 0);
-    const totalErrors = results.filter(r => r.error).length;
-    if (totalErrors === 0) {
-      toast(`✓ All exchanges synced — ${totalSynced} new trades`, "good");
-    } else {
-      toast(`Synced with ${totalErrors} error(s) — ${totalSynced} new trades`, "bad");
-    }
+    toast(`✓ Bulk sync completed`, "good");
 
     await rehydrateFromBackend();
     await loadConnections();
@@ -452,40 +459,56 @@ export default function ExchangeConnect() {
         </div>
       )}
 
-      {/* Sync All results */}
-      {syncAllResults.length > 0 && !syncingAll && (
+      {/* Sync Results Dash (Persistent until dismissed) */}
+      {Object.keys(syncResults).length > 0 && (
         <div className="card" style={{
-          padding: "8px 12px", border: "1px solid var(--line)",
+          padding: "12px 16px", border: "1px solid var(--line)",
+          background: "var(--panel)", boxShadow: "0 4px 12px rgba(0,0,0,0.2)"
         }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>Sync Results</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-            {syncAllResults.map(r => (
-              <div key={r.exchange} style={{
-                display: "flex", alignItems: "center", gap: 8, fontSize: 11,
-              }}>
-                <span style={{ fontWeight: 700, minWidth: 70 }}>
-                  {EXCHANGES.find(e => e.id === r.exchange)?.icon} {r.exchange}
-                </span>
-                {r.error ? (
-                  <span style={{ color: "var(--bad)" }}>⚠ {r.error}</span>
-                ) : (
-                  <span style={{ color: "var(--good)" }}>
-                    ✓ {r.synced} synced, {r.skipped} skipped
-                  </span>
-                )}
-              </div>
-            ))}
+          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+             Sync Results
           </div>
-          <button
-            onClick={() => setSyncAllResults([])}
-            style={{
-              marginTop: 6, fontSize: 9, padding: "2px 8px", borderRadius: 4,
-              background: "none", border: "1px solid var(--line)", color: "var(--muted)",
-              cursor: "pointer",
-            }}
-          >
-            Dismiss
-          </button>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {Object.entries(syncResults).map(([exId, r]) => {
+              const def = EXCHANGES.find(e => e.id === exId);
+              return (
+                <div key={exId} style={{
+                  display: "flex", alignItems: "center", gap: 10, fontSize: 12,
+                }}>
+                  <span style={{ 
+                    width: 14, height: 14, borderRadius: "50%", 
+                    background: r.error ? "var(--bad)" : r.ok ? "var(--good)" : "var(--warn)",
+                    boxShadow: `0 0 8px ${r.error ? "rgba(239,68,68,0.4)" : "rgba(34,197,94,0.4)"}`
+                  }} />
+                  <span style={{ fontWeight: 700, minWidth: 80, display: "flex", alignItems: "center", gap: 6 }}>
+                     {def?.name}
+                  </span>
+                  
+                  {r.error ? (
+                    <span style={{ color: "var(--bad)", display: "flex", alignItems: "center", gap: 4 }}>
+                      ⚠️ {r.error}
+                    </span>
+                  ) : (
+                    <span style={{ color: "var(--good)", display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontWeight: 700 }}>✓ {r.synced} synced</span>
+                      <span style={{ color: "var(--muted)", fontSize: 11 }}>
+                        ({r.skipped} skipped{r.stats?.duplicateTrades ? `, ${r.stats.duplicateTrades} duplicates` : ""})
+                      </span>
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid var(--line)", display: "flex", justifyContent: "flex-end" }}>
+            <button
+              onClick={() => setSyncResults({})}
+              className="btn secondary"
+              style={{ fontSize: 10, padding: "4px 12px", height: "auto" }}
+            >
+              Dismiss Results
+            </button>
+          </div>
         </div>
       )}
 
@@ -579,16 +602,7 @@ export default function ExchangeConnect() {
         </div>
       )}
 
-      {syncResult && (
-        <div style={{
-          padding: "8px 12px", borderRadius: "var(--lt-radius-sm)", fontSize: 12,
-          background: syncResult.ok ? "rgba(22,163,74,.08)" : "rgba(220,38,38,.08)",
-          border: `1px solid ${syncResult.ok ? "rgba(22,163,74,.25)" : "rgba(220,38,38,.25)"}`,
-          color: syncResult.ok ? "var(--good)" : "var(--bad)",
-        }}>
-          {syncResult.ok ? `✓ Synced ${syncResult.synced} trades (${syncResult.skipped} duplicates skipped)` : "⚠ Sync failed"}
-        </div>
-      )}
+      {/* Form Area */}
 
       {/* Connect Form */}
       {activeDef && !isConnected(activeDef.id) && (
