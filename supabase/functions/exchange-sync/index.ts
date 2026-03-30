@@ -314,7 +314,13 @@ async function syncExchangeTrades(
   // Filter & Deduplicate
   let allHistory = [...trades, ...transfers]
     .filter(t => options.types.includes(t.side))
-    .filter(t => options.coins.length === 0 || options.coins.includes(t.symbol.toUpperCase()));
+    .filter(t => options.coins.length === 0 || options.coins.includes(t.symbol.toUpperCase()))
+    .filter(t => {
+      // Exclude stablecoin (USDT/USDC) transfers as they often clutter the ledger
+      const isTransfer = t.side === "transfer_in" || t.side === "transfer_out";
+      const isStable = ["USDT", "USDC", "FDUSD", "TUSD"].includes(t.symbol.toUpperCase());
+      return !(isTransfer && isStable);
+    });
 
   if (allHistory.length === 0) return { ok: true, synced: 0, skipped: 0 };
 
