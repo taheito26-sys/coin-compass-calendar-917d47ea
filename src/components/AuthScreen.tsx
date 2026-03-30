@@ -56,26 +56,30 @@ export default function AuthScreen() {
 
   const inputStyle: React.CSSProperties = {
     width: "100%",
-    padding: "10px 14px",
-    borderRadius: 10,
-    border: "1px solid rgba(255,255,255,0.12)",
-    background: "rgba(255,255,255,0.06)",
-    color: "var(--text, #fff)",
+    padding: "12px 16px",
+    borderRadius: 12,
+    border: "1px solid rgba(255,255,255,0.1)",
+    background: "rgba(255,255,255,0.03)",
+    backdropFilter: "blur(4px)",
+    color: "#fff",
     fontSize: 14,
     outline: "none",
+    transition: "border-color 0.2s",
   };
 
   const btnStyle: React.CSSProperties = {
     width: "100%",
-    padding: "12px 16px",
-    borderRadius: 10,
+    padding: "14px 16px",
+    borderRadius: 12,
     border: "none",
-    background: "hsl(var(--primary, 217 91% 60%))",
+    background: "linear-gradient(135deg, #8D1B3D 0%, #6A142D 100%)",
     color: "#fff",
     fontSize: 14,
-    fontWeight: 600,
+    fontWeight: 700,
     cursor: loading ? "wait" : "pointer",
     opacity: loading ? 0.7 : 1,
+    boxShadow: "0 8px 24px rgba(141, 27, 61, 0.25)",
+    transition: "transform 0.15s, box-shadow 0.15s",
   };
 
   return (
@@ -85,40 +89,56 @@ export default function AuthScreen() {
         display: "grid",
         placeItems: "center",
         padding: 24,
-        background:
-          "radial-gradient(circle at top, rgba(59,130,246,0.15), transparent 30%), var(--bg, #0a0a0a)",
+        background: "#080808",
+        position: "relative",
+        overflow: "hidden",
       }}
     >
+      {/* Decorative Glows */}
+      <div style={{ position: "absolute", top: "-10%", left: "-10%", width: "50%", height: "50%", background: "radial-gradient(circle, rgba(141, 27, 61, 0.15), transparent 70%)", pointerEvents: "none" }} />
+      <div style={{ position: "absolute", bottom: "-10%", right: "-10%", width: "50%", height: "50%", background: "radial-gradient(circle, rgba(141, 141, 141, 0.05), transparent 70%)", pointerEvents: "none" }} />
+
       <div
         style={{
-          width: "min(980px, 100%)",
+          width: "min(1000px, 100%)",
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-          gap: 24,
+          gap: 48,
           alignItems: "center",
+          position: "relative",
+          zIndex: 1,
         }}
       >
-        <div style={{ color: "var(--text, #ffffff)" }}>
+        <div style={{ color: "#ffffff" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+            <img src="/logo.png" alt="Logo" style={{ width: 48, height: 48, borderRadius: 12, boxShadow: "0 8px 16px rgba(0,0,0,0.5)" }} />
+            <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: "-0.5px" }}>Royal Qatar Pro</div>
+          </div>
+          
           <div
             style={{
               display: "inline-flex",
               alignItems: "center",
               gap: 8,
-              padding: "6px 10px",
-              borderRadius: 999,
-              background: "rgba(255,255,255,0.06)",
-              color: "var(--muted, #cbd5e1)",
-              fontSize: 12,
-              marginBottom: 16,
+              padding: "6px 12px",
+              borderRadius: 8,
+              background: "rgba(141, 27, 61, 0.2)",
+              border: "1px solid rgba(141, 27, 61, 0.3)",
+              color: "#fecaca",
+              fontSize: 11,
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+              marginBottom: 20,
             }}
           >
-            CoinCompass login
+            Digital Asset Management
           </div>
-          <h1 style={{ fontSize: 40, lineHeight: 1.1, margin: "0 0 12px" }}>
-            Sign in once, keep the portfolio synced everywhere.
+          <h1 style={{ fontSize: "clamp(32px, 5vw, 48px)", lineHeight: 1.05, margin: "0 0 20px", fontWeight: 800 }}>
+            Institutional Grade <br /><span style={{ color: "#eee" }}>Portfolio Intelligence.</span>
           </h1>
-          <p style={{ fontSize: 16, lineHeight: 1.7, color: "var(--muted, #a1a1aa)", margin: 0 }}>
-            Use email and password to sign in or create a new account.
+          <p style={{ fontSize: 17, lineHeight: 1.6, color: "rgba(255,255,255,0.6)", margin: 0, maxWidth: 440 }}>
+            Monitor your global crypto holdings with millisecond accuracy and multi-exchange synchronization.
           </p>
         </div>
 
@@ -126,16 +146,17 @@ export default function AuthScreen() {
           style={{
             display: "flex",
             flexDirection: "column",
-            gap: 16,
-            background: "rgba(255,255,255,0.04)",
-            border: "1px solid rgba(255,255,255,0.08)",
-            borderRadius: 24,
-            padding: 28,
-            boxShadow: "0 24px 64px rgba(0,0,0,0.35)",
+            gap: 20,
+            background: "rgba(25, 25, 25, 0.7)",
+            border: "1px solid rgba(255, 255, 255, 0.08)",
+            borderRadius: 28,
+            padding: 36,
+            backdropFilter: "blur(20px)",
+            boxShadow: "0 32px 80px rgba(0,0,0,0.5)",
           }}
         >
-          <div style={{ fontSize: 20, fontWeight: 700, color: "var(--text, #fff)" }}>
-            {mode === "signin" ? "Sign In" : mode === "signup" ? "Create Account" : "Reset Password"}
+          <div style={{ fontSize: 24, fontWeight: 800, color: "#fff", letterSpacing: "-0.2px" }}>
+            {mode === "signin" ? "Private Access" : mode === "signup" ? "New Portfolio" : "Reset Vault"}
           </div>
 
           {message && (
@@ -183,20 +204,20 @@ export default function AuthScreen() {
             </button>
           </form>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13, color: "var(--muted, #a1a1aa)" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, fontSize: 13, color: "rgba(255,255,255,0.4)", textAlign: "center", marginTop: 8 }}>
             {mode === "signin" && (
               <>
-                <button onClick={() => { setMode("signup"); setError(null); setMessage(null); }} style={{ background: "none", border: "none", color: "hsl(var(--primary, 217 91% 60%))", cursor: "pointer", fontSize: 13, padding: 0 }}>
-                  Don't have an account? Sign up
+                <button onClick={() => { setMode("signup"); setError(null); setMessage(null); }} style={{ background: "none", border: "none", color: "#8D1B3D", cursor: "pointer", fontSize: 13, fontWeight: 600, padding: 0 }}>
+                  Don't have an account? Create one
                 </button>
-                <button onClick={() => { setMode("forgot"); setError(null); setMessage(null); }} style={{ background: "none", border: "none", color: "var(--muted, #a1a1aa)", cursor: "pointer", fontSize: 13, padding: 0 }}>
-                  Forgot password?
+                <button onClick={() => { setMode("forgot"); setError(null); setMessage(null); }} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", fontSize: 12, padding: 0 }}>
+                  Forgot your credentials?
                 </button>
               </>
             )}
             {(mode === "signup" || mode === "forgot") && (
-              <button onClick={() => { setMode("signin"); setError(null); setMessage(null); }} style={{ background: "none", border: "none", color: "hsl(var(--primary, 217 91% 60%))", cursor: "pointer", fontSize: 13, padding: 0 }}>
-                ← Back to sign in
+              <button onClick={() => { setMode("signin"); setError(null); setMessage(null); }} style={{ background: "none", border: "none", color: "#8D1B3D", cursor: "pointer", fontSize: 13, fontWeight: 600, padding: 0 }}>
+                ← Return to terminal
               </button>
             )}
           </div>

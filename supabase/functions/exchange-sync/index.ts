@@ -296,9 +296,9 @@ async function syncExchangeTrades(
         }
         break;
       case "okx":
-        trades = await fetchOkxTrades(apiKey, apiSecret, passphrase, lookbackDays);
+        trades = await fetchOkxTrades(apiKey, apiSecret, conn.passphrase || null, lookbackDays);
         if (options.types.includes("transfer_in") || options.types.includes("transfer_out")) {
-          transfers = await fetchOkxTransfers(apiKey, apiSecret, passphrase, lookbackDays);
+          transfers = await fetchOkxTransfers(apiKey, apiSecret, conn.passphrase || null, lookbackDays);
         }
         break;
       case "gate": trades = await fetchGateTrades(apiKey, apiSecret, lookbackDays); break;
@@ -507,7 +507,7 @@ async function fetchOkxTrades(apiKey: string, apiSecret: string, passphrase: str
           all.push({
             id: t.tradeId, 
             orderId: t.ordId, 
-            symbol: t.instId.split("-")[0], 
+            symbol: (t.instId || "").split("-")[0] || "UNKNOWN", 
             side: (t.side || "").toLowerCase() as any,
             qty: parseFloat(t.fillSz || 0), 
             price: parseFloat(t.fillPx || 0), 
