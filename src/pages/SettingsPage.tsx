@@ -293,6 +293,47 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
         </div>
       </div>
 
+      {/* Tracking Threshold */}
+      <div className="settings-row" style={{ marginTop: 10 }}>
+        <div className="panel" style={{ minWidth: 0 }}>
+          <div className="panel-head"><h2>🚀 Tracking Threshold</h2></div>
+          <div className="panel-body">
+            <div className="form-field" style={{ minWidth: 0 }}>
+              <label className="form-label" style={{ whiteSpace: "normal", wordBreak: "break-word", lineHeight: "1.25" }}>
+                Minimum Asset Value ({state.base})
+              </label>
+              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                <input 
+                  type="range" 
+                  min="0" 
+                  max="500" 
+                  step="10" 
+                  className="inp" 
+                  style={{ flex: 1, height: 6, padding: 0 }}
+                  value={state.minImportValue} 
+                  onChange={e => setState(p => ({ ...p, minImportValue: parseInt(e.target.value) }))} 
+                />
+                <div style={{ position: "relative" }}>
+                  <input 
+                    type="number" 
+                    className="inp" 
+                    style={{ width: 90, textAlign: "right", paddingRight: 32 }}
+                    value={state.minImportValue}
+                    onChange={e => setState(p => ({ ...p, minImportValue: parseInt(e.target.value) || 0 }))}
+                  />
+                  <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontSize: 10, fontWeight: 800, color: "var(--muted)" }}>{state.base}</span>
+                </div>
+              </div>
+              <p className="muted" style={{ marginTop: 8, fontSize: 11, whiteSpace: "normal", wordBreak: "break-word", lineHeight: "1.4" }}>
+                Assets with a total value less than this will be hidden from dashboard and summaries.
+              </p>
+            </div>
+          </div>
+        </div>
+        {/* Placeholder panel to keep 2-col layout consistent */}
+        <div style={{ flex: 1, minWidth: 0 }} />
+      </div>
+
       {/* Display Preferences */}
       <div className="panel" style={{ marginTop: 10, minWidth: 0 }}>
         <div className="panel-head"><h2>Display Preferences</h2></div>

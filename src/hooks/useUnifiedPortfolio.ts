@@ -14,8 +14,8 @@ export function useUnifiedPortfolio(): PortfolioSummary & {
   const priceGetter = usePortfolioPriceGetter();
 
   const summary = useMemo(() => {
-    return derivePortfolio(state.txs, priceGetter);
-  }, [state.txs, priceGetter]);
+    return derivePortfolio(state.txs, priceGetter, state.minImportValue);
+  }, [state.txs, priceGetter, state.minImportValue]);
 
   const positionMap = useMemo(() => {
     const map = new Map<string, DerivedPosition>();

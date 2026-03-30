@@ -140,6 +140,7 @@ export function deriveRealizedByTx(txs: CryptoTx[]): Map<string, number> {
 export function derivePortfolio(
   txs: CryptoTx[],
   getPrice: (sym: string) => number | null,
+  minValThreshold: number = 0
 ): PortfolioSummary {
   const sorted = [...txs].sort((a, b) => a.ts - b.ts);
   const { lotsMap, realizedByAsset, txCountByAsset } = runFifo(sorted);
@@ -147,7 +148,7 @@ export function derivePortfolio(
   const positions: DerivedPosition[] = [];
   const closedPositions: ClosedPosition[] = [];
 
-  // Pre-compute per-asset buy/sell stats for closed positions
+  // Pre-compute per-asset buy/sell stats
   const assetBuyStats = new Map<string, { totalBought: number; totalCost: number; firstTs: number; lastTs: number }>();
   const assetSellStats = new Map<string, { totalSold: number; totalProceeds: number }>();
 
@@ -157,28 +158,24 @@ export function derivePortfolio(
     const type = String(tx.type || "").toLowerCase();
     const q = Math.abs(Number(tx.qty || 0));
     if (!(q > 0)) continue;
-    const ts = tx.ts;
 
     if (IN_TYPES.has(type)) {
-      const prev = assetBuyStats.get(sym) || { totalBought: 0, totalCost: 0, firstTs: ts, lastTs: ts };
+      const prev = assetBuyStats.get(sym) || { totalBought: 0, totalCost: 0, firstTs: tx.ts, lastTs: tx.ts };
       const price = Number(tx.price || 0);
       const fee = Number(tx.fee || 0);
       const cost = type === "buy" ? (q * price) + fee : q * Math.max(price, 0);
       prev.totalBought += q;
       prev.totalCost += cost;
-      prev.firstTs = Math.min(prev.firstTs, ts);
-      prev.lastTs = Math.max(prev.lastTs, ts);
+      prev.firstTs = Math.min(prev.firstTs, tx.ts);
+      prev.lastTs = Math.max(prev.lastTs, tx.ts);
       assetBuyStats.set(sym, prev);
-    }
-
-    if (type === "sell") {
+    } else if (type === "sell") {
       const prev = assetSellStats.get(sym) || { totalSold: 0, totalProceeds: 0 };
       prev.totalSold += q;
       prev.totalProceeds += (q * Number(tx.price || 0)) - Number(tx.fee || 0);
       assetSellStats.set(sym, prev);
-      // update lastTs
       const buyStats = assetBuyStats.get(sym);
-      if (buyStats) buyStats.lastTs = Math.max(buyStats.lastTs, ts);
+      if (buyStats) buyStats.lastTs = Math.max(buyStats.lastTs, tx.ts);
     }
   }
 
@@ -187,68 +184,71 @@ export function derivePortfolio(
     const totalQty = openLots.reduce((s, l) => s + l.qtyRem, 0);
     const totalCost = openLots.reduce((s, l) => s + l.qtyRem * l.unitCost, 0);
 
-    if (totalQty <= 1e-10) {
-      // Closed position - only include if there was activity
+    if (totalQty > 1e-10) {
+      const price = getPrice(sym);
+      const mv = price !== null ? price * totalQty : null;
+      
+      // Filter threshold
+      const compareVal = mv !== null ? mv : totalCost;
+      if (compareVal < minValThreshold) continue;
+
+      positions.push({
+        sym,
+        qty: totalQty,
+        cost: totalCost,
+        price,
+        mv,
+        unreal: mv !== null ? mv - totalCost : null,
+        avg: totalQty > 0 ? totalCost / totalQty : 0,
+        lots: openLots,
+        realizedPnl: realizedByAsset.get(sym) || 0,
+        txCount: txCountByAsset.get(sym) || 0,
+      });
+    } else {
+      // Closed position
+      const buyStats = assetBuyStats.get(sym) || { totalBought: 0, totalCost: 0, firstTs: 0, lastTs: 0 };
+      const sellStats = assetSellStats.get(sym) || { totalSold: 0, totalProceeds: 0 };
+      const proceeds = sellStats.totalProceeds;
       const realized = realizedByAsset.get(sym) || 0;
-      const txCount = txCountByAsset.get(sym) || 0;
-      if (txCount > 0) {
-        const buyStats = assetBuyStats.get(sym) || { totalBought: 0, totalCost: 0, firstTs: 0, lastTs: 0 };
-        const sellStats = assetSellStats.get(sym) || { totalSold: 0, totalProceeds: 0 };
-        closedPositions.push({
-          sym,
-          totalBought: buyStats.totalBought,
-          totalSold: sellStats.totalSold,
-          totalCost: buyStats.totalCost,
-          totalProceeds: sellStats.totalProceeds,
-          realizedPnl: realized,
-          avgBuy: buyStats.totalBought > 0 ? buyStats.totalCost / buyStats.totalBought : 0,
-          avgSell: sellStats.totalSold > 0 ? sellStats.totalProceeds / sellStats.totalSold : 0,
-          txCount,
-          firstTx: buyStats.firstTs,
-          lastTx: buyStats.lastTs,
-        });
-      }
-      continue;
+      
+      // Filter threshold for closed pos
+      if (Math.abs(proceeds) < minValThreshold && Math.abs(realized) < minValThreshold) continue;
+
+      closedPositions.push({
+        sym,
+        totalBought: buyStats.totalBought,
+        totalSold: sellStats.totalSold,
+        totalCost: buyStats.totalCost,
+        totalProceeds: sellStats.totalProceeds,
+        realizedPnl: realized,
+        avgBuy: buyStats.totalBought > 0 ? buyStats.totalCost / buyStats.totalBought : 0,
+        avgSell: sellStats.totalSold > 0 ? sellStats.totalProceeds / sellStats.totalSold : 0,
+        txCount: txCountByAsset.get(sym) || 0,
+        firstTx: buyStats.firstTs,
+        lastTx: buyStats.lastTs,
+      });
     }
-
-    const price = getPrice(sym);
-    const mv = price !== null ? price * totalQty : null;
-    const unreal = mv !== null ? mv - totalCost : null;
-    const avg = totalQty > 0 ? totalCost / totalQty : 0;
-
-    positions.push({
-      sym,
-      qty: totalQty,
-      cost: totalCost,
-      price,
-      mv,
-      unreal,
-      avg,
-      lots: openLots,
-      realizedPnl: realizedByAsset.get(sym) || 0,
-      txCount: txCountByAsset.get(sym) || 0,
-    });
   }
 
-  positions.sort((a, b) => (b.mv ?? 0) - (a.mv ?? 0));
-  closedPositions.sort((a, b) => b.lastTx - a.lastTx);
-
-  const totalMV = positions.reduce((s, p) => s + (p.mv ?? 0), 0);
-  const totalCost = positions.reduce((s, p) => s + p.cost, 0);
-  const totalPnl = totalMV - totalCost;
-  const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
-  const realizedPnl = positions.reduce((s, p) => s + p.realizedPnl, 0)
-    + closedPositions.reduce((s, p) => s + p.realizedPnl, 0);
+  let totalMV = 0, totalCost = 0, realizedPnl = 0;
+  for (const p of positions) {
+    if (p.mv !== null) totalMV += p.mv;
+    totalCost += p.cost;
+    realizedPnl += p.realizedPnl;
+  }
+  for (const c of closedPositions) {
+    realizedPnl += c.realizedPnl;
+  }
 
   return {
-    positions,
-    closedPositions,
+    positions: positions.sort((a, b) => (b.mv || 0) - (a.mv || 0)),
+    closedPositions: closedPositions.sort((a, b) => b.lastTx - a.lastTx),
     totalMV,
     totalCost,
-    totalPnl,
-    totalPnlPct,
+    totalPnl: totalMV - totalCost,
+    totalPnlPct: totalCost > 0 ? ((totalMV - totalCost) / totalCost) * 100 : 0,
     realizedPnl,
     assetCount: positions.length,
-    txCount: sorted.length,
+    txCount: txs.length,
   };
 }

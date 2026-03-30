@@ -338,6 +338,18 @@ async function syncExchangeTrades(
 
   if (!trades.length) return { ok: true, synced: 0, skipped: 0 };
 
+  // Fetch user preference for minimum import value
+  const { data: prefRows } = await supabase
+    .from("user_preferences")
+    .select("key, value")
+    .eq("user_id", userId);
+  
+  const prefs: Record<string, string> = {};
+  for (const row of prefRows || []) {
+    prefs[row.key] = row.value;
+  }
+  const minValThreshold = parseFloat(prefs.minImportValue || "100");
+
   // --- Smart Trade Compaction Logic ---
   // 1. Sort by time
   const sorted = [...trades]
@@ -372,8 +384,17 @@ async function syncExchangeTrades(
 
   let synced = 0;
   let skipped = 0;
+  let dustSkipped = 0;
 
   for (const trade of clusters) {
+    // Filter out "dust" trades based on user preference
+    const totalValue = trade.qty * trade.price;
+    if (totalValue < minValThreshold) {
+      dustSkipped++;
+      skipped++;
+      continue;
+    }
+
     // Resolve or create asset
     const { data: existingAsset } = await supabase
       .from("assets")
@@ -431,11 +452,12 @@ async function syncExchangeTrades(
     else skipped++;
   }
 
+  if (dustSkipped > 0) {
+    console.log(`[sync] Ignored ${dustSkipped} dust trades below ${minValThreshold} USD`);
+  }
+
   return { ok: true, synced, skipped };
 }
-
-// ─── Exchange-specific trade fetchers ────────────────────────────────────────
-
 
 async function fetchBinanceTrades(apiKey: string, apiSecret: string): Promise<NormalizedTrade[]> {
   // Get exchange info for symbols

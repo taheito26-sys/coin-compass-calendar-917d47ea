@@ -73,6 +73,7 @@ export interface CryptoState {
   // Sync
   autoSyncEnabled: boolean;
   autoSyncInterval: number;
+  minImportValue: number;
   // Sync status
   syncStatus?: "idle" | "loading" | "synced" | "error";
   syncError?: string;
@@ -104,6 +105,7 @@ export function defaultState(): CryptoState {
     dashboardLayout: [],
     autoSyncEnabled: false,
     autoSyncInterval: 30,
+    minImportValue: 100,
     syncStatus: "idle",
   };
 }
@@ -111,7 +113,7 @@ export function defaultState(): CryptoState {
 /** UI-only keys that are safe to persist in localStorage for flash-less loading */
 const UI_KEYS = new Set([
   "base", "method", "watch", "layout", "theme", "alerts", "connections", "accounts",
-  "dashboardLayout", "autoSyncEnabled", "autoSyncInterval"
+  "dashboardLayout", "autoSyncEnabled", "autoSyncInterval", "minImportValue"
 ]);
 
 /**
@@ -140,6 +142,7 @@ export function loadState(): CryptoState {
           dashboardLayout: Array.isArray(parsed.dashboardLayout) ? parsed.dashboardLayout : base.dashboardLayout,
           autoSyncEnabled: typeof parsed.autoSyncEnabled === "boolean" ? parsed.autoSyncEnabled : base.autoSyncEnabled,
           autoSyncInterval: typeof parsed.autoSyncInterval === "number" ? parsed.autoSyncInterval : base.autoSyncInterval,
+          minImportValue: typeof parsed.minImportValue === "number" ? parsed.minImportValue : base.minImportValue,
           // Business data starts empty — hydrated from backend
           txs: [],
           lots: [],
@@ -269,16 +272,28 @@ export function cryptoDerived(state: CryptoState) {
     p.qty += q; p.cost += cost;
     pos.set(sym, p);
   }
+  
   let pricedMV = 0, pricedCost = 0, unpricedCost = 0, totalCost = 0;
-  const rows = [...pos.values()].sort((a, b) => b.cost - a.cost);
-  for (const r of rows) {
+  const allRows = [...pos.values()].sort((a, b) => b.cost - a.cost);
+  const rows: DerivedPosition[] = [];
+  const threshold = state.minImportValue || 0;
+
+  for (const r of allRows) {
     r.price = cryptoPriceOf(state, r.sym);
     if (r.price !== null) {
-      r.mv = r.price * r.qty; r.unreal = r.mv - r.cost;
-      pricedMV += r.mv; pricedCost += r.cost;
-    } else { unpricedCost += r.cost; }
+      r.mv = r.price * r.qty;
+      if (r.mv < threshold) continue; // Exclude small positions
+      r.unreal = r.mv - r.cost;
+      pricedMV += r.mv;
+      pricedCost += r.cost;
+    } else {
+      if (r.cost < threshold) continue; // Exclude unpriced dust by cost
+      unpricedCost += r.cost;
+    }
     totalCost += r.cost;
+    rows.push(r);
   }
+  
   const unpriced = rows.filter(r => r.price === null).map(r => r.sym);
   return { base: state.base, rows, pricedMV, pricedCost, unreal: pricedMV - pricedCost, unpricedCost, totalCost, unpriced, priceAgeMs: Date.now() - cnum(state.pricesTs, 0) };
 }

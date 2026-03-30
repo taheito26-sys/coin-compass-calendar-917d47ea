@@ -128,6 +128,9 @@ export const CryptoProvider = forwardRef<HTMLDivElement, { children: React.React
       if (userPrefs.method) prefUpdates.method = userPrefs.method;
       if (userPrefs.layout) prefUpdates.layout = userPrefs.layout;
       if (userPrefs.theme) prefUpdates.theme = userPrefs.theme;
+      if (userPrefs.minImportValue) {
+        prefUpdates.minImportValue = parseFloat(userPrefs.minImportValue) || 100;
+      }
 
       setStateRaw((prev) => {
         const next = {
@@ -215,6 +218,9 @@ export const CryptoProvider = forwardRef<HTMLDivElement, { children: React.React
         if (userPrefs.autoSyncInterval) {
           prefUpdates.autoSyncInterval = parseInt(userPrefs.autoSyncInterval) || 30;
         }
+        if (userPrefs.minImportValue) {
+          prefUpdates.minImportValue = parseFloat(userPrefs.minImportValue) || 100;
+        }
 
         if (!cancelled) {
           setStateRaw((prev) => {
@@ -260,6 +266,7 @@ export const CryptoProvider = forwardRef<HTMLDivElement, { children: React.React
       dashboardLayout: state.dashboardLayout,
       autoSyncEnabled: state.autoSyncEnabled,
       autoSyncInterval: state.autoSyncInterval,
+      minImportValue: state.minImportValue,
     });
 
     if (prevPrefsRef.current === currentPrefs) return;
@@ -280,6 +287,7 @@ export const CryptoProvider = forwardRef<HTMLDivElement, { children: React.React
         dashboardLayout: JSON.stringify(state.dashboardLayout),
         autoSyncEnabled: String(state.autoSyncEnabled),
         autoSyncInterval: String(state.autoSyncInterval),
+        minImportValue: String(state.minImportValue),
       }).catch((err) => {
         console.warn("[crypto-context] Failed to sync preferences:", err);
       });
