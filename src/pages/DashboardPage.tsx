@@ -549,68 +549,6 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
           </div>
         );
 
-      case "watchlist":
-        return (
-          <div className="panel">
-            <div className="panel-head"><DragHandle editing={editing} /><h2>Watchlist</h2><span className="pill">{watchlistData.length} coins</span></div>
-            <div className="panel-body" style={{ padding: 0 }}>
-              {watchlistData.length > 0 ? (
-                <table>
-                  <thead><tr><th>Coin</th><th style={{ textAlign: "right" }}>Price</th><th style={{ textAlign: "right" }}>24h</th><th style={{ textAlign: "right" }}>7d</th></tr></thead>
-                  <tbody>
-                    {watchlistData.map(w => (
-                      <tr key={w.sym}>
-                        <td className="mono" style={{ fontWeight: 900 }}>{w.sym}</td>
-                        <td className="mono" style={{ textAlign: "right" }}>{w.price !== null ? fmtPx(w.price) : "—"}</td>
-                        <td style={{ textAlign: "right" }}>
-                          {w.change24h !== null ? <span className={`mono ${w.change24h >= 0 ? "good" : "bad"}`} style={{ fontWeight: 700, fontSize: 11 }}>{w.change24h >= 0 ? "▲" : "▼"} {Math.abs(w.change24h).toFixed(2)}%</span> : "—"}
-                        </td>
-                        <td style={{ textAlign: "right" }}>
-                          {w.change7d !== null ? <span className={`mono ${w.change7d >= 0 ? "good" : "bad"}`} style={{ fontWeight: 700, fontSize: 11 }}>{w.change7d >= 0 ? "▲" : "▼"} {Math.abs(w.change7d).toFixed(2)}%</span> : "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : <div className="muted" style={{ padding: 20, textAlign: "center" }}>Add coins to your watchlist in Markets.</div>}
-            </div>
-          </div>
-        );
-
-      case "positions":
-        return (
-          <div className="panel">
-            <div className="panel-head">
-              <DragHandle editing={editing} />
-              <h2>Top Positions</h2>
-              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                <span className="pill">{displayPositions.length} assets</span>
-                {onNav && <button className="btn tiny secondary" onClick={() => onNav("assets")}>View All →</button>}
-              </div>
-            </div>
-            <div className="panel-body" style={{ padding: 0, overflow: "auto", maxHeight: 260 }}>
-              <div className="tableWrap">
-                <table style={{ fontSize: 11 }}>
-                  <thead><tr><th>Asset</th><th>Qty</th><th>Price</th><th>MV</th><th>P&amp;L</th></tr></thead>
-                  <tbody>
-                    {displayPositions.length > 0 ? displayPositions.slice(0, 8).map(r => (
-                      <tr key={r.sym}>
-                        <td className="mono" style={{ fontWeight: 900 }}>{r.sym}</td>
-                        <td className="mono">{fmtQty(r.qty)}</td>
-                        <td className="mono">{r.price === null ? "—" : fmtPx(r.price)}</td>
-                        <td className="mono">{r.mv === null ? "—" : fmtTotal(r.mv)}</td>
-                        <td className={`mono ${r.unreal === null ? "" : r.unreal >= 0 ? "good" : "bad"}`} style={{ fontWeight: 900 }}>
-                          {r.unreal === null ? "—" : (r.unreal >= 0 ? "+" : "") + fmtTotal(r.unreal)}
-                        </td>
-                      </tr>
-                    )) : <tr><td colSpan={5} className="muted">No positions yet.</td></tr>}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        );
-
       default: return null;
     }
   };
