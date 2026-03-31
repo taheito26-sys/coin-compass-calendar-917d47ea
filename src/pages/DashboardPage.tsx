@@ -8,13 +8,11 @@ import { useMemo, useState, useEffect } from "react";
 import MarketSentiment from "@/components/dashboard/MarketSentiment";
 import PerAssetRiskBreakdown from "@/components/dashboard/PerAssetRiskBreakdown";
 import BenchmarkChart from "@/components/dashboard/BenchmarkChart";
-import { NetWorthChart } from "@/components/dashboard/NetWorthChart";
 
 import RebalancingTool from "@/components/dashboard/RebalancingTool";
 import { BreakEvenWidget } from "@/components/dashboard/BreakEvenWidget";
 import { WhaleTracker } from "@/components/dashboard/WhaleTracker";
 
-import { RiskMetrics } from "@/components/dashboard/RiskMetrics";
 import { BenchmarkComparison } from "@/components/dashboard/BenchmarkComparison";
 import { NewlyListed, TrendingSectors } from "@/components/dashboard/MarketMetadata";
 
