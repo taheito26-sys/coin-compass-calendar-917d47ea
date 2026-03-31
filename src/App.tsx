@@ -10,7 +10,7 @@ import CalendarPage from "@/pages/CalendarPage";
 import MarketsPage from "@/pages/MarketsPage";
 import SettingsPage from "@/pages/SettingsPage";
 import LedgerPage from "@/pages/LedgerPage";
-import ReviewPage from "@/pages/ReviewPage";
+import WhalePage from "@/pages/WhalePage";
 
 const PAGE_TITLES: Record<string, [string, string]> = {
   dashboard: ["Dashboard", "KPIs, Allocation, Heatmap"],
@@ -18,7 +18,7 @@ const PAGE_TITLES: Record<string, [string, string]> = {
   ledger: ["Ledger", "Transactions, Import, Connect"],
   calendar: ["Calendar", "Daily P&L, Per Coin"],
   markets: ["Markets", "Live Prices, Watchlist"],
-  review: ["2025 Wrapped", "Year in Review"],
+  whale: ["Whale Tracker", "Live Whale Movements"],
   settings: ["Settings", "Theme, Data, Vault, Alerts"],
 };
 
