@@ -593,6 +593,48 @@ export type Database = {
         }
         Relationships: []
       }
+      whale_cache: {
+        Row: {
+          amount: number
+          amount_usd: number
+          blockchain: string
+          created_at: string
+          detected_at: string
+          from_address: string
+          id: string
+          symbol: string
+          to_address: string
+          transaction_type: string
+          tx_hash: string | null
+        }
+        Insert: {
+          amount?: number
+          amount_usd?: number
+          blockchain: string
+          created_at?: string
+          detected_at?: string
+          from_address?: string
+          id?: string
+          symbol: string
+          to_address?: string
+          transaction_type?: string
+          tx_hash?: string | null
+        }
+        Update: {
+          amount?: number
+          amount_usd?: number
+          blockchain?: string
+          created_at?: string
+          detected_at?: string
+          from_address?: string
+          id?: string
+          symbol?: string
+          to_address?: string
+          transaction_type?: string
+          tx_hash?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
