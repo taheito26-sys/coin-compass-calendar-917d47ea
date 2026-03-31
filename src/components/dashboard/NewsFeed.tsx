@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import { useCrypto } from "@/lib/cryptoContext";
 
 interface NewsItem {
   id: string;
@@ -7,28 +8,39 @@ interface NewsItem {
   source: string;
   published_at: string;
   sentiment: "positive" | "negative" | "neutral";
+  tags: string[];
 }
 
 export function NewsFeed() {
+  const { state } = useCrypto();
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const heldSymbols = useMemo(() => {
+    return state.holdings.map(h => h.asset.toUpperCase());
+  }, [state.holdings]);
 
   useEffect(() => {
     async function loadNews() {
       try {
-        // Using a public RSS-to-JSON for demonstration or a direct crypto news API
-        // CryptoPanic is great but needs API key. Using a fallback mock for premium UI if fetch fails.
         const res = await fetch("https://min-api.cryptocompare.com/data/v2/news/?lang=EN");
         const json = await res.json();
-        const items = json.Data.slice(0, 5).map((n: any) => ({
+        const items = json.Data.map((n: any) => ({
           id: n.id,
           title: n.title,
           url: n.url,
           source: n.source,
           published_at: new Date(n.published_at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          sentiment: n.sentiment || "neutral"
+          sentiment: n.sentiment || "neutral",
+          tags: (n.categories || "").toUpperCase().split("|")
         }));
-        setNews(items);
+        
+        // Filter by held coins if relevant
+        const filtered = items.filter((n: any) => 
+          heldSymbols.length === 0 || n.tags.some((t: string) => heldSymbols.includes(t))
+        ).slice(0, 5);
+
+        setNews(filtered.length > 0 ? filtered : items.slice(0, 5));
       } catch (err) {
         console.error("News Fetch Error:", err);
       } finally {
@@ -36,7 +48,7 @@ export function NewsFeed() {
       }
     }
     loadNews();
-  }, []);
+  }, [heldSymbols]);
 
   if (loading) return <div className="muted" style={{ padding: 20, textAlign: "center" }}>Scanning market signals...</div>;
 

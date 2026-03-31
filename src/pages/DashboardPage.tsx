@@ -25,6 +25,7 @@ import { NewlyListed, TrendingSectors } from "@/components/dashboard/MarketMetad
 import { NetworkStatus } from "@/components/dashboard/NetworkStatus";
 import { MigrationHub } from "@/components/dashboard/MigrationHub";
 import { PriceAlerts } from "@/components/dashboard/PriceAlerts";
+import { AirdropChecker } from "@/components/dashboard/AirdropChecker";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -53,6 +54,7 @@ const ALL_CARDS: CardDef[] = [
   { id: "migration", label: "Asset Migration Hub", colSpan: 1 },
   { id: "network-status", label: "Network & API Status", colSpan: 1 },
   { id: "price-alerts", label: "Price Alerts Hub", colSpan: 1 },
+  { id: "airdrop", label: "Airdrop Eligibility", colSpan: 1 },
   { id: "health", label: "Portfolio Health", colSpan: 1 },
   { id: "whatif", label: "What-If Simulator", colSpan: 1 },
   { id: "breakEven", label: "Break-Even Targets" },
@@ -604,6 +606,18 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
             </div>
             <div className="panel-body">
               <PriceAlerts />
+            </div>
+          </div>
+        );
+      case "airdrop":
+        return (
+          <div className="panel" key="airdrop" onDragOver={(e) => handleDragOver(e, "airdrop")} onDrop={() => handleDrop("airdrop")}>
+            <div className="panel-head">
+              <DragHandle editing={editing} onDragStart={() => handleDragStart("airdrop")} onDragEnd={handleDragEnd} />
+              <h2>Airdrop Eligibility</h2>
+            </div>
+            <div className="panel-body">
+              <AirdropChecker />
             </div>
           </div>
         );
