@@ -311,7 +311,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
     switch (id) {
       case "kpis":
         return (
-          <div className="kpis" style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 10 }}>
+          <div className="kpis" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 0 }}>
             <div className="kpi-card">
               <div className="kpi-head"><span className="kpi-badge" style={{ background: "var(--brand)" }}>Σ</span></div>
               <div className="kpi-lbl">CURRENT TOTAL</div>
