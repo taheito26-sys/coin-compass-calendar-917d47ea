@@ -14,6 +14,8 @@ import { NetWorthChart } from "@/components/dashboard/NetWorthChart";
 import { CostBasisSwitcher } from "@/components/dashboard/CostBasisSwitcher";
 import RebalancingTool from "@/components/dashboard/RebalancingTool";
 import { BreakEvenWidget } from "@/components/dashboard/BreakEvenWidget";
+import { PortfolioHealth } from "@/components/dashboard/PortfolioHealth";
+import { WhatIfSimulator } from "@/components/dashboard/WhatIfSimulator";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -32,6 +34,8 @@ interface CardDef {
 const ALL_CARDS: CardDef[] = [
   { id: "kpis", label: "KPI Summary", colSpan: 2 },
   { id: "networth", label: "Historical Net Worth", colSpan: 2 },
+  { id: "health", label: "Portfolio Health", colSpan: 1 },
+  { id: "whatif", label: "What-If Simulator", colSpan: 1 },
   { id: "breakEven", label: "Break-Even Targets" },
   { id: "rebalancer", label: "Rebalancing Tool" },
   { id: "costSwitcher", label: "Cost Basis Comparison", colSpan: 2 },
@@ -230,7 +234,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
         order = ["costSwitcher", "kpis", "breakEven", "positions"];
         break;
       case "hodler":
-        order = ["networth", "allocation", "kpis", "rebalancer", "planner"];
+        order = ["kpis", "health", "whatif", "networth", "allocation", "rebalancer", "planner"];
         break;
       default:
         order = ALL_CARDS.map(c => c.id);
@@ -435,6 +439,30 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
             </div>
             <div className="panel-body">
               <BreakEvenWidget />
+            </div>
+          </div>
+        );
+      case "health":
+        return (
+          <div className="panel" key="health" onDragOver={(e) => handleDragOver(e, "health")} onDrop={() => handleDrop("health")}>
+            <div className="panel-head">
+              <DragHandle editing={editing} onDragStart={() => handleDragStart("health")} onDragEnd={handleDragEnd} />
+              <h2>Portfolio Health</h2>
+            </div>
+            <div className="panel-body">
+              <PortfolioHealth />
+            </div>
+          </div>
+        );
+      case "whatif":
+        return (
+          <div className="panel" key="whatif" onDragOver={(e) => handleDragOver(e, "whatif")} onDrop={() => handleDrop("whatif")}>
+            <div className="panel-head">
+              <DragHandle editing={editing} onDragStart={() => handleDragStart("whatif")} onDragEnd={handleDragEnd} />
+              <h2>What-If Simulator</h2>
+            </div>
+            <div className="panel-body">
+              <WhatIfSimulator />
             </div>
           </div>
         );

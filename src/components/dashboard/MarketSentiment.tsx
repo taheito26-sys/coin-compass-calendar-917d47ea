@@ -1,13 +1,29 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 
 export default function MarketSentiment() {
-  // Mock data - in a real app, this would come from an API hook
+  const [fng, setfng] = useState({ value: 50, label: "Neutral" });
+
+  useEffect(() => {
+    async function loadFng() {
+      try {
+        const res = await fetch("https://api.alternative.me/fng/");
+        const json = await res.json();
+        const val = parseInt(json.data[0].value);
+        const lbl = json.data[0].value_classification;
+        setfng({ value: val, label: lbl });
+      } catch (err) {
+        console.error("F&G Fetch Error:", err);
+      }
+    }
+    loadFng();
+  }, []);
+
   const data = useMemo(() => ({
-    fearGreed: 12, // Extreme Fear
-    label: "Extreme Fear",
-    longRatio: 42.4,
-    shortRatio: 57.6,
-  }), []);
+    fearGreed: fng.value,
+    label: fng.label,
+    longRatio: 51.2, // Still mock, would need CEX integration
+    shortRatio: 48.8,
+  }), [fng]);
 
   const getGaugeColor = (val: number) => {
     if (val < 25) return "var(--bad)";
