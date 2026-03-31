@@ -4,7 +4,7 @@ import { recalculateLots, getPositions, compareMethods, getRiskMetrics } from ".
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 function json(data: any, status = 200) {
@@ -32,12 +32,13 @@ Deno.serve(async (req) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return json({ error: "Unauthorized" }, 401);
 
-    const url = new URL(req.url);
-    const path = url.pathname.split("/").filter(Boolean)[1]; // /accounting/:action
+    // Read action from request body instead of URL path
+    const body = await req.json();
+    const action = body.action;
 
-    switch (path) {
+    switch (action) {
       case "recalculate": {
-        const { assetId, method } = await req.json();
+        const { assetId, method } = body;
         if (!assetId) return json({ error: "Missing assetId" }, 400);
         
         const result = await recalculateLots(supabase, user.id, assetId, method);
@@ -45,8 +46,7 @@ Deno.serve(async (req) => {
       }
 
       case "recalculate-all": {
-        const { method } = await req.json();
-        // Find all assets for this user
+        const { method } = body;
         const { data: assets } = await supabase
           .from("transactions")
           .select("asset_id")
@@ -75,7 +75,6 @@ Deno.serve(async (req) => {
       case "portfolio-value": {
         const positions = await getPositions(supabase, user.id);
         
-        // Fetch prices
         const { data: prices } = await supabase
           .from("price_cache")
           .select("asset_id, price");
@@ -100,7 +99,7 @@ Deno.serve(async (req) => {
       }
 
       case "compare-methods": {
-        const { assetId } = await req.json();
+        const { assetId } = body;
         if (!assetId) return json({ error: "Missing assetId" }, 400);
         const comparison = await compareMethods(supabase, user.id, assetId);
         return json({ ok: true, comparison });
@@ -112,7 +111,7 @@ Deno.serve(async (req) => {
       }
 
       default:
-        return json({ error: "Not found" }, 404);
+        return json({ error: `Unknown action: ${action}` }, 400);
     }
   } catch (err: any) {
     return json({ error: err.message }, 500);
