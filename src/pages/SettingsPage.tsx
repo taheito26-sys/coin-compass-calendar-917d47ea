@@ -196,20 +196,11 @@ function ThemeButton({ themeId, layoutId, active, onClick }: {
   );
 }
 
-// ── Alerts Types ──────────────────────────────────────────────────
-type AlertType = "price_above" | "price_below";
-
 // ── Main Page ─────────────────────────────────────────────────────────────
 
 const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function SettingsPage(_props, _ref) {
   const { state, setState, toast, rehydrateFromBackend } = useCrypto();
   const activeLayout = LAYOUTS.find(l => l.id === state.layout);
-
-  // Alert editing state
-  const [editId, setEditId] = useState<string | null>(null);
-  const [editSym, setEditSym] = useState("");
-  const [editThreshold, setEditThreshold] = useState("");
-  const [editType, setEditType] = useState<AlertType>("price_above");
 
   // User Preferences from Database
   const [minImportValue, setMinImportValue] = useState(100);
@@ -305,35 +296,6 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
     } finally {
       setRepairingPEPE(false);
     }
-  };
-
-  const alerts = state.alerts || [];
-
-  const addAlert = () => {
-    const d = cryptoDerived(state);
-    const sym = d.rows[0]?.sym || "BTC";
-    setState(prev => ({
-      ...prev,
-      alerts: [{ id: uid(), type: "price_above", sym, threshold: 100000, active: true, createdAt: Date.now(), triggeredAt: null }, ...prev.alerts]
-    }));
-    toast("Alert added — edit threshold", "good");
-  };
-
-  const startEdit = (a: any) => {
-    setEditId(a.id);
-    setEditSym(a.sym || "");
-    setEditThreshold(String(a.threshold));
-    setEditType(a.type || "price_above");
-  };
-
-  const saveEdit = () => {
-    if (!editId) return;
-    setState(p => ({
-      ...p,
-      alerts: p.alerts.map(a => a.id === editId ? { ...a, sym: editSym.toUpperCase(), threshold: parseFloat(editThreshold) || 0, type: editType } : a)
-    }));
-    setEditId(null);
-    toast("Alert updated", "good");
   };
 
   return (
@@ -485,7 +447,6 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
         <div className="panel-head"><h2>Notifications</h2></div>
         <div className="panel-body">
           {[
-            { key: "notifyAlerts", label: "Price alert notifications", def: true },
             { key: "notifyImports", label: "Import completion notifications", def: true },
             { key: "notifySync", label: "Sync status notifications", def: false },
           ].map(n => (
@@ -497,57 +458,6 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
               </div>
             </div>
           ))}
-        </div>
-      </div>
-
-      {/* Price Alerts */}
-      <div className="panel" style={{ marginTop: 10, minWidth: 0 }}>
-        <div className="panel-head">
-          <h2>🔔 Price Alerts</h2>
-          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            <span className="pill">{alerts.length} total</span>
-            <button className="btn tiny" onClick={addAlert}>+ Add</button>
-          </div>
-        </div>
-        <div className="panel-body" style={{ padding: 0 }}>
-          <div className="tableWrap"><table>
-            <thead><tr><th>Type</th><th>Symbol</th><th style={{ textAlign: "right" }}>Threshold</th><th>Status</th><th style={{ textAlign: "right" }}>Actions</th></tr></thead>
-            <tbody>
-              {alerts.length ? alerts.map(a => (
-                editId === a.id ? (
-                  <tr key={a.id} style={{ background: "var(--brand3)" }}>
-                    <td>
-                      <select className="inp" value={editType} onChange={e => setEditType(e.target.value as AlertType)} style={{ fontSize: 11, padding: 4 }}>
-                        <option value="price_above">PRICE ABOVE</option>
-                        <option value="price_below">PRICE BELOW</option>
-                      </select>
-                    </td>
-                    <td><input className="inp" value={editSym} onChange={e => setEditSym(e.target.value)} style={{ width: 60, fontSize: 11, padding: 4 }} /></td>
-                    <td style={{ textAlign: "right" }}><input className="inp" value={editThreshold} onChange={e => setEditThreshold(e.target.value)} style={{ width: 90, fontSize: 11, padding: 4, textAlign: "right" }} /></td>
-                    <td></td>
-                    <td style={{ textAlign: "right", display: "flex", gap: 4, justifyContent: "flex-end" }}>
-                      <button className="btn tiny" onClick={saveEdit}>Save</button>
-                      <button className="btn tiny secondary" onClick={() => setEditId(null)}>Cancel</button>
-                    </td>
-                  </tr>
-                ) : (
-                  <tr key={a.id}>
-                    <td style={{ fontWeight: 900 }}>{(a.type || "").replace("_", " ").toUpperCase()}</td>
-                    <td>{a.sym || "—"}</td>
-                    <td style={{ textAlign: "right" }}>{fmtPx(a.threshold)} {state.base}</td>
-                    <td>{a.active ? <span className="pill good">Active</span> : <span className="pill">Disabled</span>}</td>
-                    <td style={{ textAlign: "right", display: "flex", gap: 4, justifyContent: "flex-end" }}>
-                      <button className="btn tiny secondary" onClick={() => startEdit(a)}>Edit</button>
-                      <button className="btn tiny secondary" onClick={() => setState(p => ({ ...p, alerts: p.alerts.map(x => x.id === a.id ? { ...x, active: !x.active } : x) }))}>
-                        {a.active ? "Disable" : "Enable"}
-                      </button>
-                      <button className="btn tiny secondary" onClick={() => setState(p => ({ ...p, alerts: p.alerts.filter(x => x.id !== a.id) }))}>Del</button>
-                    </td>
-                  </tr>
-                )
-              )) : <tr><td colSpan={5} className="muted">No alerts yet. Click "+ Add" to get started.</td></tr>}
-            </tbody>
-          </table></div>
         </div>
       </div>
 

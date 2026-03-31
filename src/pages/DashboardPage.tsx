@@ -12,13 +12,11 @@ import { NetWorthChart } from "@/components/dashboard/NetWorthChart";
 
 import RebalancingTool from "@/components/dashboard/RebalancingTool";
 import { BreakEvenWidget } from "@/components/dashboard/BreakEvenWidget";
-import { PortfolioHealth } from "@/components/dashboard/PortfolioHealth";
 import { WhaleTracker } from "@/components/dashboard/WhaleTracker";
 
 import { RiskMetrics } from "@/components/dashboard/RiskMetrics";
 import { BenchmarkComparison } from "@/components/dashboard/BenchmarkComparison";
 import { NewlyListed, TrendingSectors } from "@/components/dashboard/MarketMetadata";
-import { AirdropChecker } from "@/components/dashboard/AirdropChecker";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -40,8 +38,6 @@ const ALL_CARDS: CardDef[] = [
   { id: "whale", label: "Whale Alert Feed", colSpan: 1 },
   { id: "risk-advanced", label: "Advanced Risk Metrics", colSpan: 1 },
   { id: "benchmark-v2", label: "Market Alpha Analysis", colSpan: 1 },
-  { id: "airdrop", label: "Airdrop Eligibility", colSpan: 1 },
-  { id: "health", label: "Portfolio Health", colSpan: 1 },
   { id: "breakEven", label: "Break-Even Targets" },
   { id: "rebalancer", label: "Rebalancing Tool" },
   { id: "allocation", label: "Coin Allocation" },
@@ -238,10 +234,10 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
         order = ["kpis", "news", "whale", "correlation", "risk-advanced", "movers", "marketSentiment", "trendingSectors", "heatmap", "positions"];
         break;
       case "taxes":
-        order = ["costSwitcher", "kpis", "tax-harvest", "breakEven", "positions"];
+        order = ["kpis", "breakEven", "positions"];
         break;
       case "hodler":
-        order = ["kpis", "health", "whatif", "networth", "allocation", "rebalancer", "planner"];
+        order = ["kpis", "networth", "allocation", "rebalancer"];
         break;
       default:
         order = ALL_CARDS.map(c => c.id);
@@ -492,30 +488,6 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
             </div>
             <div className="panel-body">
               <BenchmarkComparison />
-            </div>
-          </div>
-        );
-      case "airdrop":
-        return (
-          <div className="panel" key="airdrop" onDragOver={(e) => handleDragOver(e, "airdrop")} onDrop={() => handleDrop("airdrop")}>
-            <div className="panel-head">
-              <DragHandle editing={editing} onDragStart={() => handleDragStart("airdrop")} onDragEnd={handleDragEnd} />
-              <h2>Airdrop Eligibility</h2>
-            </div>
-            <div className="panel-body">
-              <AirdropChecker />
-            </div>
-          </div>
-        );
-      case "health":
-        return (
-          <div className="panel" key="health" onDragOver={(e) => handleDragOver(e, "health")} onDrop={() => handleDrop("health")}>
-            <div className="panel-head">
-              <DragHandle editing={editing} onDragStart={() => handleDragStart("health")} onDragEnd={handleDragEnd} />
-              <h2>Portfolio Health</h2>
-            </div>
-            <div className="panel-body">
-              <PortfolioHealth />
             </div>
           </div>
         );

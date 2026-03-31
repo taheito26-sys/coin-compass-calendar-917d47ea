@@ -25,7 +25,7 @@ const PAGES: CmdItem[] = [
   { type: "page", id: "markets", label: "Markets", sub: "Live Prices · Watchlist", icon: "🌐" },
   { type: "page", id: "ledger", label: "Ledger", sub: "Journal · Import · Manual Entry", icon: "📒" },
   { type: "page", id: "calendar", label: "Calendar", sub: "Daily P&L · Per Coin", icon: "📅" },
-  { type: "page", id: "settings", label: "Settings", sub: "Layout · Themes · Alerts · Vault", icon: "⚙️" },
+  { type: "page", id: "settings", label: "Settings", sub: "Layout · Themes · Vault", icon: "⚙️" },
 ];
 
 export default function CommandPalette({ onNav }: { onNav: (page: string) => void }) {
@@ -79,8 +79,6 @@ export default function CommandPalette({ onNav }: { onNav: (page: string) => voi
       action: () => onNav("settings") },
     { type: "action", id: "import-csv", label: "Import CSV", sub: "Upload exchange trade history", icon: "📁",
       action: () => onNav("ledger") },
-    { type: "action", id: "manage-alerts", label: "Manage Alerts", sub: "Price alerts & notification channels", icon: "🔔",
-      action: () => onNav("settings") },
   ], [state.theme, onNav, setState]);
 
   const results = useMemo(() => {

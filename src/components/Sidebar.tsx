@@ -8,12 +8,10 @@ const pages = [
   { id: "ledger", label: "Ledger", sub: "Transactions · Import", icon: "M4 4h16v16H4zM4 9h16M9 4v16" },
   { id: "calendar", label: "Calendar", sub: "Daily P&L", icon: "M3 4h18v18H3zM16 2v4M8 2v4M3 10h18" },
   { id: "review", label: "Wrapped", sub: "2025 Review", icon: "M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16z" },
-  { id: "settings", label: "Settings", sub: "Theme · Alerts", icon: "M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM19.4 15a7.9 7.9 0 0 0 .1-1l2-1.5-2-3.5-2.4 1a8 8 0 0 0-1.7-1L13 3h-4l-.9 2.9a8 8 0 0 0-1.7 1l-2.4-1-2 3.5L4 13a8 8 0 0 0 .1 1l-2 1.5 2 3.5 2.4-1a8 8 0 0 0 1.7 1L9 21h4l.9-2.9a8 8 0 0 0 1.7-1l2.4 1 2-3.5-2-1.6Z" },
+  { id: "settings", label: "Settings", sub: "Theme", icon: "M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM19.4 15a7.9 7.9 0 0 0 .1-1l2-1.5-2-3.5-2.4 1a8 8 0 0 0-1.7-1L13 3h-4l-.9 2.9a8 8 0 0 0-1.7 1l-2.4-1-2 3.5L4 13a8 8 0 0 0 .1 1l-2 1.5 2 3.5 2.4-1a8 8 0 0 0 1.7 1L9 21h4l.9-2.9a8 8 0 0 0 1.7-1l2.4 1 2-3.5-2-1.6Z" },
 ];
 
 export default function Sidebar({ page, onNav, onLogout }: { page: string; onNav: (p: string) => void; onLogout?: () => void }) {
-  const { state } = useCrypto();
-  const alertCount = (state.alerts || []).filter(a => a.active).length;
 
   return (
     <aside className="sidebar">
@@ -33,12 +31,6 @@ export default function Sidebar({ page, onNav, onLogout }: { page: string; onNav
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 {p.label}
-                {p.id === "settings" && alertCount > 0 && (
-                  <span style={{
-                    fontSize: 8, fontWeight: 900, background: "var(--brand)", color: "#fff",
-                    borderRadius: 999, padding: "1px 5px", lineHeight: 1.4,
-                  }}>{alertCount}</span>
-                )}
               </div>
               <small>{p.sub}</small>
             </div>
