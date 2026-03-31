@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { AuthProvider, useAuth } from "@/lib/supabaseAuth";
 import { CryptoProvider, useCrypto } from "@/lib/cryptoContext";
 import AuthScreen from "@/components/AuthScreen";
@@ -22,88 +22,45 @@ const PAGE_TITLES: Record<string, [string, string]> = {
 
 function LoadingScreen() {
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "grid",
-        placeItems: "center",
-        background: "var(--bg, #0a0a0a)",
-        color: "var(--muted, #a1a1aa)",
-      }}
-    >
+    <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#0a0a0a", color: "#a1a1aa" }}>
       Loading authentication...
     </div>
   );
 }
 
-function AppShell({
-  onLogout,
-  userLabel,
-}: {
-  onLogout: () => Promise<void>;
-  userLabel?: string;
-}) {
+function AppShell({ onLogout, userLabel }: { onLogout: () => Promise<void>; userLabel?: string }) {
   const [page, setPage] = useState("dashboard");
-  const { toastMsg } = useCrypto();
+  const { toastMsg } = useCrypto() || {};
   const [title, sub] = PAGE_TITLES[page] || ["Crypto Tracker", ""];
-
+  console.log(`[AppShell] Rendering ${page}`);
   return (
-    <>
-      <div className="app">
-        <Sidebar page={page} onNav={setPage} onLogout={onLogout} />
-        <div className="mainWrap">
-          <div className="appUserBar" style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, padding: "12px 18px 0" }}>
-            {userLabel ? (
-              <span style={{ fontSize: 12, color: "var(--muted, #a1a1aa)" }}>{userLabel}</span>
-            ) : null}
-            <button
-              onClick={onLogout}
-              style={{
-                background: "rgba(255,255,255,0.06)",
-                border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: 8,
-                padding: "6px 14px",
-                color: "var(--muted, #a1a1aa)",
-                fontSize: 12,
-                cursor: "pointer",
-              }}
-            >
-              Sign Out
-            </button>
-          </div>
-
-          <Topbar title={title} sub={sub} onNav={setPage} />
-
-          <div className="scroll">
-            {page === "dashboard" && <DashboardPage onNav={setPage} />}
-            {page === "assets" && <PortfolioPage />}
-            {page === "ledger" && <LedgerPage />}
-            {page === "calendar" && <CalendarPage />}
-            {page === "markets" && <MarketsPage />}
-            {page === "settings" && <SettingsPage />}
-          </div>
+    <div className="app">
+      <Sidebar page={page} onNav={setPage} onLogout={onLogout} />
+      <div className="mainWrap">
+        <Topbar title={title} sub={sub} onNav={setPage} />
+        <div className="scroll">
+          {page === "dashboard" && <DashboardPage onNav={setPage} />}
+          {page === "assets" && <PortfolioPage />}
+          {page === "ledger" && <LedgerPage />}
+          {page === "calendar" && <CalendarPage />}
+          {page === "markets" && <MarketsPage />}
+          {page === "settings" && <SettingsPage />}
         </div>
       </div>
-
       {toastMsg ? <div className={`toast show ${toastMsg.type}`}>{toastMsg.msg}</div> : null}
-    </>
+    </div>
   );
 }
 
 function AuthGate() {
-  const { isLoaded, isSignedIn, userEmail, signOut } = useAuth();
-
-  if (!isLoaded) return <LoadingScreen />;
-  if (!isSignedIn) return <AuthScreen />;
-
-  return <AppShell onLogout={signOut} userLabel={userEmail || "Signed in"} />;
+  const auth = useAuth();
+  console.log("[AuthGate] Render", auth);
+  if (!auth?.isLoaded) return <LoadingScreen />;
+  if (!auth?.isSignedIn) return <AuthScreen />;
+  return <AppShell onLogout={auth.signOut} userLabel={auth.userEmail || "Signed in"} />;
 }
 
 export default function App() {
-  useEffect(() => {
-    document.title = "Crypto Tracker Pro — Portfolio & Intelligence";
-  }, []);
-
   return (
     <AuthProvider>
       <CryptoProvider>

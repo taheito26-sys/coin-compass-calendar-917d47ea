@@ -11,14 +11,20 @@ export function NetWorthChart() {
     const load = async () => {
       try {
         const history = await fetchHistoricalNetWorth();
+        if (!Array.isArray(history)) {
+          console.warn("fetchHistoricalNetWorth returned non-array", history);
+          setData([]);
+          return;
+        }
         const formatted = history.map((h) => ({
           date: h.date,
-          value: Number(h.total_market_value),
-          cost: Number(h.total_cost_basis),
+          value: Number(h.total_market_value || 0),
+          cost: Number(h.total_cost_basis || 0),
         }));
         setData(formatted);
       } catch (err) {
         console.error("Failed to load net worth history", err);
+        setData([]);
       } finally {
         setLoading(false);
       }
