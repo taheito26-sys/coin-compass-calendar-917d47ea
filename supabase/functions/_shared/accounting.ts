@@ -35,7 +35,8 @@ export async function recalculateLots(
   supabase: SupabaseClient,
   userId: string,
   assetId: string,
-  method: string = 'FIFO'
+  method: string = 'FIFO',
+  dryRun: boolean = false
 ) {
   // 1. Fetch all transactions for this user and asset, ordered by timestamp
   const { data: txs, error: txError } = await supabase
@@ -134,24 +135,23 @@ export async function recalculateLots(
     }
   }
 
-  // 3. Atomically update the lots table (Delete old lots, insert new ones)
-  // For safety, we wrap this in a transaction if possible, or just delete and insert.
-  // Note: Since this is likely called from an Edge Function, we'll do it sequentially.
-  
-  const { error: deleteError } = await supabase
-    .from("lots")
-    .delete()
-    .eq("user_id", userId)
-    .eq("asset_id", assetId);
-
-  if (deleteError) throw deleteError;
-
-  if (openLots.length > 0) {
-    const { error: insertError } = await supabase
+  // 3. Persist to DB only if not a dry run
+  if (!dryRun) {
+    const { error: deleteError } = await supabase
       .from("lots")
-      .insert(openLots);
+      .delete()
+      .eq("user_id", userId)
+      .eq("asset_id", assetId);
 
-    if (insertError) throw insertError;
+    if (deleteError) throw deleteError;
+
+    if (openLots.length > 0) {
+      const { error: insertError } = await supabase
+        .from("lots")
+        .insert(openLots);
+
+      if (insertError) throw insertError;
+    }
   }
 
   return { realizedPnl, openLots: openLots.filter(l => l.status === 'open') };
@@ -169,9 +169,7 @@ export async function compareMethods(
   const results: Record<string, { costBasis: number; realizedPnl: number }> = {};
 
   for (const m of methods) {
-    // Note: This is an in-memory recalculation that doesn't persist to the DB.
-    // We already fetch all txs in recalculateLots.
-    const res = await recalculateLots(supabase, userId, assetId, m);
+    const res = await recalculateLots(supabase, userId, assetId, m, true);
     
     // Calculate total cost basis of remaining lots
     const costBasis = (res.openLots || []).reduce((s, l) => s + (Number(l.remaining_qty) * Number(l.unit_cost)), 0);
