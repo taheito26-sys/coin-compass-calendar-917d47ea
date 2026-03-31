@@ -491,7 +491,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
 
   return (
     <>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 0, padding: "8px 12px", background: "var(--panel)", borderBottom: "1px solid var(--line)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6, padding: "8px 12px", background: "var(--panel)", borderRadius: 12, border: "1px solid var(--line)" }}>
         <span className="pill">{base}</span>
         <div style={{ flex: 1 }} />
         <button 
@@ -530,7 +530,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
           const id = row[0];
           return (
             <div key={`row-${ri}`} draggable={editing} onDragStart={() => handleDragStart(id)} onDragOver={e => handleDragOver(e, id)} onDrop={() => handleDrop(id)} onDragEnd={handleDragEnd}
-              style={{ marginBottom: 0, opacity: draggedId === id ? 0.5 : 1, outline: dragOverId === id ? "2px dashed var(--brand)" : "none", outlineOffset: 2, borderRadius: 0, transition: "opacity .15s" }}>
+              style={{ marginBottom: 0, opacity: draggedId === id ? 0.5 : 1, outline: dragOverId === id ? "2px dashed var(--brand)" : "none", outlineOffset: 2, borderRadius: 12, transition: "opacity .15s" }}>
               {id === "kpis" && editing && (
                 <div style={{ fontSize: 9, color: "var(--muted)", marginBottom: 2, display: "flex", alignItems: "center", gap: 4 }}>
                   <span style={{ cursor: "grab", fontSize: 14 }}>⠿</span> KPI Summary
@@ -544,7 +544,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
           <div key={`row-${ri}`} className="dashboard-charts-grid">
             {row.map(id => (
               <div key={id} draggable={editing} onDragStart={() => handleDragStart(id)} onDragOver={e => handleDragOver(e, id)} onDrop={() => handleDrop(id)} onDragEnd={handleDragEnd}
-                style={{ opacity: draggedId === id ? 0.5 : 1, outline: dragOverId === id ? "2px dashed var(--brand)" : "none", outlineOffset: 2, borderRadius: 0, transition: "opacity .15s" }}>
+                style={{ opacity: draggedId === id ? 0.5 : 1, outline: dragOverId === id ? "2px dashed var(--brand)" : "none", outlineOffset: 2, borderRadius: 12, transition: "opacity .15s" }}>
                 {renderCard(id)}
               </div>
             ))}
