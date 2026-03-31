@@ -38,7 +38,9 @@ async function fetchChain(
   const valueField = isUtxo ? "output_total_usd" : "value_usd";
   const amountField = isUtxo ? "output_total" : "value";
 
-  const url = `https://api.blockchair.com/${chain}/transactions?s=${valueField}(desc)&limit=5&q=${valueField}(1000000..)`;
+  // Get transactions from the last 24 hours with >$1M value
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const url = `https://api.blockchair.com/${chain}/transactions?s=${valueField}(desc)&limit=5&q=${valueField}(1000000..),time(${yesterday}..)`;
 
   const res = await fetch(url);
   if (!res.ok) {
