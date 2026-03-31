@@ -9,22 +9,15 @@ import MarketSentiment from "@/components/dashboard/MarketSentiment";
 import PerAssetRiskBreakdown from "@/components/dashboard/PerAssetRiskBreakdown";
 import BenchmarkChart from "@/components/dashboard/BenchmarkChart";
 import { NetWorthChart } from "@/components/dashboard/NetWorthChart";
-import { CostBasisSwitcher } from "@/components/dashboard/CostBasisSwitcher";
+
 import RebalancingTool from "@/components/dashboard/RebalancingTool";
 import { BreakEvenWidget } from "@/components/dashboard/BreakEvenWidget";
 import { PortfolioHealth } from "@/components/dashboard/PortfolioHealth";
-import { WhatIfSimulator } from "@/components/dashboard/WhatIfSimulator";
-import { NewsFeed } from "@/components/dashboard/NewsFeed";
 import { WhaleTracker } from "@/components/dashboard/WhaleTracker";
-import { CorrelationMatrix } from "@/components/dashboard/CorrelationMatrix";
+
 import { RiskMetrics } from "@/components/dashboard/RiskMetrics";
-import { MonteCarlo } from "@/components/dashboard/MonteCarlo";
-import { TaxHarvesting } from "@/components/dashboard/TaxHarvesting";
 import { BenchmarkComparison } from "@/components/dashboard/BenchmarkComparison";
 import { NewlyListed, TrendingSectors } from "@/components/dashboard/MarketMetadata";
-import { NetworkStatus } from "@/components/dashboard/NetworkStatus";
-import { MigrationHub } from "@/components/dashboard/MigrationHub";
-import { PriceAlerts } from "@/components/dashboard/PriceAlerts";
 import { AirdropChecker } from "@/components/dashboard/AirdropChecker";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -44,22 +37,13 @@ interface CardDef {
 const ALL_CARDS: CardDef[] = [
   { id: "kpis", label: "KPI Summary", colSpan: 2 },
   { id: "networth", label: "Historical Net Worth", colSpan: 2 },
-  { id: "news", label: "Market News Feed", colSpan: 1 },
   { id: "whale", label: "Whale Alert Feed", colSpan: 1 },
-  { id: "correlation", label: "Correlation Matrix", colSpan: 1 },
   { id: "risk-advanced", label: "Advanced Risk Metrics", colSpan: 1 },
-  { id: "monte-carlo", label: "Monte Carlo Simulations", colSpan: 1 },
-  { id: "tax-harvest", label: "Tax-Loss Harvesting", colSpan: 1 },
   { id: "benchmark-v2", label: "Market Alpha Analysis", colSpan: 1 },
-  { id: "migration", label: "Asset Migration Hub", colSpan: 1 },
-  { id: "network-status", label: "Network & API Status", colSpan: 1 },
-  { id: "price-alerts", label: "Price Alerts Hub", colSpan: 1 },
   { id: "airdrop", label: "Airdrop Eligibility", colSpan: 1 },
   { id: "health", label: "Portfolio Health", colSpan: 1 },
-  { id: "whatif", label: "What-If Simulator", colSpan: 1 },
   { id: "breakEven", label: "Break-Even Targets" },
   { id: "rebalancer", label: "Rebalancing Tool" },
-  { id: "costSwitcher", label: "Cost Basis Comparison", colSpan: 2 },
   { id: "allocation", label: "Coin Allocation" },
   { id: "heatmap", label: "Heatmap" },
   { id: "marketSentiment", label: "Market Sentiment" },
@@ -453,18 +437,6 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
           </div>
         );
 
-      case "costSwitcher":
-        return (
-          <div className="panel" key="costSwitcher" onDragOver={(e) => handleDragOver(e, "costSwitcher")} onDrop={() => handleDrop("costSwitcher")}>
-            <div className="panel-head">
-              <DragHandle editing={editing} onDragStart={() => handleDragStart("costSwitcher")} onDragEnd={handleDragEnd} />
-              <h2>Cost Basis Comparison</h2>
-            </div>
-            <div className="panel-body">
-              <CostBasisSwitcher />
-            </div>
-          </div>
-        );
       case "rebalancer":
         return (
           <div className="panel" key="rebalancer" onDragOver={(e) => handleDragOver(e, "rebalancer")} onDrop={() => handleDrop("rebalancer")}>
@@ -489,18 +461,6 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
             </div>
           </div>
         );
-      case "news":
-        return (
-          <div className="panel" key="news" onDragOver={(e) => handleDragOver(e, "news")} onDrop={() => handleDrop("news")}>
-            <div className="panel-head">
-              <DragHandle editing={editing} onDragStart={() => handleDragStart("news")} onDragEnd={handleDragEnd} />
-              <h2>Market News Feed</h2>
-            </div>
-            <div className="panel-body">
-              <NewsFeed />
-            </div>
-          </div>
-        );
       case "whale":
         return (
           <div className="panel" key="whale" onDragOver={(e) => handleDragOver(e, "whale")} onDrop={() => handleDrop("whale")}>
@@ -510,18 +470,6 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
             </div>
             <div className="panel-body">
               <WhaleTracker />
-            </div>
-          </div>
-        );
-      case "correlation":
-        return (
-          <div className="panel" key="correlation" onDragOver={(e) => handleDragOver(e, "correlation")} onDrop={() => handleDrop("correlation")}>
-            <div className="panel-head">
-              <DragHandle editing={editing} onDragStart={() => handleDragStart("correlation")} onDragEnd={handleDragEnd} />
-              <h2>Correlation Matrix</h2>
-            </div>
-            <div className="panel-body">
-              <CorrelationMatrix />
             </div>
           </div>
         );
@@ -537,30 +485,6 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
             </div>
           </div>
         );
-      case "monte-carlo":
-        return (
-          <div className="panel" key="monte-carlo" onDragOver={(e) => handleDragOver(e, "monte-carlo")} onDrop={() => handleDrop("monte-carlo")}>
-            <div className="panel-head">
-              <DragHandle editing={editing} onDragStart={() => handleDragStart("monte-carlo")} onDragEnd={handleDragEnd} />
-              <h2>Monte Carlo Projections</h2>
-            </div>
-            <div className="panel-body">
-              <MonteCarlo />
-            </div>
-          </div>
-        );
-      case "tax-harvest":
-        return (
-          <div className="panel" key="tax-harvest" onDragOver={(e) => handleDragOver(e, "tax-harvest")} onDrop={() => handleDrop("tax-harvest")}>
-            <div className="panel-head">
-              <DragHandle editing={editing} onDragStart={() => handleDragStart("tax-harvest")} onDragEnd={handleDragEnd} />
-              <h2>Tax-Loss Harvesting</h2>
-            </div>
-            <div className="panel-body">
-              <TaxHarvesting />
-            </div>
-          </div>
-        );
       case "benchmark-v2":
         return (
           <div className="panel" key="benchmark-v2" onDragOver={(e) => handleDragOver(e, "benchmark-v2")} onDrop={() => handleDrop("benchmark-v2")}>
@@ -570,42 +494,6 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
             </div>
             <div className="panel-body">
               <BenchmarkComparison />
-            </div>
-          </div>
-        );
-      case "network-status":
-        return (
-          <div className="panel" key="network-status" onDragOver={(e) => handleDragOver(e, "network-status")} onDrop={() => handleDrop("network-status")}>
-            <div className="panel-head">
-              <DragHandle editing={editing} onDragStart={() => handleDragStart("network-status")} onDragEnd={handleDragEnd} />
-              <h2>Network & API Status</h2>
-            </div>
-            <div className="panel-body">
-              <NetworkStatus />
-            </div>
-          </div>
-        );
-      case "migration":
-        return (
-          <div className="panel" key="migration" onDragOver={(e) => handleDragOver(e, "migration")} onDrop={() => handleDrop("migration")}>
-            <div className="panel-head">
-              <DragHandle editing={editing} onDragStart={() => handleDragStart("migration")} onDragEnd={handleDragEnd} />
-              <h2>Asset Migration Hub</h2>
-            </div>
-            <div className="panel-body">
-              <MigrationHub />
-            </div>
-          </div>
-        );
-      case "price-alerts":
-        return (
-          <div className="panel" key="price-alerts" onDragOver={(e) => handleDragOver(e, "price-alerts")} onDrop={() => handleDrop("price-alerts")}>
-            <div className="panel-head">
-              <DragHandle editing={editing} onDragStart={() => handleDragStart("price-alerts")} onDragEnd={handleDragEnd} />
-              <h2>Price Alerts Hub</h2>
-            </div>
-            <div className="panel-body">
-              <PriceAlerts />
             </div>
           </div>
         );
@@ -630,18 +518,6 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
             </div>
             <div className="panel-body">
               <PortfolioHealth />
-            </div>
-          </div>
-        );
-      case "whatif":
-        return (
-          <div className="panel" key="whatif" onDragOver={(e) => handleDragOver(e, "whatif")} onDrop={() => handleDrop("whatif")}>
-            <div className="panel-head">
-              <DragHandle editing={editing} onDragStart={() => handleDragStart("whatif")} onDragEnd={handleDragEnd} />
-              <h2>What-If Simulator</h2>
-            </div>
-            <div className="panel-body">
-              <WhatIfSimulator />
             </div>
           </div>
         );

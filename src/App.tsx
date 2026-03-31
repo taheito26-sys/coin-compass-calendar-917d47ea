@@ -10,8 +10,6 @@ import CalendarPage from "@/pages/CalendarPage";
 import MarketsPage from "@/pages/MarketsPage";
 import SettingsPage from "@/pages/SettingsPage";
 import LedgerPage from "@/pages/LedgerPage";
-import PlannerPage from "@/pages/PlannerPage";
-import JournalPage from "@/pages/JournalPage";
 import ReviewPage from "@/pages/ReviewPage";
 
 const PAGE_TITLES: Record<string, [string, string]> = {
@@ -19,9 +17,7 @@ const PAGE_TITLES: Record<string, [string, string]> = {
   assets: ["Portfolio", "Holdings, Lots, Alerts"],
   ledger: ["Ledger", "Transactions, Import, Connect"],
   calendar: ["Calendar", "Daily P&L, Per Coin"],
-  journal: ["Trading Journal", "Daily Notes & Logs"],
   markets: ["Markets", "Live Prices, Watchlist"],
-  planner: ["DCA Planner", "Backtest & Goal Tracking"],
   review: ["2025 Wrapped", "Year in Review"],
   settings: ["Settings", "Theme, Data, Vault, Alerts"],
 };
@@ -49,9 +45,7 @@ function AppShell({ onLogout, userLabel }: { onLogout: () => Promise<void>; user
           {page === "assets" && <PortfolioPage />}
           {page === "ledger" && <LedgerPage />}
           {page === "calendar" && <CalendarPage />}
-          {page === "journal" && <JournalPage />}
           {page === "markets" && <MarketsPage />}
-          {page === "planner" && <PlannerPage />}
           {page === "review" && <ReviewPage />}
           {page === "settings" && <SettingsPage />}
         </div>
