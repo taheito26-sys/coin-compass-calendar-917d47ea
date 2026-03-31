@@ -17,11 +17,21 @@ interface WhaleAlert {
 }
 
 const CHAIN_COLORS: Record<string, string> = {
-  bitcoin: "hsl(32 92% 50%)",
-  ethereum: "hsl(226 74% 63%)",
-  litecoin: "hsl(0 2% 75%)",
-  dogecoin: "hsl(47 56% 48%)",
-  "bitcoin-cash": "hsl(121 53% 54%)",
+  bitcoin: "hsl(var(--chart-3))",
+  ethereum: "hsl(var(--chart-1))",
+  litecoin: "hsl(var(--muted-foreground))",
+  dogecoin: "hsl(var(--chart-4))",
+  "bitcoin-cash": "hsl(var(--chart-2))",
+  solana: "hsl(var(--chart-5))",
+};
+
+const EXPLORER_BASE: Record<string, string> = {
+  bitcoin: "https://blockchair.com/bitcoin/transaction/",
+  ethereum: "https://etherscan.io/tx/",
+  litecoin: "https://blockchair.com/litecoin/transaction/",
+  dogecoin: "https://blockchair.com/dogecoin/transaction/",
+  "bitcoin-cash": "https://blockchair.com/bitcoin-cash/transaction/",
+  solana: "https://solscan.io/tx/",
 };
 
 async function requestNotificationPermission(): Promise<boolean> {
@@ -36,42 +46,122 @@ function sendNotification(title: string, body: string) {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   try {
     new Notification(title, { body, tag: "whale-alert" });
-  } catch {
-    // Ignore unsupported Notification constructor contexts
-  }
+  } catch { /* unsupported context */ }
 }
 
-function getMockAlerts(): WhaleAlert[] {
-  return [
-    { id: "mock-1", blockchain: "bitcoin", symbol: "BTC", amount: 1250, amount_usd: 84300000, from: "Unknown", to: "Unknown", timestamp: Date.now() - 300000, transaction_type: "transfer" },
-    { id: "mock-2", blockchain: "ethereum", symbol: "ETH", amount: 15400, amount_usd: 54200000, from: "Unknown", to: "Unknown", timestamp: Date.now() - 1200000, transaction_type: "transfer" },
-    { id: "mock-3", blockchain: "bitcoin", symbol: "BTC", amount: 800, amount_usd: 53900000, from: "Unknown", to: "Unknown", timestamp: Date.now() - 2500000, transaction_type: "transfer" },
-  ];
-}
+type FeedSource = "live" | "cached" | "demo";
 
-function normalizeAlerts(data: unknown): WhaleAlert[] {
+function normalizeResponse(data: unknown): { alerts: WhaleAlert[]; source: FeedSource } {
   const payload = data && typeof data === "object" && "data" in data
     ? (data as { data?: unknown }).data ?? data
     : data;
 
-  if (!payload || typeof payload !== "object") return [];
+  if (!payload || typeof payload !== "object") return { alerts: [], source: "demo" };
 
-  const typedPayload = payload as {
-    success?: boolean;
-    alerts?: WhaleAlert[];
-    transactions?: WhaleAlert[];
-  };
+  const p = payload as { success?: boolean; source?: string; alerts?: WhaleAlert[] };
+  if (p.success === false) return { alerts: [], source: "demo" };
 
-  if (typedPayload.success === false) return [];
-  if (Array.isArray(typedPayload.alerts)) return typedPayload.alerts;
-  if (Array.isArray(typedPayload.transactions)) return typedPayload.transactions;
-  return [];
+  const alerts = Array.isArray(p.alerts) ? p.alerts : [];
+  const source: FeedSource = p.source === "live" ? "live" : p.source === "cached" ? "cached" : alerts.length > 0 ? "live" : "demo";
+  return { alerts, source };
+}
+
+function getMockAlerts(): WhaleAlert[] {
+  return [
+    { id: "mock-1", blockchain: "ethereum", symbol: "ETH", amount: 15400, amount_usd: 54200000, from: "0x1a2b..3c4d", to: "0x5e6f..7a8b", timestamp: Date.now() - 300000, transaction_type: "transfer" },
+    { id: "mock-2", blockchain: "bitcoin", symbol: "BTC", amount: 800, amount_usd: 53900000, from: "bc1q..xz9m", to: "bc1q..4f7k", timestamp: Date.now() - 1200000, transaction_type: "transfer" },
+    { id: "mock-3", blockchain: "dogecoin", symbol: "DOGE", amount: 250000000, amount_usd: 42500000, from: "D7vK..mN3p", to: "DQkw..eR5t", timestamp: Date.now() - 2500000, transaction_type: "transfer" },
+  ];
+}
+
+function StatusBadge({ source }: { source: FeedSource }) {
+  const isLive = source === "live";
+  const isCached = source === "cached";
+  const label = isLive ? "● LIVE" : isCached ? "● CACHED" : "● DEMO";
+
+  return (
+    <span
+      className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
+      style={{
+        background: isLive
+          ? "hsl(142 71% 45% / 0.15)"
+          : isCached
+          ? "hsl(210 80% 55% / 0.15)"
+          : "hsl(43 96% 56% / 0.15)",
+        color: isLive
+          ? "hsl(142 71% 35%)"
+          : isCached
+          ? "hsl(210 80% 45%)"
+          : "hsl(38 92% 40%)",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function AlertCard({ alert }: { alert: WhaleAlert }) {
+  const color = CHAIN_COLORS[alert.blockchain] ?? "hsl(var(--primary))";
+  const explorerUrl = alert.tx_hash
+    ? `${EXPLORER_BASE[alert.blockchain] ?? "https://blockchair.com/"}${alert.tx_hash}`
+    : null;
+
+  const truncAddr = (s: string) =>
+    s.length > 14 ? `${s.slice(0, 6)}…${s.slice(-4)}` : s;
+
+  return (
+    <div
+      className="border rounded-xl p-3"
+      style={{ background: "hsl(var(--muted) / 0.12)", borderColor: "hsl(var(--border))" }}
+    >
+      <div className="flex justify-between items-center mb-1.5">
+        <span className="font-mono font-black text-[13px] flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full inline-block" style={{ background: color }} />
+          <span style={{ color }}>{alert.symbol}</span>
+          <span>🐋</span>
+        </span>
+        <span className="text-[9px] text-muted-foreground">
+          {new Date(alert.timestamp).toLocaleTimeString()}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center mb-2">
+        <div className="text-[11px] font-bold truncate text-foreground">{truncAddr(alert.from)}</div>
+        <div className="text-[12px] text-muted-foreground">→</div>
+        <div className="text-[11px] font-bold truncate text-right text-foreground">{truncAddr(alert.to)}</div>
+      </div>
+
+      <div className="flex justify-between items-baseline gap-3">
+        <div className="font-extrabold text-[15px] text-foreground">
+          {fmtQty(alert.amount)} {alert.symbol}
+        </div>
+        <div className="text-[10px] text-muted-foreground font-bold whitespace-nowrap">
+          ${alert.amount_usd >= 1e9
+            ? `${(alert.amount_usd / 1e9).toFixed(2)}B`
+            : alert.amount_usd >= 1e6
+            ? `${(alert.amount_usd / 1e6).toFixed(1)}M`
+            : `${(alert.amount_usd / 1e3).toFixed(0)}K`} USD
+        </div>
+      </div>
+
+      {explorerUrl && (
+        <a
+          href={explorerUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[8px] text-primary/70 hover:text-primary mt-1 block truncate"
+        >
+          View on Explorer ↗
+        </a>
+      )}
+    </div>
+  );
 }
 
 export function WhaleTracker() {
   const [alerts, setAlerts] = useState<WhaleAlert[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isLive, setIsLive] = useState(false);
+  const [source, setSource] = useState<FeedSource>("demo");
   const [notificationsEnabled, setNotificationsEnabled] = useState(
     typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted"
   );
@@ -98,38 +188,36 @@ export function WhaleTracker() {
           body: {},
         });
 
-        if (error) {
-          throw error;
-        }
+        if (error) throw error;
 
-        const liveAlerts = normalizeAlerts(data);
-        if (liveAlerts.length === 0) {
-          throw new Error("No whale alerts returned from live feed");
-        }
+        const result = normalizeResponse(data);
+
+        if (result.alerts.length === 0) throw new Error("Empty response");
 
         if (notificationsEnabled) {
-          for (const alert of liveAlerts) {
+          for (const alert of result.alerts) {
             if (!seenIdsRef.current.has(alert.id)) {
-              const usdStr = `$${(alert.amount_usd / 1_000_000).toFixed(1)}M`;
+              const usdStr = alert.amount_usd >= 1e6
+                ? `$${(alert.amount_usd / 1_000_000).toFixed(1)}M`
+                : `$${(alert.amount_usd / 1_000).toFixed(0)}K`;
               sendNotification(
                 `🐋 ${fmtQty(alert.amount)} ${alert.symbol} moved`,
                 `${usdStr} — ${alert.from} → ${alert.to}`
               );
             }
           }
-
-          liveAlerts.forEach((alert) => seenIdsRef.current.add(alert.id));
+          result.alerts.forEach((a) => seenIdsRef.current.add(a.id));
         }
 
         if (!cancelled) {
-          setAlerts(liveAlerts);
-          setIsLive(true);
+          setAlerts(result.alerts);
+          setSource(result.source);
         }
       } catch (err) {
         console.error("Whale Fetch Error:", err);
         if (!cancelled) {
           setAlerts(getMockAlerts());
-          setIsLive(false);
+          setSource("demo");
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -138,16 +226,14 @@ export function WhaleTracker() {
 
     fetchWhales();
     const timer = setInterval(fetchWhales, 120_000);
-
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
+    return () => { cancelled = true; clearInterval(timer); };
   }, [notificationsEnabled]);
 
   if (loading) {
     return <div className="text-muted-foreground text-center p-5">Scanning the deep... 🐋</div>;
   }
+
+  const chainList = [...new Set(alerts.map((a) => a.symbol))].join(" · ");
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -159,15 +245,7 @@ export function WhaleTracker() {
         }}
       >
         <div className="flex items-center gap-2">
-          <span
-            className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
-            style={{
-              background: isLive ? "hsl(142 71% 45% / 0.15)" : "hsl(43 96% 56% / 0.15)",
-              color: isLive ? "hsl(142 71% 35%)" : "hsl(38 92% 40%)",
-            }}
-          >
-            {isLive ? "● LIVE" : "● DEMO"}
-          </span>
+          <StatusBadge source={source} />
           <span className="text-[11px] font-bold text-foreground">
             {notificationsEnabled ? "🔔 Alerts On" : "🔕 Alerts Off"}
           </span>
@@ -184,64 +262,15 @@ export function WhaleTracker() {
         </button>
       </div>
 
-      {alerts.map((alert) => {
-        const color = CHAIN_COLORS[alert.blockchain] ?? "hsl(var(--primary))";
-
-        return (
-          <div
-            key={alert.id}
-            className="border rounded-xl p-3"
-            style={{ background: "hsl(var(--muted) / 0.12)", borderColor: "hsl(var(--border))" }}
-          >
-            <div className="flex justify-between items-center mb-1.5">
-              <span className="font-mono font-black text-[13px] flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full inline-block" style={{ background: color }} />
-                <span style={{ color }}>{alert.symbol}</span>
-                <span>🐋</span>
-              </span>
-              <span className="text-[9px] text-muted-foreground">
-                {new Date(alert.timestamp).toLocaleTimeString()}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center mb-2">
-              <div className="text-[11px] font-bold truncate text-foreground">
-                {alert.from.length > 14 ? `${alert.from.slice(0, 6)}…${alert.from.slice(-4)}` : alert.from}
-              </div>
-              <div className="text-[12px] text-muted-foreground">→</div>
-              <div className="text-[11px] font-bold truncate text-right text-foreground">
-                {alert.to.length > 14 ? `${alert.to.slice(0, 6)}…${alert.to.slice(-4)}` : alert.to}
-              </div>
-            </div>
-
-            <div className="flex justify-between items-baseline gap-3">
-              <div className="font-extrabold text-[15px] text-foreground">
-                {fmtQty(alert.amount)} {alert.symbol}
-              </div>
-              <div className="text-[10px] text-muted-foreground font-bold whitespace-nowrap">
-                ${alert.amount_usd >= 1e9
-                  ? `${(alert.amount_usd / 1e9).toFixed(2)}B`
-                  : `${(alert.amount_usd / 1e6).toFixed(1)}M`} USD
-              </div>
-            </div>
-
-            {alert.tx_hash && (
-              <a
-                href={`https://blockchair.com/${alert.blockchain}/transaction/${alert.tx_hash}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[8px] text-primary/70 hover:text-primary mt-1 block truncate"
-              >
-                View on Blockchair ↗
-              </a>
-            )}
-          </div>
-        );
-      })}
+      {alerts.map((alert) => (
+        <AlertCard key={alert.id} alert={alert} />
+      ))}
 
       <div className="text-center mt-1 text-[10px] text-muted-foreground">
-        {isLive
-          ? "Live data from BTC · ETH · LTC · DOGE · BCH via Blockchair"
+        {source === "live"
+          ? `Live multi-chain data · ${chainList}`
+          : source === "cached"
+          ? `Cached data · ${chainList} (upstream temporarily unavailable)`
           : "Demo data — live feed unavailable"}
       </div>
     </div>
