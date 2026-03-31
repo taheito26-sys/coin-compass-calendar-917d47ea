@@ -23,6 +23,7 @@ import { TaxHarvesting } from "@/components/dashboard/TaxHarvesting";
 import { BenchmarkComparison } from "@/components/dashboard/BenchmarkComparison";
 import { NewlyListed, TrendingSectors } from "@/components/dashboard/MarketMetadata";
 import { NetworkStatus } from "@/components/dashboard/NetworkStatus";
+import { MigrationHub } from "@/components/dashboard/MigrationHub";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -577,6 +578,18 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
             </div>
             <div className="panel-body">
               <NetworkStatus />
+            </div>
+          </div>
+        );
+      case "migration":
+        return (
+          <div className="panel" key="migration" onDragOver={(e) => handleDragOver(e, "migration")} onDrop={() => handleDrop("migration")}>
+            <div className="panel-head">
+              <DragHandle editing={editing} onDragStart={() => handleDragStart("migration")} onDragEnd={handleDragEnd} />
+              <h2>Asset Migration Hub</h2>
+            </div>
+            <div className="panel-body">
+              <MigrationHub />
             </div>
           </div>
         );
