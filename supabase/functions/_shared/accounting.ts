@@ -35,7 +35,8 @@ export async function recalculateLots(
   supabase: SupabaseClient,
   userId: string,
   assetId: string,
-  method: string = 'FIFO'
+  method: string = 'FIFO',
+  dryRun: boolean = false
 ) {
   // 1. Fetch all transactions for this user and asset, ordered by timestamp
   const { data: txs, error: txError } = await supabase
