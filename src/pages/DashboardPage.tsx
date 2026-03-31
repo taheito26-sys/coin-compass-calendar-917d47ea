@@ -21,6 +21,7 @@ import { WhaleTracker } from "@/components/dashboard/WhaleTracker";
 import { CorrelationMatrix } from "@/components/dashboard/CorrelationMatrix";
 import { RiskMetrics } from "@/components/dashboard/RiskMetrics";
 import { MonteCarlo } from "@/components/dashboard/MonteCarlo";
+import { TaxHarvesting } from "@/components/dashboard/TaxHarvesting";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -44,6 +45,7 @@ const ALL_CARDS: CardDef[] = [
   { id: "correlation", label: "Correlation Matrix", colSpan: 1 },
   { id: "risk-advanced", label: "Advanced Risk Metrics", colSpan: 1 },
   { id: "monte-carlo", label: "Monte Carlo Simulations", colSpan: 1 },
+  { id: "tax-harvest", label: "Tax-Loss Harvesting", colSpan: 1 },
   { id: "health", label: "Portfolio Health", colSpan: 1 },
   { id: "whatif", label: "What-If Simulator", colSpan: 1 },
   { id: "breakEven", label: "Break-Even Targets" },
@@ -245,7 +247,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
         order = ["kpis", "news", "whale", "correlation", "risk-advanced", "movers", "marketSentiment", "trendingSectors", "heatmap", "positions"];
         break;
       case "taxes":
-        order = ["costSwitcher", "kpis", "breakEven", "positions"];
+        order = ["costSwitcher", "kpis", "tax-harvest", "breakEven", "positions"];
         break;
       case "hodler":
         order = ["kpis", "health", "whatif", "networth", "allocation", "rebalancer", "planner"];
@@ -513,6 +515,18 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
             </div>
             <div className="panel-body">
               <MonteCarlo />
+            </div>
+          </div>
+        );
+      case "tax-harvest":
+        return (
+          <div className="panel" key="tax-harvest" onDragOver={(e) => handleDragOver(e, "tax-harvest")} onDrop={() => handleDrop("tax-harvest")}>
+            <div className="panel-head">
+              <DragHandle editing={editing} onDragStart={() => handleDragStart("tax-harvest")} onDragEnd={handleDragEnd} />
+              <h2>Tax-Loss Harvesting</h2>
+            </div>
+            <div className="panel-body">
+              <TaxHarvesting />
             </div>
           </div>
         );
