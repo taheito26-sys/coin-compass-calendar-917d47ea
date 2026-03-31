@@ -746,11 +746,11 @@ export async function fetchPositions(): Promise<any[]> {
 
 export async function fetchHistoricalNetWorth(): Promise<any[]> {
   const { data, error } = await supabase
-    .from("portfolio_snapshots")
+    .from("portfolio_snapshots" as any)
     .select("*")
     .order("date", { ascending: true });
   if (error) throw error;
-  return data || [];
+  return (data as any[]) || [];
 }
 
 export async function recalculateLots(assetId: string): Promise<void> {
