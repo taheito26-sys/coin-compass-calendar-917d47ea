@@ -4,16 +4,6 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-interface BlockchairTx {
-  block_id: number;
-  hash: string;
-  time: string;
-  input_total: number;
-  output_total: number;
-  input_total_usd: number;
-  output_total_usd: number;
-}
-
 interface WhaleAlert {
   id: string;
   blockchain: string;
@@ -27,72 +17,88 @@ interface WhaleAlert {
   tx_hash: string;
 }
 
+// Blockchair chains: [apiPath, symbol, divisor]
+const CHAINS: [string, string, number][] = [
+  ["bitcoin", "BTC", 1e8],
+  ["ethereum", "ETH", 1e18],
+  ["litecoin", "LTC", 1e8],
+  ["dogecoin", "DOGE", 1e8],
+  ["bitcoin-cash", "BCH", 1e8],
+];
+
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function fetchChain(
+  chain: string,
+  symbol: string,
+  divisor: number
+): Promise<WhaleAlert[]> {
+  const isUtxo = chain !== "ethereum";
+  const valueField = isUtxo ? "output_total_usd" : "value_usd";
+  const amountField = isUtxo ? "output_total" : "value";
+
+  // Last 24h, >$1M
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const url = `https://api.blockchair.com/${chain}/transactions?s=${valueField}(desc)&limit=3&q=${valueField}(1000000..),time(${yesterday}..)`;
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    const body = await res.text();
+    console.error(`Blockchair ${chain} ${res.status}: ${body.slice(0, 200)}`);
+    return [];
+  }
+
+  const json = await res.json();
+  const txs: Record<string, unknown>[] = json?.data ?? [];
+
+  return txs.map((tx: Record<string, unknown>) => {
+    const rawAmount = Number(tx[amountField] ?? 0);
+    const amount = rawAmount / divisor;
+    const amountUsd = Number(tx[valueField] ?? 0);
+    const hash = String(tx.hash ?? "");
+    const time = String(tx.time ?? "");
+
+    return {
+      id: `${symbol.toLowerCase()}-${hash}`,
+      blockchain: chain,
+      symbol,
+      amount,
+      amount_usd: amountUsd,
+      from: isUtxo ? "Multiple Inputs" : String((tx as Record<string, unknown>).sender ?? "Unknown"),
+      to: isUtxo ? "Multiple Outputs" : String((tx as Record<string, unknown>).recipient ?? "Unknown"),
+      timestamp: new Date(time + (time.includes("Z") ? "" : "Z")).getTime(),
+      transaction_type: "transfer",
+      tx_hash: hash,
+    };
+  });
+}
+
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Fetch large BTC transactions from Blockchair (free, no key)
-    const btcUrl =
-      "https://api.blockchair.com/bitcoin/transactions?s=output_total_usd(desc)&limit=5&q=output_total_usd(1000000..)";
-    const ethUrl =
-      "https://api.blockchair.com/ethereum/transactions?s=value_usd(desc)&limit=5&q=value_usd(1000000..)";
-
-    const [btcRes, ethRes] = await Promise.allSettled([
-      fetch(btcUrl),
-      fetch(ethUrl),
-    ]);
-
     const alerts: WhaleAlert[] = [];
 
-    // Parse BTC
-    if (btcRes.status === "fulfilled" && btcRes.value.ok) {
-      const btcData = await btcRes.value.json();
-      const txs: BlockchairTx[] = btcData?.data ?? [];
-      for (const tx of txs) {
-        const amountBtc = (tx.output_total ?? 0) / 1e8;
-        alerts.push({
-          id: `btc-${tx.hash}`,
-          blockchain: "bitcoin",
-          symbol: "BTC",
-          amount: amountBtc,
-          amount_usd: tx.output_total_usd ?? 0,
-          from: "Unknown",
-          to: "Unknown",
-          timestamp: new Date(tx.time + "Z").getTime(),
-          transaction_type: "transfer",
-          tx_hash: tx.hash,
-        });
+    // Fetch sequentially with small delay to avoid Blockchair free-tier rate limits
+    for (const [chain, sym, div] of CHAINS) {
+      try {
+        const result = await fetchChain(chain, sym, div);
+        alerts.push(...result);
+      } catch (e) {
+        console.error(`Error fetching ${chain}:`, e);
       }
+      // 500ms delay between chains to respect free rate limit
+      await sleep(500);
     }
 
-    // Parse ETH
-    if (ethRes.status === "fulfilled" && ethRes.value.ok) {
-      const ethData = await ethRes.value.json();
-      const txs = ethData?.data ?? [];
-      for (const tx of txs) {
-        const amountEth = (tx.value ?? 0) / 1e18;
-        alerts.push({
-          id: `eth-${tx.hash}`,
-          blockchain: "ethereum",
-          symbol: "ETH",
-          amount: amountEth,
-          amount_usd: tx.value_usd ?? 0,
-          from: tx.sender ?? "Unknown",
-          to: tx.recipient ?? "Unknown",
-          timestamp: new Date(tx.time + "Z").getTime(),
-          transaction_type: "transfer",
-          tx_hash: tx.hash,
-        });
-      }
-    }
-
-    // Sort by USD value descending
     alerts.sort((a, b) => b.amount_usd - a.amount_usd);
 
     return new Response(
-      JSON.stringify({ success: true, alerts: alerts.slice(0, 8) }),
+      JSON.stringify({ success: true, alerts: alerts.slice(0, 12) }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: unknown) {
