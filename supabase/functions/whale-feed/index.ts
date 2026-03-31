@@ -17,7 +17,7 @@ interface WhaleAlert {
   tx_hash: string;
 }
 
-// Blockchair chains config: [apiPath, symbol, divisor]
+// Blockchair chains: [apiPath, symbol, divisor]
 const CHAINS: [string, string, number][] = [
   ["bitcoin", "BTC", 1e8],
   ["ethereum", "ETH", 1e18],
@@ -26,27 +26,27 @@ const CHAINS: [string, string, number][] = [
   ["bitcoin-cash", "BCH", 1e8],
 ];
 
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 async function fetchChain(
   chain: string,
   symbol: string,
   divisor: number
 ): Promise<WhaleAlert[]> {
-  // For UTXO chains (BTC, LTC, DOGE, BCH) use output_total_usd
-  // For account chains (ETH) use value_usd
   const isUtxo = chain !== "ethereum";
-
   const valueField = isUtxo ? "output_total_usd" : "value_usd";
   const amountField = isUtxo ? "output_total" : "value";
 
-  // Get transactions from the last 24 hours with >$1M value
+  // Last 24h, >$1M
   const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-  const url = `https://api.blockchair.com/${chain}/transactions?s=${valueField}(desc)&limit=5&q=${valueField}(1000000..),time(${yesterday}..)`;
+  const url = `https://api.blockchair.com/${chain}/transactions?s=${valueField}(desc)&limit=3&q=${valueField}(1000000..),time(${yesterday}..)`;
 
   const res = await fetch(url);
   if (!res.ok) {
-    console.error(`Blockchair ${chain} error: ${res.status}`);
     const body = await res.text();
-    console.error(body);
+    console.error(`Blockchair ${chain} ${res.status}: ${body.slice(0, 200)}`);
     return [];
   }
 
@@ -55,7 +55,7 @@ async function fetchChain(
 
   return txs.map((tx: Record<string, unknown>) => {
     const rawAmount = Number(tx[amountField] ?? 0);
-    const amount = isUtxo ? rawAmount / divisor : rawAmount / divisor;
+    const amount = rawAmount / divisor;
     const amountUsd = Number(tx[valueField] ?? 0);
     const hash = String(tx.hash ?? "");
     const time = String(tx.time ?? "");
@@ -66,8 +66,8 @@ async function fetchChain(
       symbol,
       amount,
       amount_usd: amountUsd,
-      from: isUtxo ? "Multiple Inputs" : String((tx as any).sender ?? "Unknown"),
-      to: isUtxo ? "Multiple Outputs" : String((tx as any).recipient ?? "Unknown"),
+      from: isUtxo ? "Multiple Inputs" : String((tx as Record<string, unknown>).sender ?? "Unknown"),
+      to: isUtxo ? "Multiple Outputs" : String((tx as Record<string, unknown>).recipient ?? "Unknown"),
       timestamp: new Date(time + (time.includes("Z") ? "" : "Z")).getTime(),
       transaction_type: "transfer",
       tx_hash: hash,
@@ -81,23 +81,24 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   try {
-    // Fetch all chains in parallel
-    const results = await Promise.allSettled(
-      CHAINS.map(([chain, sym, div]) => fetchChain(chain, sym, div))
-    );
-
     const alerts: WhaleAlert[] = [];
-    for (const r of results) {
-      if (r.status === "fulfilled") {
-        alerts.push(...r.value);
+
+    // Fetch sequentially with small delay to avoid Blockchair free-tier rate limits
+    for (const [chain, sym, div] of CHAINS) {
+      try {
+        const result = await fetchChain(chain, sym, div);
+        alerts.push(...result);
+      } catch (e) {
+        console.error(`Error fetching ${chain}:`, e);
       }
+      // 500ms delay between chains to respect free rate limit
+      await sleep(500);
     }
 
-    // Sort by USD value descending, take top 10
     alerts.sort((a, b) => b.amount_usd - a.amount_usd);
 
     return new Response(
-      JSON.stringify({ success: true, alerts: alerts.slice(0, 10) }),
+      JSON.stringify({ success: true, alerts: alerts.slice(0, 12) }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: unknown) {
