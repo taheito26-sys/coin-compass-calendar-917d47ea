@@ -364,7 +364,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
               <div className={`kpi-val ${riskMetrics?.sessionPnl && riskMetrics.sessionPnl >= 0 ? "good" : "bad"}`}>
                 {riskMetrics ? (riskMetrics.sessionPnl >= 0 ? "+" : "") + fmtTotal(riskMetrics.sessionPnl) : "..."}
               </div>
-              <div className="kpi-sub">{riskMetrics ? riskMetrics.sessionPnlPct.toFixed(2) + "%" : "vs yesterday"}</div>
+              <div className="kpi-sub">{riskMetrics ? (riskMetrics.sessionPnlPct ?? 0).toFixed(2) + "%" : "vs yesterday"}</div>
             </div>
             <div className="kpi-card">
               <div className="kpi-head"><span className={`kpi-badge`}>{totalPnlCombined >= 0 ? "▲" : "▼"}</span></div>
@@ -374,7 +374,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
             </div>
             <div className="kpi-card">
               <div className="kpi-lbl">MAX DRAWDOWN</div>
-              <div className="kpi-val bad">{riskMetrics ? riskMetrics.maxDrawdown.toFixed(2) + "%" : "..."}</div>
+              <div className="kpi-val bad">{riskMetrics ? (riskMetrics.maxDrawdown ?? 0).toFixed(2) + "%" : "..."}</div>
               <div className="kpi-sub">Peak to trough</div>
             </div>
             <div className="kpi-card">
