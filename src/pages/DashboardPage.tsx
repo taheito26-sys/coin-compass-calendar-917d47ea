@@ -9,9 +9,7 @@ import MarketSentiment from "@/components/dashboard/MarketSentiment";
 import PerAssetRiskBreakdown from "@/components/dashboard/PerAssetRiskBreakdown";
 import BenchmarkChart from "@/components/dashboard/BenchmarkChart";
 
-import RebalancingTool from "@/components/dashboard/RebalancingTool";
 import { BreakEvenWidget } from "@/components/dashboard/BreakEvenWidget";
-import { WhaleTracker } from "@/components/dashboard/WhaleTracker";
 
 import { BenchmarkComparison } from "@/components/dashboard/BenchmarkComparison";
 import { NewlyListed, TrendingSectors } from "@/components/dashboard/MarketMetadata";
