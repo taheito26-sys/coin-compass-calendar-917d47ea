@@ -157,10 +157,65 @@ export function WhaleTracker() {
         </button>
       </div>
 
-      {alerts.map(alert => (
-        <div key={alert.id} className="border rounded-xl p-3" style={{ background: "rgba(255,255,255,0.02)", borderColor: "hsl(var(--border))" }}>
-          <div className="flex justify-between items-center mb-1.5">
-            <span className="font-mono font-black text-primary text-[13px]">{alert.symbol} 🐋</span>
+      {alerts.map(alert => {
+        const chainColor: Record<string, string> = {
+          bitcoin: "#f7931a", ethereum: "#627eea", litecoin: "#bfbbbb",
+          dogecoin: "#c2a633", "bitcoin-cash": "#4cc947",
+        };
+        const color = chainColor[alert.blockchain] ?? "hsl(var(--primary))";
+
+        return (
+          <div key={alert.id} className="border rounded-xl p-3" style={{ background: "rgba(255,255,255,0.02)", borderColor: "hsl(var(--border))" }}>
+            <div className="flex justify-between items-center mb-1.5">
+              <span className="font-mono font-black text-[13px] flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full inline-block" style={{ background: color }} />
+                <span style={{ color }}>{alert.symbol}</span>
+                <span>🐋</span>
+              </span>
+              <span className="text-[9px] text-muted-foreground">{new Date(alert.timestamp).toLocaleTimeString()}</span>
+            </div>
+
+            <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center mb-2">
+              <div className="text-[11px] font-bold truncate text-foreground">
+                {alert.from.length > 14 ? alert.from.slice(0, 6) + "…" + alert.from.slice(-4) : alert.from}
+              </div>
+              <div className="text-[12px] text-muted-foreground">→</div>
+              <div className="text-[11px] font-bold truncate text-right text-foreground">
+                {alert.to.length > 14 ? alert.to.slice(0, 6) + "…" + alert.to.slice(-4) : alert.to}
+              </div>
+            </div>
+
+            <div className="flex justify-between items-baseline">
+              <div className="font-extrabold text-[15px] text-foreground">
+                {fmtQty(alert.amount)} {alert.symbol}
+              </div>
+              <div className="text-[10px] text-muted-foreground font-bold">
+                ${alert.amount_usd >= 1e9
+                  ? (alert.amount_usd / 1e9).toFixed(2) + "B"
+                  : (alert.amount_usd / 1e6).toFixed(1) + "M"} USD
+              </div>
+            </div>
+
+            {alert.tx_hash && (
+              <a
+                href={`https://blockchair.com/${alert.blockchain}/transaction/${alert.tx_hash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[8px] text-primary/60 hover:text-primary mt-1 block truncate"
+              >
+                View on Blockchair ↗
+              </a>
+            )}
+          </div>
+        );
+      })}
+
+      <div className="text-center mt-1 text-[10px] text-muted-foreground">
+        {isLive ? "Live data from BTC · ETH · LTC · DOGE · BCH via Blockchair" : "Demo data — edge function loading..."}
+      </div>
+    </div>
+  );
+}
             <span className="text-[9px] text-muted-foreground">{new Date(alert.timestamp).toLocaleTimeString()}</span>
           </div>
 
