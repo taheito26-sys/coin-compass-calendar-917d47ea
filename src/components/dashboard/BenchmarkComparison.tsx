@@ -39,10 +39,10 @@ export function BenchmarkComparison() {
       <div
         style={{
           background: "hsl(var(--muted) / 0.18)",
-          padding: 12,
-          borderRadius: 12,
+          padding: 8,
+          borderRadius: 8,
           border: "1px solid hsl(var(--border))",
-          marginBottom: 16,
+          marginBottom: 8,
         }}
       >
         <div style={{ fontSize: 10, color: "hsl(var(--muted-foreground))", textTransform: "uppercase" }}>
@@ -68,7 +68,7 @@ export function BenchmarkComparison() {
         </div>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {benchmarks.map((benchmark) => (
           <div key={benchmark.name} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11 }}>

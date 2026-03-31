@@ -41,7 +41,7 @@ export default function MarketSentiment() {
         <h2>Market Sentiment</h2>
         <button className="btn tiny secondary" style={{ fontSize: 10 }}>View More →</button>
       </div>
-      <div className="panel-body" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 20, padding: "20px 16px" }}>
+      <div className="panel-body" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "8px 6px" }}>
         {/* Gauge */}
         <div style={{ position: "relative", width: 180, height: 90, overflow: "hidden" }}>
           <svg viewBox="0 0 100 50" style={{ width: "100%", height: "100%" }}>

@@ -27,9 +27,9 @@ export function NewlyListed() {
   if (loading) return <div className="muted" style={{ padding: 20 }}>Scanning the frontier...</div>;
 
   return (
-    <div className="newly-listed" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+    <div className="newly-listed" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
        {tokens.map(t => (
-         <div key={t.symbol} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", background: "var(--panel2)", borderRadius: 10, border: "1px solid var(--line)" }}>
+         <div key={t.symbol} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 8px", background: "var(--panel2)", borderRadius: 8, border: "1px solid var(--line)" }}>
             <div>
                <div style={{ fontSize: 12, fontWeight: 800 }}>{t.name} <span className="muted" style={{ fontWeight: 400, marginLeft: 4 }}>({t.symbol})</span></div>
                <div style={{ fontSize: 9, color: "var(--muted2)", marginTop: 2 }}>Listed {t.added}</div>
@@ -56,10 +56,10 @@ export function TrendingSectors() {
   ].sort((a, b) => b.trend - a.trend);
 
   return (
-    <div className="trending-sectors" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+    <div className="trending-sectors" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
        {sectors.map(s => (
          <div key={s.name}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, alignItems: "center" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2, alignItems: "center" }}>
                <span style={{ fontSize: 11, fontWeight: 800 }}>{s.name}</span>
                <span style={{ fontSize: 11, fontWeight: 800, color: s.trend > 0 ? "var(--good)" : "var(--bad)" }}>
                   {s.trend > 0 ? "+" : ""}{s.trend}%

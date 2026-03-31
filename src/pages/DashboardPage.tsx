@@ -30,16 +30,16 @@ interface CardDef {
 
 const ALL_CARDS: CardDef[] = [
   { id: "kpis", label: "KPI Summary", colSpan: 2 },
-  { id: "benchmark-v2", label: "Market Alpha Analysis", colSpan: 1 },
-  { id: "breakEven", label: "Break-Even Targets" },
   { id: "allocation", label: "Coin Allocation" },
   { id: "heatmap", label: "Heatmap" },
   { id: "marketSentiment", label: "Market Sentiment" },
+  { id: "riskBreakdown", label: "Per-Asset Risk" },
+  { id: "benchmark", label: "Portfolio vs Benchmarks" },
+  { id: "benchmark-v2", label: "Market Alpha Analysis", colSpan: 1 },
+  { id: "breakEven", label: "Break-Even Targets" },
   { id: "trendingSectors", label: "Trending Sectors" },
   { id: "newlyListed", label: "Newly Listed" },
-  { id: "riskBreakdown", label: "Per-Asset Risk" },
   { id: "movers", label: "Top Movers" },
-  { id: "benchmark", label: "Portfolio vs Benchmarks" },
 ];
 
 interface DonutSlice {
@@ -99,7 +99,7 @@ function DonutLegend({ slices }: { slices: DonutSlice[] }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 24px", alignContent: "center" }}>
       {slices.map((s, i) => (
-        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div key={i} style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <span style={{ width: 8, height: 8, borderRadius: 2, flexShrink: 0, background: s.color }} />
           <span style={{ fontWeight: 700, fontSize: 12, minWidth: 40 }}>{s.label}</span>
           <span style={{ fontSize: 11, color: "var(--muted)", marginLeft: "auto" }}>{s.pct.toFixed(s.pct < 1 ? 2 : 1)}%</span>
@@ -311,7 +311,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
     switch (id) {
       case "kpis":
         return (
-          <div className="kpis" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 0 }}>
+          <div className="kpis" style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 0 }}>
             <div className="kpi-card">
               <div className="kpi-head"><span className="kpi-badge" style={{ background: "var(--brand)" }}>Σ</span></div>
               <div className="kpi-lbl">CURRENT TOTAL</div>
@@ -354,7 +354,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
         return (
           <div className="panel">
             <div className="panel-head"><DragHandle editing={editing} /><h2>Coin Allocation</h2></div>
-            <div className="panel-body" style={{ display: "flex", gap: 24, alignItems: "center", flexWrap: "wrap" }}>
+            <div className="panel-body" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "10px 8px" }}>
               {coinSlices.length > 0 ? (
                 <>
                   <DonutChart slices={coinSlices} centerLabel={topCoin?.label ?? "-"} centerValue={fmtTotal(topCoin?.value ?? 0)} centerSub={topCoin ? topCoin.pct.toFixed(1) + "%" : ""} size={180} />
@@ -373,7 +373,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
             <div className="panel-head"><DragHandle editing={editing} /><h2>Heatmap</h2></div>
             <div className="panel-body">
               {heatmapItems.length > 0 ? (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 2 }}>
                   {heatmapItems.map((item, i) => <HeatmapBlock key={i} sym={item.sym} value={item.value} pct={item.pct} color={item.color} />)}
                 </div>
               ) : <div className="muted" style={{ padding: 20, textAlign: "center" }}>No positions to display.</div>}
@@ -436,7 +436,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
         return (
           <div className="panel">
             <div className="panel-head"><DragHandle editing={editing} /><h2>Top Movers</h2></div>
-            <div className="panel-body" style={{ padding: 0 }}>
+            <div className="panel-body" style={{ padding: 4 }}>
               {(topGainers.length > 0 || topLosers.length > 0) ? (
                 <table>
                   <thead><tr><th>Asset</th><th style={{ textAlign: "right" }}>P&amp;L %</th><th style={{ textAlign: "right" }}>P&amp;L</th></tr></thead>
@@ -491,7 +491,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
 
   return (
     <>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
         <span className="pill">{base}</span>
         <div style={{ flex: 1 }} />
         <button 
