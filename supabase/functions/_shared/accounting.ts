@@ -169,9 +169,7 @@ export async function compareMethods(
   const results: Record<string, { costBasis: number; realizedPnl: number }> = {};
 
   for (const m of methods) {
-    // Note: This is an in-memory recalculation that doesn't persist to the DB.
-    // We already fetch all txs in recalculateLots.
-    const res = await recalculateLots(supabase, userId, assetId, m);
+    const res = await recalculateLots(supabase, userId, assetId, m, true);
     
     // Calculate total cost basis of remaining lots
     const costBasis = (res.openLots || []).reduce((s, l) => s + (Number(l.remaining_qty) * Number(l.unit_cost)), 0);
