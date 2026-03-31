@@ -9,7 +9,7 @@ import MarketSentiment from "@/components/dashboard/MarketSentiment";
 import PerAssetRiskBreakdown from "@/components/dashboard/PerAssetRiskBreakdown";
 import BenchmarkChart from "@/components/dashboard/BenchmarkChart";
 import { NetWorthChart } from "@/components/dashboard/NetWorthChart";
-import { CostBasisSwitcher } from "@/components/dashboard/CostBasisSwitcher";
+
 import RebalancingTool from "@/components/dashboard/RebalancingTool";
 import { BreakEvenWidget } from "@/components/dashboard/BreakEvenWidget";
 import { PortfolioHealth } from "@/components/dashboard/PortfolioHealth";
