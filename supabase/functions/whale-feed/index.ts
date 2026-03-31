@@ -4,16 +4,6 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-interface BlockchairTx {
-  block_id: number;
-  hash: string;
-  time: string;
-  input_total: number;
-  output_total: number;
-  input_total_usd: number;
-  output_total_usd: number;
-}
-
 interface WhaleAlert {
   id: string;
   blockchain: string;
@@ -27,72 +17,85 @@ interface WhaleAlert {
   tx_hash: string;
 }
 
+// Blockchair chains config: [apiPath, symbol, divisor]
+const CHAINS: [string, string, number][] = [
+  ["bitcoin", "BTC", 1e8],
+  ["ethereum", "ETH", 1e18],
+  ["litecoin", "LTC", 1e8],
+  ["dogecoin", "DOGE", 1e8],
+  ["bitcoin-cash", "BCH", 1e8],
+];
+
+async function fetchChain(
+  chain: string,
+  symbol: string,
+  divisor: number
+): Promise<WhaleAlert[]> {
+  // For UTXO chains (BTC, LTC, DOGE, BCH) use output_total_usd
+  // For account chains (ETH) use value_usd
+  const isUtxo = chain !== "ethereum";
+
+  const valueField = isUtxo ? "output_total_usd" : "value_usd";
+  const amountField = isUtxo ? "output_total" : "value";
+
+  const url = `https://api.blockchair.com/${chain}/transactions?s=${valueField}(desc)&limit=5&q=${valueField}(1000000..)`;
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    console.error(`Blockchair ${chain} error: ${res.status}`);
+    const body = await res.text();
+    console.error(body);
+    return [];
+  }
+
+  const json = await res.json();
+  const txs: Record<string, unknown>[] = json?.data ?? [];
+
+  return txs.map((tx: Record<string, unknown>) => {
+    const rawAmount = Number(tx[amountField] ?? 0);
+    const amount = isUtxo ? rawAmount / divisor : rawAmount / divisor;
+    const amountUsd = Number(tx[valueField] ?? 0);
+    const hash = String(tx.hash ?? "");
+    const time = String(tx.time ?? "");
+
+    return {
+      id: `${symbol.toLowerCase()}-${hash}`,
+      blockchain: chain,
+      symbol,
+      amount,
+      amount_usd: amountUsd,
+      from: isUtxo ? "Multiple Inputs" : String((tx as any).sender ?? "Unknown"),
+      to: isUtxo ? "Multiple Outputs" : String((tx as any).recipient ?? "Unknown"),
+      timestamp: new Date(time + (time.includes("Z") ? "" : "Z")).getTime(),
+      transaction_type: "transfer",
+      tx_hash: hash,
+    };
+  });
+}
+
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Fetch large BTC transactions from Blockchair (free, no key)
-    const btcUrl =
-      "https://api.blockchair.com/bitcoin/transactions?s=output_total_usd(desc)&limit=5&q=output_total_usd(1000000..)";
-    const ethUrl =
-      "https://api.blockchair.com/ethereum/transactions?s=value_usd(desc)&limit=5&q=value_usd(1000000..)";
-
-    const [btcRes, ethRes] = await Promise.allSettled([
-      fetch(btcUrl),
-      fetch(ethUrl),
-    ]);
+    // Fetch all chains in parallel
+    const results = await Promise.allSettled(
+      CHAINS.map(([chain, sym, div]) => fetchChain(chain, sym, div))
+    );
 
     const alerts: WhaleAlert[] = [];
-
-    // Parse BTC
-    if (btcRes.status === "fulfilled" && btcRes.value.ok) {
-      const btcData = await btcRes.value.json();
-      const txs: BlockchairTx[] = btcData?.data ?? [];
-      for (const tx of txs) {
-        const amountBtc = (tx.output_total ?? 0) / 1e8;
-        alerts.push({
-          id: `btc-${tx.hash}`,
-          blockchain: "bitcoin",
-          symbol: "BTC",
-          amount: amountBtc,
-          amount_usd: tx.output_total_usd ?? 0,
-          from: "Unknown",
-          to: "Unknown",
-          timestamp: new Date(tx.time + "Z").getTime(),
-          transaction_type: "transfer",
-          tx_hash: tx.hash,
-        });
+    for (const r of results) {
+      if (r.status === "fulfilled") {
+        alerts.push(...r.value);
       }
     }
 
-    // Parse ETH
-    if (ethRes.status === "fulfilled" && ethRes.value.ok) {
-      const ethData = await ethRes.value.json();
-      const txs = ethData?.data ?? [];
-      for (const tx of txs) {
-        const amountEth = (tx.value ?? 0) / 1e18;
-        alerts.push({
-          id: `eth-${tx.hash}`,
-          blockchain: "ethereum",
-          symbol: "ETH",
-          amount: amountEth,
-          amount_usd: tx.value_usd ?? 0,
-          from: tx.sender ?? "Unknown",
-          to: tx.recipient ?? "Unknown",
-          timestamp: new Date(tx.time + "Z").getTime(),
-          transaction_type: "transfer",
-          tx_hash: tx.hash,
-        });
-      }
-    }
-
-    // Sort by USD value descending
+    // Sort by USD value descending, take top 10
     alerts.sort((a, b) => b.amount_usd - a.amount_usd);
 
     return new Response(
-      JSON.stringify({ success: true, alerts: alerts.slice(0, 8) }),
+      JSON.stringify({ success: true, alerts: alerts.slice(0, 10) }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: unknown) {
