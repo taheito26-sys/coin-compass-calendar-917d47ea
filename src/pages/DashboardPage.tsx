@@ -18,9 +18,6 @@ import { WhaleTracker } from "@/components/dashboard/WhaleTracker";
 import { RiskMetrics } from "@/components/dashboard/RiskMetrics";
 import { BenchmarkComparison } from "@/components/dashboard/BenchmarkComparison";
 import { NewlyListed, TrendingSectors } from "@/components/dashboard/MarketMetadata";
-import { NetworkStatus } from "@/components/dashboard/NetworkStatus";
-import { MigrationHub } from "@/components/dashboard/MigrationHub";
-import { PriceAlerts } from "@/components/dashboard/PriceAlerts";
 import { AirdropChecker } from "@/components/dashboard/AirdropChecker";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
