@@ -4,6 +4,7 @@ import { uid, fmtPx } from "@/lib/cryptoState";
 import { cryptoDerived } from "@/lib/cryptoState";
 import { supabase } from "@/integrations/supabase/client";
 import { repairMultiplierTransactions } from "@/lib/api";
+import RebalancingTool from "@/components/dashboard/RebalancingTool";
 
 // ── Layout & theme metadata ───────────────────────────────────────────────
 
@@ -502,6 +503,14 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
               One-click in-place repair for previously imported multiplier-corrupted PEPE transactions. No data wipe.
             </p>
           </div>
+        </div>
+      </div>
+
+      {/* Rebalancing Tool */}
+      <div className="panel" style={{ marginTop: 10, minWidth: 0 }}>
+        <div className="panel-head"><h2>⚖️ Portfolio Rebalancing</h2></div>
+        <div className="panel-body">
+          <RebalancingTool />
         </div>
       </div>
 

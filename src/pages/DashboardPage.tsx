@@ -9,9 +9,7 @@ import MarketSentiment from "@/components/dashboard/MarketSentiment";
 import PerAssetRiskBreakdown from "@/components/dashboard/PerAssetRiskBreakdown";
 import BenchmarkChart from "@/components/dashboard/BenchmarkChart";
 
-import RebalancingTool from "@/components/dashboard/RebalancingTool";
 import { BreakEvenWidget } from "@/components/dashboard/BreakEvenWidget";
-import { WhaleTracker } from "@/components/dashboard/WhaleTracker";
 
 import { BenchmarkComparison } from "@/components/dashboard/BenchmarkComparison";
 import { NewlyListed, TrendingSectors } from "@/components/dashboard/MarketMetadata";
@@ -32,10 +30,8 @@ interface CardDef {
 
 const ALL_CARDS: CardDef[] = [
   { id: "kpis", label: "KPI Summary", colSpan: 2 },
-  { id: "whale", label: "Whale Alert Feed", colSpan: 1 },
   { id: "benchmark-v2", label: "Market Alpha Analysis", colSpan: 1 },
   { id: "breakEven", label: "Break-Even Targets" },
-  { id: "rebalancer", label: "Rebalancing Tool" },
   { id: "allocation", label: "Coin Allocation" },
   { id: "heatmap", label: "Heatmap" },
   { id: "marketSentiment", label: "Market Sentiment" },
@@ -315,7 +311,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
     switch (id) {
       case "kpis":
         return (
-          <div className="kpis" style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 10 }}>
+          <div className="kpis" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 0 }}>
             <div className="kpi-card">
               <div className="kpi-head"><span className="kpi-badge" style={{ background: "var(--brand)" }}>Σ</span></div>
               <div className="kpi-lbl">CURRENT TOTAL</div>
@@ -345,11 +341,6 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
               <div className="kpi-lbl">TOTAL P&amp;L</div>
               <div className={`kpi-val ${totalPnlCombined >= 0 ? "good" : "bad"}`}>{(totalPnlCombined >= 0 ? "+" : "") + fmtTotal(totalPnlCombined)}</div>
               <div className="kpi-sub">Realized + Unrealized</div>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-lbl">MAX DRAWDOWN</div>
-              <div className="kpi-val bad">{riskMetrics ? (riskMetrics.maxDrawdown ?? 0).toFixed(2) + "%" : "..."}</div>
-              <div className="kpi-sub">Peak to trough</div>
             </div>
             <div className="kpi-card">
               <div className="kpi-lbl">TX COUNT</div>
@@ -417,18 +408,6 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
         );
       case "riskBreakdown": return <PerAssetRiskBreakdown compact />;
       case "benchmark": return <BenchmarkChart compact />;
-      case "rebalancer":
-        return (
-          <div className="panel" key="rebalancer" onDragOver={(e) => handleDragOver(e, "rebalancer")} onDrop={() => handleDrop("rebalancer")}>
-            <div className="panel-head">
-              <DragHandle editing={editing} onDragStart={() => handleDragStart("rebalancer")} onDragEnd={handleDragEnd} />
-              <h2>Rebalancing Tool</h2>
-            </div>
-            <div className="panel-body">
-              <RebalancingTool />
-            </div>
-          </div>
-        );
       case "breakEven":
         return (
           <div className="panel" key="breakEven" onDragOver={(e) => handleDragOver(e, "breakEven")} onDrop={() => handleDrop("breakEven")}>
@@ -438,18 +417,6 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
             </div>
             <div className="panel-body">
               <BreakEvenWidget />
-            </div>
-          </div>
-        );
-      case "whale":
-        return (
-          <div className="panel" key="whale" onDragOver={(e) => handleDragOver(e, "whale")} onDrop={() => handleDrop("whale")}>
-            <div className="panel-head">
-              <DragHandle editing={editing} onDragStart={() => handleDragStart("whale")} onDragEnd={handleDragEnd} />
-              <h2>Whale Alert Feed</h2>
-            </div>
-            <div className="panel-body">
-              <WhaleTracker />
             </div>
           </div>
         );
@@ -563,7 +530,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
           const id = row[0];
           return (
             <div key={`row-${ri}`} draggable={editing} onDragStart={() => handleDragStart(id)} onDragOver={e => handleDragOver(e, id)} onDrop={() => handleDrop(id)} onDragEnd={handleDragEnd}
-              style={{ marginBottom: 10, opacity: draggedId === id ? 0.5 : 1, outline: dragOverId === id ? "2px dashed var(--brand)" : "none", outlineOffset: 2, borderRadius: "var(--lt-radius-sm)", transition: "opacity .15s" }}>
+              style={{ marginBottom: 0, opacity: draggedId === id ? 0.5 : 1, outline: dragOverId === id ? "2px dashed var(--brand)" : "none", outlineOffset: 2, borderRadius: "var(--lt-radius-sm)", transition: "opacity .15s" }}>
               {id === "kpis" && editing && (
                 <div style={{ fontSize: 9, color: "var(--muted)", marginBottom: 2, display: "flex", alignItems: "center", gap: 4 }}>
                   <span style={{ cursor: "grab", fontSize: 14 }}>⠿</span> KPI Summary
