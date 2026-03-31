@@ -135,24 +135,23 @@ export async function recalculateLots(
     }
   }
 
-  // 3. Atomically update the lots table (Delete old lots, insert new ones)
-  // For safety, we wrap this in a transaction if possible, or just delete and insert.
-  // Note: Since this is likely called from an Edge Function, we'll do it sequentially.
-  
-  const { error: deleteError } = await supabase
-    .from("lots")
-    .delete()
-    .eq("user_id", userId)
-    .eq("asset_id", assetId);
-
-  if (deleteError) throw deleteError;
-
-  if (openLots.length > 0) {
-    const { error: insertError } = await supabase
+  // 3. Persist to DB only if not a dry run
+  if (!dryRun) {
+    const { error: deleteError } = await supabase
       .from("lots")
-      .insert(openLots);
+      .delete()
+      .eq("user_id", userId)
+      .eq("asset_id", assetId);
 
-    if (insertError) throw insertError;
+    if (deleteError) throw deleteError;
+
+    if (openLots.length > 0) {
+      const { error: insertError } = await supabase
+        .from("lots")
+        .insert(openLots);
+
+      if (insertError) throw insertError;
+    }
   }
 
   return { realizedPnl, openLots: openLots.filter(l => l.status === 'open') };
