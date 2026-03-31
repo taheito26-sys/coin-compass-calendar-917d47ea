@@ -52,8 +52,6 @@ const ALL_CARDS: CardDef[] = [
   { id: "riskBreakdown", label: "Per-Asset Risk" },
   { id: "movers", label: "Top Movers" },
   { id: "benchmark", label: "Portfolio vs Benchmarks" },
-  { id: "watchlist", label: "Watchlist" },
-  { id: "positions", label: "Top Positions", colSpan: 2 },
 ];
 
 interface DonutSlice {
