@@ -343,11 +343,6 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
               <div className="kpi-sub">Realized + Unrealized</div>
             </div>
             <div className="kpi-card">
-              <div className="kpi-lbl">MAX DRAWDOWN</div>
-              <div className="kpi-val bad">{riskMetrics ? (riskMetrics.maxDrawdown ?? 0).toFixed(2) + "%" : "..."}</div>
-              <div className="kpi-sub">Peak to trough</div>
-            </div>
-            <div className="kpi-card">
               <div className="kpi-lbl">TX COUNT</div>
               <div className="kpi-val">{txCount}</div>
               <div className="kpi-sub">Total events</div>
