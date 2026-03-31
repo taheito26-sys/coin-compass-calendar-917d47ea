@@ -407,43 +407,6 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
           </div>
         );
       case "riskBreakdown": return <PerAssetRiskBreakdown compact />;
-      case "benchmark": return <BenchmarkChart compact />;
-      case "rebalancer":
-        return (
-          <div className="panel" key="rebalancer" onDragOver={(e) => handleDragOver(e, "rebalancer")} onDrop={() => handleDrop("rebalancer")}>
-            <div className="panel-head">
-              <DragHandle editing={editing} onDragStart={() => handleDragStart("rebalancer")} onDragEnd={handleDragEnd} />
-              <h2>Rebalancing Tool</h2>
-            </div>
-            <div className="panel-body">
-              <RebalancingTool />
-            </div>
-          </div>
-        );
-      case "breakEven":
-        return (
-          <div className="panel" key="breakEven" onDragOver={(e) => handleDragOver(e, "breakEven")} onDrop={() => handleDrop("breakEven")}>
-            <div className="panel-head">
-              <DragHandle editing={editing} onDragStart={() => handleDragStart("breakEven")} onDragEnd={handleDragEnd} />
-              <h2>Break-Even Targets</h2>
-            </div>
-            <div className="panel-body">
-              <BreakEvenWidget />
-            </div>
-          </div>
-        );
-      case "whale":
-        return (
-          <div className="panel" key="whale" onDragOver={(e) => handleDragOver(e, "whale")} onDrop={() => handleDrop("whale")}>
-            <div className="panel-head">
-              <DragHandle editing={editing} onDragStart={() => handleDragStart("whale")} onDragEnd={handleDragEnd} />
-              <h2>Whale Alert Feed</h2>
-            </div>
-            <div className="panel-body">
-              <WhaleTracker />
-            </div>
-          </div>
-        );
       case "benchmark-v2":
         return (
           <div className="panel" key="benchmark-v2" onDragOver={(e) => handleDragOver(e, "benchmark-v2")} onDrop={() => handleDrop("benchmark-v2")}>
