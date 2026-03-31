@@ -19,6 +19,8 @@ import { WhatIfSimulator } from "@/components/dashboard/WhatIfSimulator";
 import { NewsFeed } from "@/components/dashboard/NewsFeed";
 import { WhaleTracker } from "@/components/dashboard/WhaleTracker";
 import { CorrelationMatrix } from "@/components/dashboard/CorrelationMatrix";
+import { RiskMetrics } from "@/components/dashboard/RiskMetrics";
+import { MonteCarlo } from "@/components/dashboard/MonteCarlo";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -40,6 +42,8 @@ const ALL_CARDS: CardDef[] = [
   { id: "news", label: "Market News Feed", colSpan: 1 },
   { id: "whale", label: "Whale Alert Feed", colSpan: 1 },
   { id: "correlation", label: "Correlation Matrix", colSpan: 1 },
+  { id: "risk-advanced", label: "Advanced Risk Metrics", colSpan: 1 },
+  { id: "monte-carlo", label: "Monte Carlo Simulations", colSpan: 1 },
   { id: "health", label: "Portfolio Health", colSpan: 1 },
   { id: "whatif", label: "What-If Simulator", colSpan: 1 },
   { id: "breakEven", label: "Break-Even Targets" },
@@ -238,7 +242,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
     let order: string[] = [];
     switch (preset) {
       case "trader": 
-        order = ["kpis", "news", "whale", "correlation", "movers", "marketSentiment", "trendingSectors", "heatmap", "positions"];
+        order = ["kpis", "news", "whale", "correlation", "risk-advanced", "movers", "marketSentiment", "trendingSectors", "heatmap", "positions"];
         break;
       case "taxes":
         order = ["costSwitcher", "kpis", "breakEven", "positions"];
@@ -485,6 +489,30 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
             </div>
             <div className="panel-body">
               <CorrelationMatrix />
+            </div>
+          </div>
+        );
+      case "risk-advanced":
+        return (
+          <div className="panel" key="risk-advanced" onDragOver={(e) => handleDragOver(e, "risk-advanced")} onDrop={() => handleDrop("risk-advanced")}>
+            <div className="panel-head">
+              <DragHandle editing={editing} onDragStart={() => handleDragStart("risk-advanced")} onDragEnd={handleDragEnd} />
+              <h2>Advanced Risk Metrics</h2>
+            </div>
+            <div className="panel-body">
+              <RiskMetrics />
+            </div>
+          </div>
+        );
+      case "monte-carlo":
+        return (
+          <div className="panel" key="monte-carlo" onDragOver={(e) => handleDragOver(e, "monte-carlo")} onDrop={() => handleDrop("monte-carlo")}>
+            <div className="panel-head">
+              <DragHandle editing={editing} onDragStart={() => handleDragStart("monte-carlo")} onDragEnd={handleDragEnd} />
+              <h2>Monte Carlo Projections</h2>
+            </div>
+            <div className="panel-body">
+              <MonteCarlo />
             </div>
           </div>
         );
