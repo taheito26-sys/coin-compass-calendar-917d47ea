@@ -14,7 +14,7 @@ import RebalancingTool from "@/components/dashboard/RebalancingTool";
 import { BreakEvenWidget } from "@/components/dashboard/BreakEvenWidget";
 import { PortfolioHealth } from "@/components/dashboard/PortfolioHealth";
 import { WhaleTracker } from "@/components/dashboard/WhaleTracker";
-import { CorrelationMatrix } from "@/components/dashboard/CorrelationMatrix";
+
 import { RiskMetrics } from "@/components/dashboard/RiskMetrics";
 import { MonteCarlo } from "@/components/dashboard/MonteCarlo";
 import { TaxHarvesting } from "@/components/dashboard/TaxHarvesting";
