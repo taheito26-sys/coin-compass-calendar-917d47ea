@@ -202,7 +202,7 @@ type AlertType = "price_above" | "price_below";
 // ── Main Page ─────────────────────────────────────────────────────────────
 
 const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function SettingsPage(_props, _ref) {
-  const { state, setState, toast } = useCrypto();
+  const { state, setState, toast, rehydrateFromBackend } = useCrypto();
   const activeLayout = LAYOUTS.find(l => l.id === state.layout);
 
   // Alert editing state
@@ -256,7 +256,15 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
       });
 
       if (!preview?.candidates) {
-        toast("No PEPE rows need repair", "warn");
+        const scanned = Number(preview?.scanned || 0);
+        const matched = Number(preview?.matchedSymbolRows || 0);
+        const already = Number(preview?.skippedAlreadyRepaired || 0);
+        if (already > 0) {
+          await rehydrateFromBackend();
+          toast(`Already repaired (${already} row(s))`, "warn");
+        } else {
+          toast(`No repair candidates (scanned ${scanned}, matched ${matched})`, "warn");
+        }
         return;
       }
 
@@ -267,6 +275,7 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
         force: true,
       });
 
+      await rehydrateFromBackend();
       toast(`PEPE repair complete: ${result.repaired} row(s) updated`, "good");
     } catch (err: any) {
       toast(err?.message || "PEPE repair failed", "bad");

@@ -1832,6 +1832,11 @@ type RepairRow = {
   qty: number;
   unit_price: number;
   tags?: string[] | null;
+  asset_id?: string;
+  asset?: {
+    symbol?: string | null;
+    binance_symbol?: string | null;
+  } | null;
 };
 
 async function repairMultiplierTransactions(
@@ -1842,40 +1847,10 @@ async function repairMultiplierTransactions(
   const repairTagPrefix = "instrument_multiplier_repair_v1:";
   const tsIso = new Date().toISOString();
 
-  const { data: assets, error: assetError } = await supabase
-    .from("assets")
-    .select("id, symbol, binance_symbol")
-    .or(`symbol.eq.${options.canonicalSymbol},binance_symbol.eq.${options.canonicalSymbol}`);
-
-  if (assetError) {
-    throw new AppError({
-      message: "Failed to resolve target asset",
-      status: 500,
-      stage: "sync",
-      hint: toSafeSnippet(assetError.message),
-    });
-  }
-
-  const assetIds = (assets || []).map((a: any) => a.id).filter(Boolean);
-  if (assetIds.length === 0) {
-    return {
-      ok: true,
-      dryRun: options.dryRun,
-      message: `No asset found for symbol ${options.canonicalSymbol}`,
-      scanned: 0,
-      candidates: 0,
-      repaired: 0,
-      skippedAlreadyRepaired: 0,
-      invariantFailures: 0,
-      sample: [],
-    };
-  }
-
   let txQuery = supabase
     .from("transactions")
-    .select("id, qty, unit_price, tags, venue")
+    .select("id, qty, unit_price, tags, venue, asset_id, asset:assets(symbol, binance_symbol)")
     .eq("user_id", userId)
-    .in("asset_id", assetIds)
     .in("type", ["buy", "sell"]);
 
   if (options.venue) {
@@ -1893,13 +1868,37 @@ async function repairMultiplierTransactions(
   }
 
   const scanned = (rows || []).length;
+  const symbolMatches = ((rows || []) as RepairRow[]).filter((row) => {
+    const symbols = [
+      String(row.asset?.symbol || "").trim().toUpperCase(),
+      String(row.asset?.binance_symbol || "").trim().toUpperCase(),
+    ].filter(Boolean);
+
+    return symbols.some((symbol) => parseInstrumentSymbol(symbol).canonicalSymbol === options.canonicalSymbol);
+  });
+
+  if (symbolMatches.length === 0) {
+    return {
+      ok: true,
+      dryRun: options.dryRun,
+      message: `No matching ${options.canonicalSymbol} rows found`,
+      scanned,
+      matchedSymbolRows: 0,
+      candidates: 0,
+      repaired: 0,
+      skippedAlreadyRepaired: 0,
+      invariantFailures: 0,
+      sample: [],
+    };
+  }
+
   let candidates = 0;
   let repaired = 0;
   let skippedAlreadyRepaired = 0;
   let invariantFailures = 0;
   const sample: Array<Record<string, unknown>> = [];
 
-  for (const row of (rows || []) as RepairRow[]) {
+  for (const row of symbolMatches) {
     const existingTags = Array.isArray(row.tags) ? row.tags : [];
     if (existingTags.some((tag) => typeof tag === "string" && tag.startsWith(repairTagPrefix))) {
       skippedAlreadyRepaired++;
@@ -1978,6 +1977,7 @@ async function repairMultiplierTransactions(
     symbol: options.canonicalSymbol,
     multiplier: options.multiplier,
     scanned,
+    matchedSymbolRows: symbolMatches.length,
     candidates,
     repaired,
     skippedAlreadyRepaired,
