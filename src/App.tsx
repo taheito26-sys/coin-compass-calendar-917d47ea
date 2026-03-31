@@ -45,9 +45,7 @@ function AppShell({ onLogout, userLabel }: { onLogout: () => Promise<void>; user
           {page === "assets" && <PortfolioPage />}
           {page === "ledger" && <LedgerPage />}
           {page === "calendar" && <CalendarPage />}
-          {page === "journal" && <JournalPage />}
           {page === "markets" && <MarketsPage />}
-          {page === "planner" && <PlannerPage />}
           {page === "review" && <ReviewPage />}
           {page === "settings" && <SettingsPage />}
         </div>
