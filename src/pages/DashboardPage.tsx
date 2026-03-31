@@ -22,6 +22,7 @@ import { MonteCarlo } from "@/components/dashboard/MonteCarlo";
 import { TaxHarvesting } from "@/components/dashboard/TaxHarvesting";
 import { BenchmarkComparison } from "@/components/dashboard/BenchmarkComparison";
 import { NewlyListed, TrendingSectors } from "@/components/dashboard/MarketMetadata";
+import { NetworkStatus } from "@/components/dashboard/NetworkStatus";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -47,6 +48,8 @@ const ALL_CARDS: CardDef[] = [
   { id: "monte-carlo", label: "Monte Carlo Simulations", colSpan: 1 },
   { id: "tax-harvest", label: "Tax-Loss Harvesting", colSpan: 1 },
   { id: "benchmark-v2", label: "Market Alpha Analysis", colSpan: 1 },
+  { id: "migration", label: "Asset Migration Hub", colSpan: 1 },
+  { id: "network-status", label: "Network & API Status", colSpan: 1 },
   { id: "health", label: "Portfolio Health", colSpan: 1 },
   { id: "whatif", label: "What-If Simulator", colSpan: 1 },
   { id: "breakEven", label: "Break-Even Targets" },
@@ -562,6 +565,18 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
             </div>
             <div className="panel-body">
               <BenchmarkComparison />
+            </div>
+          </div>
+        );
+      case "network-status":
+        return (
+          <div className="panel" key="network-status" onDragOver={(e) => handleDragOver(e, "network-status")} onDrop={() => handleDrop("network-status")}>
+            <div className="panel-head">
+              <DragHandle editing={editing} onDragStart={() => handleDragStart("network-status")} onDragEnd={handleDragEnd} />
+              <h2>Network & API Status</h2>
+            </div>
+            <div className="panel-body">
+              <NetworkStatus />
             </div>
           </div>
         );
