@@ -629,7 +629,7 @@ async function fetchCoinbaseTrades(apiKey: string, apiSecret: string): Promise<N
         });
 
         if (!txRes.ok) break;
-        const txData = await txRes.json();
+        const txData: any = await txRes.json();
         for (const t of txData.data || []) {
           allTrades.push({
             id: t.id || String(Date.now()),

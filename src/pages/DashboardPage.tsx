@@ -453,18 +453,6 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
             </div>
           </div>
         );
-      case "risk-advanced":
-        return (
-          <div className="panel" key="risk-advanced" onDragOver={(e) => handleDragOver(e, "risk-advanced")} onDrop={() => handleDrop("risk-advanced")}>
-            <div className="panel-head">
-              <DragHandle editing={editing} onDragStart={() => handleDragStart("risk-advanced")} onDragEnd={handleDragEnd} />
-              <h2>Advanced Risk Metrics</h2>
-            </div>
-            <div className="panel-body">
-              <RiskMetrics />
-            </div>
-          </div>
-        );
       case "benchmark-v2":
         return (
           <div className="panel" key="benchmark-v2" onDragOver={(e) => handleDragOver(e, "benchmark-v2")} onDrop={() => handleDrop("benchmark-v2")}>

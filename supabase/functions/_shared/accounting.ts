@@ -172,10 +172,10 @@ export async function compareMethods(
     const res = await recalculateLots(supabase, userId, assetId, m, true);
     
     // Calculate total cost basis of remaining lots
-    const costBasis = (res.openLots || []).reduce((s, l) => s + (Number(l.remaining_qty) * Number(l.unit_cost)), 0);
+    const costBasis = (res?.openLots || []).reduce((s: number, l: any) => s + (Number(l.remaining_qty) * Number(l.unit_cost)), 0);
     results[m] = { 
       costBasis, 
-      realizedPnl: res.realizedPnl 
+      realizedPnl: res?.realizedPnl ?? 0 
     };
   }
 
