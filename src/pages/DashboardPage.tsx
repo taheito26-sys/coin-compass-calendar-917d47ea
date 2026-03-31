@@ -22,6 +22,7 @@ import { CorrelationMatrix } from "@/components/dashboard/CorrelationMatrix";
 import { RiskMetrics } from "@/components/dashboard/RiskMetrics";
 import { MonteCarlo } from "@/components/dashboard/MonteCarlo";
 import { TaxHarvesting } from "@/components/dashboard/TaxHarvesting";
+import { BenchmarkComparison } from "@/components/dashboard/BenchmarkComparison";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -46,6 +47,7 @@ const ALL_CARDS: CardDef[] = [
   { id: "risk-advanced", label: "Advanced Risk Metrics", colSpan: 1 },
   { id: "monte-carlo", label: "Monte Carlo Simulations", colSpan: 1 },
   { id: "tax-harvest", label: "Tax-Loss Harvesting", colSpan: 1 },
+  { id: "benchmark-v2", label: "Market Alpha Analysis", colSpan: 1 },
   { id: "health", label: "Portfolio Health", colSpan: 1 },
   { id: "whatif", label: "What-If Simulator", colSpan: 1 },
   { id: "breakEven", label: "Break-Even Targets" },
@@ -527,6 +529,18 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
             </div>
             <div className="panel-body">
               <TaxHarvesting />
+            </div>
+          </div>
+        );
+      case "benchmark-v2":
+        return (
+          <div className="panel" key="benchmark-v2" onDragOver={(e) => handleDragOver(e, "benchmark-v2")} onDrop={() => handleDrop("benchmark-v2")}>
+            <div className="panel-head">
+              <DragHandle editing={editing} onDragStart={() => handleDragStart("benchmark-v2")} onDragEnd={handleDragEnd} />
+              <h2>Market Alpha Analysis</h2>
+            </div>
+            <div className="panel-body">
+              <BenchmarkComparison />
             </div>
           </div>
         );
