@@ -13,8 +13,6 @@ import { NetWorthChart } from "@/components/dashboard/NetWorthChart";
 import RebalancingTool from "@/components/dashboard/RebalancingTool";
 import { BreakEvenWidget } from "@/components/dashboard/BreakEvenWidget";
 import { PortfolioHealth } from "@/components/dashboard/PortfolioHealth";
-import { WhatIfSimulator } from "@/components/dashboard/WhatIfSimulator";
-import { NewsFeed } from "@/components/dashboard/NewsFeed";
 import { WhaleTracker } from "@/components/dashboard/WhaleTracker";
 import { CorrelationMatrix } from "@/components/dashboard/CorrelationMatrix";
 import { RiskMetrics } from "@/components/dashboard/RiskMetrics";
