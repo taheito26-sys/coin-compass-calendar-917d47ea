@@ -25,6 +25,12 @@ export function NewsFeed() {
       try {
         const res = await fetch("https://min-api.cryptocompare.com/data/v2/news/?lang=EN");
         const json = await res.json();
+        if (!Array.isArray(json.Data)) {
+           console.warn("News API returned non-array Data:", json);
+           setNews([]);
+           return;
+        }
+        
         const items = json.Data.map((n: any) => ({
           id: n.id,
           title: n.title,
