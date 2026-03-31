@@ -407,6 +407,19 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
           </div>
         );
       case "riskBreakdown": return <PerAssetRiskBreakdown compact />;
+      case "benchmark": return <BenchmarkChart compact />;
+      case "breakEven":
+        return (
+          <div className="panel" key="breakEven" onDragOver={(e) => handleDragOver(e, "breakEven")} onDrop={() => handleDrop("breakEven")}>
+            <div className="panel-head">
+              <DragHandle editing={editing} onDragStart={() => handleDragStart("breakEven")} onDragEnd={handleDragEnd} />
+              <h2>Break-Even Targets</h2>
+            </div>
+            <div className="panel-body">
+              <BreakEvenWidget />
+            </div>
+          </div>
+        );
       case "benchmark-v2":
         return (
           <div className="panel" key="benchmark-v2" onDragOver={(e) => handleDragOver(e, "benchmark-v2")} onDrop={() => handleDrop("benchmark-v2")}>
