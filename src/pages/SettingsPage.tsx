@@ -249,22 +249,31 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
 
     setRepairingPEPE(true);
     try {
+      // Step 1: Dry-run to preview candidates
       const preview = await repairMultiplierTransactions({
         symbol: "PEPE",
         multiplier: 1000,
         dryRun: true,
       });
 
-      if (!preview?.candidates) {
-        const scanned = Number(preview?.scanned || 0);
-        const matched = Number(preview?.matchedSymbolRows || 0);
-        const already = Number(preview?.skippedAlreadyRepaired || 0);
+      const scanned = Number(preview?.scanned || 0);
+      const matched = Number(preview?.matchedSymbolRows || 0);
+      const candidates = Number(preview?.candidates || 0);
+      const already = Number(preview?.skippedAlreadyRepaired || 0);
+      const invariantFail = Number(preview?.invariantFailures || 0);
+
+      if (candidates === 0) {
         if (already > 0) {
           await rehydrateFromBackend();
-          toast(`Already repaired (${already} row(s))`, "warn");
+          toast(`Already repaired: ${already} row(s). Scanned ${scanned}, matched ${matched}.`, "warn");
         } else {
-          toast(`No repair candidates (scanned ${scanned}, matched ${matched})`, "warn");
+          toast(`No repair candidates. Scanned ${scanned}, matched ${matched}, invariant failures ${invariantFail}.`, "warn");
         }
+        return;
+      }
+
+      // Step 2: Confirm and apply
+      if (!confirm(`Dry-run found ${candidates} candidate(s) to repair (scanned ${scanned}, matched ${matched}, already repaired ${already}). Apply now?`)) {
         return;
       }
 
@@ -276,8 +285,21 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
       });
 
       await rehydrateFromBackend();
-      toast(`PEPE repair complete: ${result.repaired} row(s) updated`, "good");
-      setTimeout(() => window.location.reload(), 350);
+
+      const rScanned = Number(result?.scanned || 0);
+      const rMatched = Number(result?.matchedSymbolRows || 0);
+      const rRepaired = Number(result?.repaired || 0);
+      const rSkipped = Number(result?.skippedAlreadyRepaired || 0);
+      const rInvariant = Number(result?.invariantFailures || 0);
+
+      toast(
+        `PEPE repair done: ${rRepaired} repaired, ${rSkipped} already done, ${rInvariant} invariant fail (scanned ${rScanned}, matched ${rMatched})`,
+        rRepaired > 0 ? "good" : "warn"
+      );
+
+      if (rRepaired > 0) {
+        setTimeout(() => window.location.reload(), 500);
+      }
     } catch (err: any) {
       toast(err?.message || "PEPE repair failed", "bad");
     } finally {
