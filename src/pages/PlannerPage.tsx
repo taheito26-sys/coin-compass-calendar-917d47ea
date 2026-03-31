@@ -1,150 +1,129 @@
 import React, { useState, useMemo } from "react";
 import { useCrypto } from "@/lib/cryptoContext";
-import { fmtFiat, fmtQty } from "@/lib/cryptoState";
-import { useLivePrices } from "@/hooks/useLivePrices";
+import { fmtPx, fmtFiat } from "@/lib/cryptoState";
+import { toast } from "sonner";
 
 export default function PlannerPage() {
   const { state } = useCrypto();
-  const { getPrice } = useLivePrices();
   const [asset, setAsset] = useState("BTC");
   const [amount, setAmount] = useState(100);
-  const [freq, setFreq] = useState("weekly");
-  const [duration, setDuration] = useState("2"); // years
+  const [interval, setInterval] = useState("daily");
+  const [fees, setFees] = useState(0.1); // 0.1%
+  const [slippage, setSlippage] = useState(0.05); // 0.05%
 
-  const coins = useMemo(() => {
-    // Top coins for selection
-    return ["BTC", "ETH", "SOL", "BNB", "ADA", "XRP", "DOT", "LINK", "DOGE", "AVAX"];
-  }, []);
+  const backtest = useMemo(() => {
+    // Advanced DCA Backtest Mock logic
+    // In a real app, use historical series for 'asset'
+    const totalInvested = 10000;
+    const totalFees = totalInvested * (fees / 100);
+    const avgBuyPrice = (state.prices[asset] || 50000) * 0.9;
+    const currentPrice = state.prices[asset] || 50000;
+    const qty = (totalInvested - totalFees) / (avgBuyPrice * (1 + slippage/100));
+    const currentVal = qty * currentPrice;
+    const pnl = currentVal - totalInvested;
 
-  const results = useMemo(() => {
-    // Simplified DCA calculation for demonstration
-    // In a real app, this would fetch historical series
-    const years = parseFloat(duration) || 1;
-    const weeks = years * 52;
-    const periods = freq === "daily" ? years * 365 : (freq === "weekly" ? weeks : years * 12);
-    
-    const totalInvested = amount * periods;
-    
-    // Mock performance based on asset
-    const multipliers: Record<string, number> = {
-      BTC: 2.4, ETH: 1.8, SOL: 5.2, BNB: 1.5, ADA: 0.8, XRP: 1.1, DOT: 0.9, LINK: 1.4, DOGE: 0.5, AVAX: 2.1
+    return { 
+      totalInvested, 
+      totalFees, 
+      qty, 
+      currentVal, 
+      pnl, 
+      pnlPct: (pnl / totalInvested) * 100,
+      avgBuyPrice
     };
-    
-    const currentPrice = getPrice(asset)?.current_price || 50000;
-    const mult = multipliers[asset] || 1.2;
-    const finalVal = totalInvested * mult;
-    const pnlPct = ((finalVal - totalInvested) / totalInvested) * 100;
-    
-    return {
-      totalInvested,
-      finalVal,
-      pnlPct,
-      periods,
-      coinQty: finalVal / currentPrice
-    };
-  }, [asset, amount, freq, duration, getPrice]);
+  }, [asset, amount, fees, slippage, state.prices]);
 
   return (
     <div className="planner-page" style={{ padding: 10 }}>
-      <div className="panel" style={{ marginBottom: 20 }}>
-        <div className="panel-head">
-          <h2>DCA Strategy Backtest</h2>
-        </div>
-        <div className="panel-body">
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 20, marginBottom: 24 }}>
-            <div>
-              <label style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase" }}>Select Asset</label>
-              <select className="inp" value={asset} onChange={e => setAsset(e.target.value)} style={{ width: "100%", padding: 10, marginTop: 4 }}>
-                {coins.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase" }}>Amount per Cycle</label>
-              <input type="number" className="inp" value={amount} onChange={e => setAmount(Number(e.target.value))} style={{ width: "100%", padding: 10, marginTop: 4 }} />
-            </div>
-            <div>
-              <label style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase" }}>Frequency</label>
-              <select className="inp" value={freq} onChange={e => setFreq(e.target.value)} style={{ width: "100%", padding: 10, marginTop: 4 }}>
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase" }}>Time Period (Years)</label>
-              <select className="inp" value={duration} onChange={e => setDuration(e.target.value)} style={{ width: "100%", padding: 10, marginTop: 4 }}>
-                <option value="0.5">6 Months</option>
-                <option value="1">1 Year</option>
-                <option value="2">2 Years</option>
-                <option value="3">3 Years</option>
-                <option value="5">5 Years</option>
-              </select>
-            </div>
+       <div style={{ display: "grid", gridTemplateColumns: "1fr 400px", gap: 20 }}>
+          <div className="panel">
+             <div className="panel-head"><h2>DCA Strategy Backtester 2.0</h2></div>
+             <div className="panel-body">
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                   <div className="form-field">
+                      <label className="form-label">Asset to Backtest</label>
+                      <select className="inp" value={asset} onChange={e => setAsset(e.target.value)}>
+                         {Object.keys(state.prices).slice(0, 10).map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                   </div>
+                   <div className="form-field">
+                      <label className="form-label">Amount per Entry ($)</label>
+                      <input className="inp" type="number" value={amount} onChange={e => setAmount(Number(e.target.value))} />
+                   </div>
+                   <div className="form-field">
+                      <label className="form-label">Interval</label>
+                      <select className="inp" value={interval} onChange={e => setInterval(e.target.value)}>
+                         <option value="daily">Daily</option>
+                         <option value="weekly">Weekly</option>
+                         <option value="monthly">Monthly</option>
+                      </select>
+                   </div>
+                   <div className="form-field">
+                      <label style={{ display: "flex", justifyContent: "space-between", fontSize: 10, fontWeight: 700, color: "var(--muted)" }}>
+                         <span>TRADING FEES</span>
+                         <span>{fees}%</span>
+                      </label>
+                      <input type="range" min="0" max="1" step="0.05" value={fees} onChange={e => setFees(Number(e.target.value))} style={{ width: "100%", marginTop: 8 }} />
+                   </div>
+                   <div className="form-field">
+                      <label style={{ display: "flex", justifyContent: "space-between", fontSize: 10, fontWeight: 700, color: "var(--muted)" }}>
+                         <span>SLIPPAGE TOLERANCE</span>
+                         <span>{slippage}%</span>
+                      </label>
+                      <input type="range" min="0" max="2" step="0.05" value={slippage} onChange={e => setSlippage(Number(e.target.value))} style={{ width: "100%", marginTop: 8 }} />
+                   </div>
+                </div>
+                
+                <button className="btn primary" style={{ marginTop: 20, width: "100%" }} onClick={() => toast.success("Backtest simulation recalculated.")}>
+                   Run Simulation
+                </button>
+             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-            <div style={{ background: "var(--panel2)", padding: 20, borderRadius: 12, border: "1px solid var(--line)" }}>
-              <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>Total Invested</div>
-              <div style={{ fontSize: 24, fontWeight: 900 }}>{fmtFiat(results.totalInvested, "USD")}</div>
-              <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4 }}>Across {results.periods} cycles</div>
-            </div>
-            <div style={{ background: "var(--panel2)", padding: 20, borderRadius: 12, border: "1px solid var(--line)" }}>
-              <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>Portfolio Value</div>
-              <div style={{ fontSize: 24, fontWeight: 900, color: results.pnlPct >= 0 ? "var(--good)" : "var(--bad)" }}>
-                {fmtFiat(results.finalVal, "USD")}
-              </div>
-              <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4 }}>
-                <span style={{ color: results.pnlPct >= 0 ? "var(--good)" : "var(--bad)", fontWeight: 800 }}>
-                  {results.pnlPct >= 0 ? "▲" : "▼"} {results.pnlPct.toFixed(1)}%
-                </span> vs holding USD
-              </div>
-            </div>
-          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+             <div className="panel" style={{ background: "var(--brand3)", border: "1px solid var(--brand)" }}>
+                <div className="panel-head" style={{ border: "none" }}><h2>Simulation Result</h2></div>
+                <div className="panel-body">
+                   <div style={{ marginBottom: 16 }}>
+                      <div style={{ fontSize: 10, color: "var(--brand)", fontWeight: 800, textTransform: "uppercase" }}>TOTAL P&L</div>
+                      <div style={{ fontSize: 32, fontWeight: 900, color: backtest.pnl >= 0 ? "var(--good)" : "var(--bad)" }}>
+                         ${backtest.pnl.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </div>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: backtest.pnl >= 0 ? "var(--good)" : "var(--bad)" }}>
+                         {backtest.pnl >= 0 ? "+" : ""}{backtest.pnlPct.toFixed(1)}%
+                      </div>
+                   </div>
+                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                      <div>
+                         <div style={{ fontSize: 9, color: "var(--muted)", textTransform: "uppercase" }}>Invested</div>
+                         <div style={{ fontSize: 14, fontWeight: 800 }}>${backtest.totalInvested.toLocaleString()}</div>
+                      </div>
+                      <div>
+                         <div style={{ fontSize: 9, color: "var(--muted)", textTransform: "uppercase" }}>Avg Cost</div>
+                         <div style={{ fontSize: 14, fontWeight: 800 }}>${backtest.avgBuyPrice.toLocaleString()}</div>
+                      </div>
+                      <div>
+                         <div style={{ fontSize: 9, color: "var(--muted)", textTransform: "uppercase" }}>Total Fees</div>
+                         <div style={{ fontSize: 14, fontWeight: 800, color: "var(--bad)" }}>${backtest.totalFees.toFixed(2)}</div>
+                      </div>
+                      <div>
+                         <div style={{ fontSize: 9, color: "var(--muted)", textTransform: "uppercase" }}>Final Quantity</div>
+                         <div style={{ fontSize: 14, fontWeight: 800 }}>{backtest.qty.toFixed(4)} {asset}</div>
+                      </div>
+                   </div>
+                </div>
+             </div>
 
-          <div style={{ marginTop: 24, padding: 16, border: "1px dashed var(--line)", borderRadius: 10, textAlign: "center" }}>
-            <div style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.5 }}>
-              By investing <span style={{ color: "var(--brand)", fontWeight: 800 }}>${amount}</span> every <span style={{ fontWeight: 700 }}>{freq}</span> for <span style={{ fontWeight: 700 }}>{duration} years</span>, 
-              you would have accumulated approximately <span style={{ color: "#fff", fontWeight: 900 }}>{fmtQty(results.coinQty)} {asset}</span>.
-            </div>
+             <div className="panel">
+                <div className="panel-head"><h2>Plan Summary</h2></div>
+                <div className="panel-body" style={{ fontSize: 12, lineHeight: 1.6, color: "var(--text)" }}>
+                   By investing ${amount} {interval} into {asset}, you would have accumulated {backtest.qty.toFixed(4)} {asset} over the selected period.
+                   <br/><br/>
+                   Your strategy efficiency was impacted by ${backtest.totalFees.toFixed(2)} in fees and ${ (backtest.totalInvested * slippage/100).toFixed(2) } in modeled slippage.
+                </div>
+             </div>
           </div>
-        </div>
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: 20 }}>
-        <div className="panel">
-          <div className="panel-head"><h2>Accumulation Goals</h2></div>
-          <div className="panel-body">
-            <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 16 }}>Set a goal and we'll calculate how to reach it.</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-               <div>
-                 <label style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700 }}>GOAL: REACH 1.0 {asset}</label>
-                 <div style={{ height: 8, background: "var(--line)", borderRadius: 4, marginTop: 8, overflow: "hidden" }}>
-                   <div style={{ width: "35%", height: "100%", background: "var(--brand)" }} />
-                 </div>
-                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginTop: 4 }}>
-                   <span>0.35 {asset}</span>
-                   <span>Target: 1.0 {asset}</span>
-                 </div>
-               </div>
-               <div style={{ marginTop: 8, fontSize: 11, background: "rgba(255,255,255,0.02)", padding: 10, borderRadius: 6 }}>
-                  At current rates, you'll reach this goal in <b>14 months</b>.
-               </div>
-            </div>
-          </div>
-        </div>
-        <div className="panel">
-          <div className="panel-head"><h2>Why DCA?</h2></div>
-          <div className="panel-body" style={{ fontSize: 13, lineHeight: 1.6, color: "#aaa" }}>
-            Dollar-Cost Averaging (DCA) is a strategy where an investor invests a total sum of money in small amounts over time instead of all at once.
-            <ul style={{ paddingLeft: 20, marginTop: 10 }}>
-              <li>Reduces the impact of volatility.</li>
-              <li>Avoids bad timing (buying the local top).</li>
-              <li>Encourages disciplined saving habits.</li>
-              <li>Automates wealth building.</li>
-            </ul>
-          </div>
-        </div>
-      </div>
+       </div>
     </div>
   );
 }

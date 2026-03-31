@@ -24,6 +24,7 @@ import { BenchmarkComparison } from "@/components/dashboard/BenchmarkComparison"
 import { NewlyListed, TrendingSectors } from "@/components/dashboard/MarketMetadata";
 import { NetworkStatus } from "@/components/dashboard/NetworkStatus";
 import { MigrationHub } from "@/components/dashboard/MigrationHub";
+import { PriceAlerts } from "@/components/dashboard/PriceAlerts";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -51,6 +52,7 @@ const ALL_CARDS: CardDef[] = [
   { id: "benchmark-v2", label: "Market Alpha Analysis", colSpan: 1 },
   { id: "migration", label: "Asset Migration Hub", colSpan: 1 },
   { id: "network-status", label: "Network & API Status", colSpan: 1 },
+  { id: "price-alerts", label: "Price Alerts Hub", colSpan: 1 },
   { id: "health", label: "Portfolio Health", colSpan: 1 },
   { id: "whatif", label: "What-If Simulator", colSpan: 1 },
   { id: "breakEven", label: "Break-Even Targets" },
@@ -590,6 +592,18 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
             </div>
             <div className="panel-body">
               <MigrationHub />
+            </div>
+          </div>
+        );
+      case "price-alerts":
+        return (
+          <div className="panel" key="price-alerts" onDragOver={(e) => handleDragOver(e, "price-alerts")} onDrop={() => handleDrop("price-alerts")}>
+            <div className="panel-head">
+              <DragHandle editing={editing} onDragStart={() => handleDragStart("price-alerts")} onDragEnd={handleDragEnd} />
+              <h2>Price Alerts Hub</h2>
+            </div>
+            <div className="panel-body">
+              <PriceAlerts />
             </div>
           </div>
         );
