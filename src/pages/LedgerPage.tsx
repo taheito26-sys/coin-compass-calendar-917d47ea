@@ -5,6 +5,7 @@ import { importCSV, hashFile, applyLookup } from "@/lib/importers";
 import type { ParseResult, Exchange } from "@/lib/importers";
 import CoinAutocomplete from "@/components/CoinAutocomplete";
 import ExchangeConnect from "@/components/ledger/ExchangeConnect";
+import { WalletConnector } from "@/components/ledger/WalletConnector";
 import {
   isWorkerConfigured,
   lookupImportRows,
@@ -757,7 +758,17 @@ export default function LedgerPage() {
         </div>
       )}
 
-      {tab === "connect" && <ExchangeConnect />}
+      {tab === "connect" && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 400px", gap: 20, alignItems: "start" }}>
+          <ExchangeConnect />
+          <div className="panel">
+            <div className="panel-head"><h2>Watch-only Sync</h2></div>
+            <div className="panel-body">
+              <WalletConnector />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -16,6 +16,9 @@ import RebalancingTool from "@/components/dashboard/RebalancingTool";
 import { BreakEvenWidget } from "@/components/dashboard/BreakEvenWidget";
 import { PortfolioHealth } from "@/components/dashboard/PortfolioHealth";
 import { WhatIfSimulator } from "@/components/dashboard/WhatIfSimulator";
+import { NewsFeed } from "@/components/dashboard/NewsFeed";
+import { WhaleTracker } from "@/components/dashboard/WhaleTracker";
+import { CorrelationMatrix } from "@/components/dashboard/CorrelationMatrix";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -34,6 +37,9 @@ interface CardDef {
 const ALL_CARDS: CardDef[] = [
   { id: "kpis", label: "KPI Summary", colSpan: 2 },
   { id: "networth", label: "Historical Net Worth", colSpan: 2 },
+  { id: "news", label: "Market News Feed", colSpan: 1 },
+  { id: "whale", label: "Whale Alert Feed", colSpan: 1 },
+  { id: "correlation", label: "Correlation Matrix", colSpan: 1 },
   { id: "health", label: "Portfolio Health", colSpan: 1 },
   { id: "whatif", label: "What-If Simulator", colSpan: 1 },
   { id: "breakEven", label: "Break-Even Targets" },
@@ -193,13 +199,17 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
   }, [state.syncStatus]);
 
   const cardOrder = useMemo(() => {
-    const raw = state.dashboardLayout;
-    if (!raw || raw.length === 0) return ALL_CARDS.map(c => c.id);
-    const valid = raw.filter(id => ALL_CARDS.some(c => c.id === id));
-    for (const c of ALL_CARDS) {
-      if (!valid.includes(c.id)) valid.push(c.id);
-    }
-    return valid;
+    const raw = state.dashboardLayout || [];
+    // If empty, return full list
+    if (raw.length === 0) return ALL_CARDS.map(c => c.id);
+    
+    // Filter out invalid IDs
+    const current = raw.filter(id => ALL_CARDS.some(c => c.id === id));
+    
+    // Append any newly added features that aren't in the saved layout
+    const missing = ALL_CARDS.filter(c => !current.includes(c.id)).map(c => c.id);
+    
+    return [...current, ...missing];
   }, [state.dashboardLayout]);
 
   const [editing, setEditing] = useState(false);
@@ -228,7 +238,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
     let order: string[] = [];
     switch (preset) {
       case "trader": 
-        order = ["kpis", "movers", "marketSentiment", "trendingSectors", "heatmap", "positions"];
+        order = ["kpis", "news", "whale", "correlation", "movers", "marketSentiment", "trendingSectors", "heatmap", "positions"];
         break;
       case "taxes":
         order = ["costSwitcher", "kpis", "breakEven", "positions"];
@@ -439,6 +449,42 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
             </div>
             <div className="panel-body">
               <BreakEvenWidget />
+            </div>
+          </div>
+        );
+      case "news":
+        return (
+          <div className="panel" key="news" onDragOver={(e) => handleDragOver(e, "news")} onDrop={() => handleDrop("news")}>
+            <div className="panel-head">
+              <DragHandle editing={editing} onDragStart={() => handleDragStart("news")} onDragEnd={handleDragEnd} />
+              <h2>Market News Feed</h2>
+            </div>
+            <div className="panel-body">
+              <NewsFeed />
+            </div>
+          </div>
+        );
+      case "whale":
+        return (
+          <div className="panel" key="whale" onDragOver={(e) => handleDragOver(e, "whale")} onDrop={() => handleDrop("whale")}>
+            <div className="panel-head">
+              <DragHandle editing={editing} onDragStart={() => handleDragStart("whale")} onDragEnd={handleDragEnd} />
+              <h2>Whale Alert Feed</h2>
+            </div>
+            <div className="panel-body">
+              <WhaleTracker />
+            </div>
+          </div>
+        );
+      case "correlation":
+        return (
+          <div className="panel" key="correlation" onDragOver={(e) => handleDragOver(e, "correlation")} onDrop={() => handleDrop("correlation")}>
+            <div className="panel-head">
+              <DragHandle editing={editing} onDragStart={() => handleDragStart("correlation")} onDragEnd={handleDragEnd} />
+              <h2>Correlation Matrix</h2>
+            </div>
+            <div className="panel-body">
+              <CorrelationMatrix />
             </div>
           </div>
         );
