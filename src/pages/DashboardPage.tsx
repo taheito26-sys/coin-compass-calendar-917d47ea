@@ -8,11 +8,6 @@ import TrendingSectors from "@/components/dashboard/TrendingSectors";
 import NewlyListed from "@/components/dashboard/NewlyListed";
 import PerAssetRiskBreakdown from "@/components/dashboard/PerAssetRiskBreakdown";
 import BenchmarkChart from "@/components/dashboard/BenchmarkChart";
-import HistoricalNetWorthChart from "@/components/dashboard/HistoricalNetWorthChart";
-import MaxDrawdownChart from "@/components/dashboard/MaxDrawdownChart";
-import SessionPnl from "@/components/dashboard/SessionPnl";
-import WhaleAlertFeed from "@/components/dashboard/WhaleAlertFeed";
-import CryptoNewsFeed from "@/components/dashboard/CryptoNewsFeed";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -40,11 +35,6 @@ const ALL_CARDS: CardDef[] = [
   { id: "benchmark", label: "Portfolio vs Benchmarks" },
   { id: "watchlist", label: "Watchlist" },
   { id: "positions", label: "Top Positions", colSpan: 2 },
-  { id: "netWorth", label: "Historical Net Worth", colSpan: 2 },
-  { id: "drawdown", label: "Max Drawdown" },
-  { id: "sessionPnl", label: "Session P&L" },
-  { id: "whaleAlert", label: "Whale Alert Feed" },
-  { id: "newsFlow", label: "Crypto News" },
 ];
 
 interface DonutSlice {
@@ -436,16 +426,6 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
     }
   };
 
-  // NOTE: new dashboard card renderers for features #1, #17, #13, #27, #30
-  const renderNewCard = (id: string) => {
-    if (id === "netWorth") return <HistoricalNetWorthChart />;
-    if (id === "drawdown") return <MaxDrawdownChart />;
-    if (id === "sessionPnl") return <SessionPnl />;
-    if (id === "whaleAlert") return <WhaleAlertFeed />;
-    if (id === "newsFlow") return <CryptoNewsFeed />;
-    return renderCard(id);
-  };
-
   const cardRows = useMemo(() => {
     const rows: string[][] = [];
     let currentRow: string[] = [];
@@ -493,7 +473,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
                   <span style={{ cursor: "grab", fontSize: 14 }}>⠿</span> KPI Summary
                 </div>
               )}
-              {renderNewCard(id)}
+              {renderCard(id)}
             </div>
           );
         }
@@ -502,7 +482,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
             {row.map(id => (
               <div key={id} draggable={editing} onDragStart={() => handleDragStart(id)} onDragOver={e => handleDragOver(e, id)} onDrop={() => handleDrop(id)} onDragEnd={handleDragEnd}
                 style={{ opacity: draggedId === id ? 0.5 : 1, outline: dragOverId === id ? "2px dashed var(--brand)" : "none", outlineOffset: 2, borderRadius: "var(--lt-radius-sm)", transition: "opacity .15s" }}>
-                {renderNewCard(id)}
+                {renderCard(id)}
               </div>
             ))}
           </div>

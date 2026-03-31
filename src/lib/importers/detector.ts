@@ -26,12 +26,6 @@ const SIGNATURES: { exchange: Exchange; exportType: string; required: string[] }
   // KuCoin Spot Trade History
   { exchange: "kucoin", exportType: "Spot Trade History", required: ["tradeCreatedAt", "symbol", "side"] },
   { exchange: "kucoin", exportType: "Spot Trade History", required: ["Symbol", "Side", "Trade Time"] },
-
-  // Coinbase Transaction History
-  { exchange: "coinbase" as any, exportType: "Transaction History", required: ["Timestamp","Transaction Type","Asset","Quantity Transacted","Spot Price Currency"] },
-
-  // Kraken Trades History
-  { exchange: "kraken" as any, exportType: "Trades History", required: ["txid","ordertxid","pair","time","type","vol"] },
 ];
 
 // Headers that indicate a NON-spot export (reject these)
