@@ -17,9 +17,7 @@ const PAGE_TITLES: Record<string, [string, string]> = {
   assets: ["Portfolio", "Holdings, Lots, Alerts"],
   ledger: ["Ledger", "Transactions, Import, Connect"],
   calendar: ["Calendar", "Daily P&L, Per Coin"],
-  journal: ["Trading Journal", "Daily Notes & Logs"],
   markets: ["Markets", "Live Prices, Watchlist"],
-  planner: ["DCA Planner", "Backtest & Goal Tracking"],
   review: ["2025 Wrapped", "Year in Review"],
   settings: ["Settings", "Theme, Data, Vault, Alerts"],
 };
