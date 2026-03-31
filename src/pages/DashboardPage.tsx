@@ -8,13 +8,11 @@ import { useMemo, useState, useEffect } from "react";
 import MarketSentiment from "@/components/dashboard/MarketSentiment";
 import PerAssetRiskBreakdown from "@/components/dashboard/PerAssetRiskBreakdown";
 import BenchmarkChart from "@/components/dashboard/BenchmarkChart";
-import { NetWorthChart } from "@/components/dashboard/NetWorthChart";
 
 import RebalancingTool from "@/components/dashboard/RebalancingTool";
 import { BreakEvenWidget } from "@/components/dashboard/BreakEvenWidget";
 import { WhaleTracker } from "@/components/dashboard/WhaleTracker";
 
-import { RiskMetrics } from "@/components/dashboard/RiskMetrics";
 import { BenchmarkComparison } from "@/components/dashboard/BenchmarkComparison";
 import { NewlyListed, TrendingSectors } from "@/components/dashboard/MarketMetadata";
 
@@ -34,9 +32,7 @@ interface CardDef {
 
 const ALL_CARDS: CardDef[] = [
   { id: "kpis", label: "KPI Summary", colSpan: 2 },
-  { id: "networth", label: "Historical Net Worth", colSpan: 2 },
   { id: "whale", label: "Whale Alert Feed", colSpan: 1 },
-  { id: "risk-advanced", label: "Advanced Risk Metrics", colSpan: 1 },
   { id: "benchmark-v2", label: "Market Alpha Analysis", colSpan: 1 },
   { id: "breakEven", label: "Break-Even Targets" },
   { id: "rebalancer", label: "Rebalancing Tool" },
@@ -421,16 +417,6 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
         );
       case "riskBreakdown": return <PerAssetRiskBreakdown compact />;
       case "benchmark": return <BenchmarkChart compact />;
-      case "networth":
-        return (
-          <div className="panel">
-            <div className="panel-head"><DragHandle editing={editing} /><h2>Historical Net Worth</h2></div>
-            <div className="panel-body">
-              <NetWorthChart />
-            </div>
-          </div>
-        );
-
       case "rebalancer":
         return (
           <div className="panel" key="rebalancer" onDragOver={(e) => handleDragOver(e, "rebalancer")} onDrop={() => handleDrop("rebalancer")}>
@@ -464,18 +450,6 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
             </div>
             <div className="panel-body">
               <WhaleTracker />
-            </div>
-          </div>
-        );
-      case "risk-advanced":
-        return (
-          <div className="panel" key="risk-advanced" onDragOver={(e) => handleDragOver(e, "risk-advanced")} onDrop={() => handleDrop("risk-advanced")}>
-            <div className="panel-head">
-              <DragHandle editing={editing} onDragStart={() => handleDragStart("risk-advanced")} onDragEnd={handleDragEnd} />
-              <h2>Advanced Risk Metrics</h2>
-            </div>
-            <div className="panel-body">
-              <RiskMetrics />
             </div>
           </div>
         );

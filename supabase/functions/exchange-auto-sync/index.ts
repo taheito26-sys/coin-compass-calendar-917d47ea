@@ -619,7 +619,7 @@ async function fetchCoinbaseTrades(apiKey: string, apiSecret: string): Promise<N
       while (nextUri) {
         const ts2 = Math.floor(Date.now() / 1000);
         const txSig = await hmacSign(apiSecret, `${ts2}GET${nextUri}`);
-        const txRes = await fetch(`https://api.coinbase.com${nextUri}`, {
+        const txRes: Response = await fetch(`https://api.coinbase.com${nextUri}`, {
           headers: {
             "CB-ACCESS-KEY": apiKey,
             "CB-ACCESS-SIGN": txSig,
@@ -629,7 +629,7 @@ async function fetchCoinbaseTrades(apiKey: string, apiSecret: string): Promise<N
         });
 
         if (!txRes.ok) break;
-        const txData = await txRes.json();
+        const txData: any = await txRes.json();
         for (const t of txData.data || []) {
           allTrades.push({
             id: t.id || String(Date.now()),
