@@ -13,6 +13,7 @@ export interface DerivedLot {
 
 export interface DerivedPosition {
   sym: string;
+  assetId: string;
   qty: number;
   cost: number;
   price: number | null;
@@ -144,6 +145,13 @@ export function derivePortfolio(
 ): PortfolioSummary {
   const sorted = [...txs].sort((a, b) => a.ts - b.ts);
   const { lotsMap, realizedByAsset, txCountByAsset } = runFifo(sorted);
+  
+  // Map symbol to assetId
+  const assetIdMap = new Map<string, string>();
+  for (const tx of sorted) {
+    const sym = normalizeSymbol(tx.asset || "");
+    if (sym && tx.assetId) assetIdMap.set(sym, tx.assetId);
+  }
 
   const positions: DerivedPosition[] = [];
   const closedPositions: ClosedPosition[] = [];
@@ -194,6 +202,7 @@ export function derivePortfolio(
 
       positions.push({
         sym,
+        assetId: assetIdMap.get(sym) || "",
         qty: totalQty,
         cost: totalCost,
         price,

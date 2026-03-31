@@ -44,6 +44,7 @@ const ALL_COLUMNS = [
   { key: "avgSell",    label: "Avg Sell",     default: false },
   { key: "pnl",        label: "P/L",          default: true  },
   { key: "pnlPct",     label: "Profit %",     default: true  },
+  { key: "breakEven",  label: "Break-Even",   default: true  },
   { key: "realizedPnl",label: "Realized P/L", default: false },
   { key: "marketCap",  label: "Market Cap",   default: false },
   { key: "volume",     label: "Volume 24h",   default: false },
@@ -99,6 +100,7 @@ interface DisplayRow {
   cost: number;
   pnlAbs: number;
   pnlPct: number;
+  breakEven: number;
   realizedPnl: number;
   coinId: string;
   change1h: number;
@@ -413,6 +415,7 @@ export default function PortfolioPage() {
         cost,
         pnlAbs,
         pnlPct,
+        breakEven:   r.avg,
         realizedPnl: r.realizedPnl,
         coinId:      live?.id ?? r.sym.toLowerCase(),
         change1h:    live?.price_change_percentage_1h_in_currency  ?? 0,
@@ -450,6 +453,7 @@ export default function PortfolioPage() {
         case "avg":        return (a.avg         - b.avg)         * m;
         case "pnl":        return (a.pnlAbs      - b.pnlAbs)      * m;
         case "allocation": return (a.total       - b.total)       * m;
+        case "breakEven":  return (a.breakEven   - b.breakEven)   * m;
         default:           return (a.total       - b.total)       * m;
       }
     });
@@ -1048,6 +1052,12 @@ export default function PortfolioPage() {
                                   <span className={`mono ${pos.pnlPct >= 0 ? "good" : "bad"}`} style={{ fontWeight: 700, fontSize: 11 }}>
                                     {pos.pnlPct >= 0 ? "▲" : "▼"} {Math.abs(pos.pnlPct).toFixed(2)}%
                                   </span>
+                                </td>
+                              ),
+                              breakEven: (
+                                <td key="breakEven" className="mono">
+                                  <div style={{ fontWeight: 800 }}>${fmtPx(pos.breakEven)}</div>
+                                  <div style={{ fontSize: 9, color: "var(--muted2)", textTransform: "uppercase" }}>Target</div>
                                 </td>
                               ),
                               realizedPnl: (

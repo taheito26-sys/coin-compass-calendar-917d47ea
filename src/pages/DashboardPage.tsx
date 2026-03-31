@@ -4,13 +4,16 @@ import { toast } from "sonner";
 import { fmtFiat, fmtQty, fmtPx, fmtTotal } from "@/lib/cryptoState";
 import { useLivePrices } from "@/hooks/useLivePrices";
 import { useUnifiedPortfolio } from "@/hooks/useUnifiedPortfolio";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import MarketSentiment from "@/components/dashboard/MarketSentiment";
 import TrendingSectors from "@/components/dashboard/TrendingSectors";
 import NewlyListed from "@/components/dashboard/NewlyListed";
 import PerAssetRiskBreakdown from "@/components/dashboard/PerAssetRiskBreakdown";
 import BenchmarkChart from "@/components/dashboard/BenchmarkChart";
 import { NetWorthChart } from "@/components/dashboard/NetWorthChart";
+import { CostBasisSwitcher } from "@/components/dashboard/CostBasisSwitcher";
+import RebalancingTool from "@/components/dashboard/RebalancingTool";
+import { BreakEvenWidget } from "@/components/dashboard/BreakEvenWidget";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -29,6 +32,9 @@ interface CardDef {
 const ALL_CARDS: CardDef[] = [
   { id: "kpis", label: "KPI Summary", colSpan: 2 },
   { id: "networth", label: "Historical Net Worth", colSpan: 2 },
+  { id: "breakEven", label: "Break-Even Targets" },
+  { id: "rebalancer", label: "Rebalancing Tool" },
+  { id: "costSwitcher", label: "Cost Basis Comparison", colSpan: 2 },
   { id: "allocation", label: "Coin Allocation" },
   { id: "heatmap", label: "Heatmap" },
   { id: "marketSentiment", label: "Market Sentiment" },
@@ -127,11 +133,18 @@ function HeatmapBlock({ sym, value, pct, color }: { sym: string; value: string; 
   );
 }
 
-function DragHandle({ editing }: { editing: boolean }) {
+function DragHandle({ editing, onDragStart, onDragEnd }: { 
+  editing: boolean; 
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
+}) {
   if (!editing) return null;
   return (
     <span
       className="dash-drag-handle"
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       style={{
         cursor: "grab", padding: "2px 4px", fontSize: 14, lineHeight: 1,
         color: "var(--muted2)", userSelect: "none",
@@ -159,6 +172,21 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
   const txCount     = state.txs.length;
   const realizedPnl = portfolio.realizedPnl;
   const totalPnlCombined = totalPnl + realizedPnl;
+
+  const [riskMetrics, setRiskMetrics] = useState<{ maxDrawdown: number; sessionPnl: number; sessionPnlPct: number; peakValue: number } | null>(null);
+
+  useEffect(() => {
+    async function loadRisk() {
+      try {
+        const { fetchRiskMetrics } = await import("@/lib/api");
+        const data = await fetchRiskMetrics();
+        setRiskMetrics(data);
+      } catch (err) {
+        console.error("Failed to load risk metrics:", err);
+      }
+    }
+    loadRisk();
+  }, [state.syncStatus]);
 
   const cardOrder = useMemo(() => {
     const raw = state.dashboardLayout;
@@ -192,6 +220,25 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
   };
 
   const handleDragEnd = () => { setDraggedId(null); setDragOverId(null); };
+  const applyPreset = (preset: "default" | "trader" | "taxes" | "hodler") => {
+    let order: string[] = [];
+    switch (preset) {
+      case "trader": 
+        order = ["kpis", "movers", "marketSentiment", "trendingSectors", "heatmap", "positions"];
+        break;
+      case "taxes":
+        order = ["costSwitcher", "kpis", "breakEven", "positions"];
+        break;
+      case "hodler":
+        order = ["networth", "allocation", "kpis", "rebalancer", "planner"];
+        break;
+      default:
+        order = ALL_CARDS.map(c => c.id);
+    }
+    setState(prev => ({ ...prev, dashboardLayout: order }));
+    toast.success(`Applied ${preset.toUpperCase()} layout`);
+  };
+
   const resetLayout = () => { 
     setState(prev => ({ ...prev, dashboardLayout: ALL_CARDS.map(c => c.id) }));
   };
@@ -265,7 +312,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
     switch (id) {
       case "kpis":
         return (
-          <div className="kpis" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10 }}>
+          <div className="kpis" style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 10 }}>
             <div className="kpi-card">
               <div className="kpi-head"><span className="kpi-badge" style={{ background: "var(--brand)" }}>Σ</span></div>
               <div className="kpi-lbl">CURRENT TOTAL</div>
@@ -284,15 +331,27 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
               <div className="kpi-sub">From closed trades</div>
             </div>
             <div className="kpi-card">
+              <div className="kpi-lbl">DAILY P&L</div>
+              <div className={`kpi-val ${riskMetrics?.sessionPnl && riskMetrics.sessionPnl >= 0 ? "good" : "bad"}`}>
+                {riskMetrics ? (riskMetrics.sessionPnl >= 0 ? "+" : "") + fmtTotal(riskMetrics.sessionPnl) : "..."}
+              </div>
+              <div className="kpi-sub">{riskMetrics ? riskMetrics.sessionPnlPct.toFixed(2) + "%" : "vs yesterday"}</div>
+            </div>
+            <div className="kpi-card">
               <div className="kpi-head"><span className={`kpi-badge`}>{totalPnlCombined >= 0 ? "▲" : "▼"}</span></div>
               <div className="kpi-lbl">TOTAL P&amp;L</div>
               <div className={`kpi-val ${totalPnlCombined >= 0 ? "good" : "bad"}`}>{(totalPnlCombined >= 0 ? "+" : "") + fmtTotal(totalPnlCombined)}</div>
               <div className="kpi-sub">Realized + Unrealized</div>
             </div>
             <div className="kpi-card">
-              <div className="kpi-lbl">TOTAL COST</div>
-              <div className="kpi-val">{fmtFiat(totalCost, base)}</div>
-              <div className="kpi-sub">{txCount} transactions</div>
+              <div className="kpi-lbl">MAX DRAWDOWN</div>
+              <div className="kpi-val bad">{riskMetrics ? riskMetrics.maxDrawdown.toFixed(2) + "%" : "..."}</div>
+              <div className="kpi-sub">Peak to trough</div>
+            </div>
+            <div className="kpi-card">
+              <div className="kpi-lbl">TX COUNT</div>
+              <div className="kpi-val">{txCount}</div>
+              <div className="kpi-sub">Total events</div>
             </div>
           </div>
         );
@@ -343,6 +402,42 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
           </div>
         );
 
+      case "costSwitcher":
+        return (
+          <div className="panel" key="costSwitcher" onDragOver={(e) => handleDragOver(e, "costSwitcher")} onDrop={() => handleDrop("costSwitcher")}>
+            <div className="panel-head">
+              <DragHandle editing={editing} onDragStart={() => handleDragStart("costSwitcher")} onDragEnd={handleDragEnd} />
+              <h2>Cost Basis Comparison</h2>
+            </div>
+            <div className="panel-body">
+              <CostBasisSwitcher />
+            </div>
+          </div>
+        );
+      case "rebalancer":
+        return (
+          <div className="panel" key="rebalancer" onDragOver={(e) => handleDragOver(e, "rebalancer")} onDrop={() => handleDrop("rebalancer")}>
+            <div className="panel-head">
+              <DragHandle editing={editing} onDragStart={() => handleDragStart("rebalancer")} onDragEnd={handleDragEnd} />
+              <h2>Rebalancing Tool</h2>
+            </div>
+            <div className="panel-body">
+              <RebalancingTool />
+            </div>
+          </div>
+        );
+      case "breakEven":
+        return (
+          <div className="panel" key="breakEven" onDragOver={(e) => handleDragOver(e, "breakEven")} onDrop={() => handleDrop("breakEven")}>
+            <div className="panel-head">
+              <DragHandle editing={editing} onDragStart={() => handleDragStart("breakEven")} onDragEnd={handleDragEnd} />
+              <h2>Break-Even Targets</h2>
+            </div>
+            <div className="panel-body">
+              <BreakEvenWidget />
+            </div>
+          </div>
+        );
       case "movers":
         return (
           <div className="panel">
@@ -482,6 +577,14 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
         >
           ⚡ Sync & Snapshot
         </button>
+        {editing && (
+          <div style={{ display: "flex", gap: 4, marginRight: 12, padding: "3px 6px", background: "rgba(255,255,255,0.03)", borderRadius: 8, border: "1px dashed var(--line)" }}>
+            <span style={{ fontSize: 8, color: "var(--muted2)", alignSelf: "center", marginRight: 4, textTransform: "uppercase", fontWeight: 800 }}>Presets:</span>
+            <button className="btn tiny secondary" style={{ fontSize: 9, padding: "2px 6px" }} onClick={() => applyPreset("hodler")}>HODLer</button>
+            <button className="btn tiny secondary" style={{ fontSize: 9, padding: "2px 6px" }} onClick={() => applyPreset("trader")}>Trader</button>
+            <button className="btn tiny secondary" style={{ fontSize: 9, padding: "2px 6px" }} onClick={() => applyPreset("taxes")}>Taxes</button>
+          </div>
+        )}
         <button className={`btn tiny ${editing ? "" : "secondary"}`} onClick={() => setEditing(!editing)}
           style={editing ? { background: "var(--brand)", color: "#fff", border: "none" } : {}}>
           {editing ? "✓ Done" : "⚙ Customize"}

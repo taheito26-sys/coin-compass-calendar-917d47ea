@@ -753,8 +753,30 @@ export async function fetchHistoricalNetWorth(): Promise<any[]> {
   return (data as any[]) || [];
 }
 
-export async function recalculateLots(assetId: string): Promise<void> {
+export async function recalculateLots(assetId: string, method?: string): Promise<void> {
   await supabase.functions.invoke("accounting", {
-    body: { action: "recalculate", assetId }
+    body: { action: "recalculate", assetId, method }
   });
+}
+
+export async function recalculateAllLots(method?: string): Promise<void> {
+  await supabase.functions.invoke("accounting", {
+    body: { action: "recalculate-all", method }
+  });
+}
+
+export async function compareCostMethods(assetId: string): Promise<Record<string, { costBasis: number; realizedPnl: number }>> {
+  const { data, error } = await supabase.functions.invoke("accounting", {
+    body: { action: "compare-methods", assetId }
+  });
+  if (error) throw error;
+  return data.comparison;
+}
+
+export async function fetchRiskMetrics(): Promise<{ maxDrawdown: number; sessionPnl: number; sessionPnlPct: number; peakValue: number }> {
+  const { data, error } = await supabase.functions.invoke("accounting", {
+    body: { action: "risk-metrics" }
+  });
+  if (error) throw error;
+  return data;
 }

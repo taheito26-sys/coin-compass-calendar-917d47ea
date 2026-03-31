@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { recalculateLots, getPositions } from "../_shared/accounting.ts";
+import { recalculateLots, getPositions, compareMethods, getRiskMetrics } from "../_shared/accounting.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -37,14 +37,15 @@ Deno.serve(async (req) => {
 
     switch (path) {
       case "recalculate": {
-        const { assetId } = await req.json();
+        const { assetId, method } = await req.json();
         if (!assetId) return json({ error: "Missing assetId" }, 400);
         
-        const result = await recalculateLots(supabase, user.id, assetId);
+        const result = await recalculateLots(supabase, user.id, assetId, method);
         return json({ ok: true, ...result });
       }
 
       case "recalculate-all": {
+        const { method } = await req.json();
         // Find all assets for this user
         const { data: assets } = await supabase
           .from("transactions")
@@ -56,7 +57,7 @@ Deno.serve(async (req) => {
 
         for (const id of assetIds) {
           try {
-            await recalculateLots(supabase, user.id, id);
+            await recalculateLots(supabase, user.id, id, method);
             results.push({ assetId: id, ok: true });
           } catch (err: any) {
             results.push({ assetId: id, ok: false, error: err.message });
@@ -96,6 +97,18 @@ Deno.serve(async (req) => {
           total_cost_basis: totalCost,
           unrealized_pnl: totalValue - totalCost
         });
+      }
+
+      case "compare-methods": {
+        const { assetId } = await req.json();
+        if (!assetId) return json({ error: "Missing assetId" }, 400);
+        const comparison = await compareMethods(supabase, user.id, assetId);
+        return json({ ok: true, comparison });
+      }
+
+      case "risk-metrics": {
+        const result = await getRiskMetrics(supabase, user.id);
+        return json({ ok: true, ...result });
       }
 
       default:

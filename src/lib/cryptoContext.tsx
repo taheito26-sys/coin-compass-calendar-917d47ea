@@ -51,6 +51,7 @@ function mapTransactions(
 
       return {
         id: tx.id,
+        assetId: tx.asset_id,
         ts,
         type: tx.type,
         asset: symbol,
@@ -75,13 +76,24 @@ export const CryptoProvider = forwardRef<HTMLDivElement, { children: React.React
 
   const { isSignedIn, userId } = useAuth();
 
-  const setState = useCallback((updater: (prev: CryptoState) => CryptoState) => {
+  const setState = (arg: CryptoState | ((prev: CryptoState) => CryptoState)) => {
     setStateRaw((prev) => {
-      const next = updater(prev);
+      const next = typeof arg === "function" ? arg(prev) : arg;
+      
+      // If method changed, trigger background recalculation
+      if (next.method !== prev.method && next.syncStatus === "synced") {
+        console.log(`[crypto-context] Method changed from ${prev.method} to ${next.method}. Recalculating...`);
+        import("@/lib/api").then(api => {
+          api.recalculateAllLots(next.method).then(() => {
+            rehydrateFromBackend();
+          });
+        });
+      }
+
       saveState(next);
       return next;
     });
-  }, []);
+  };
 
   const refresh = useCallback(async (force = false) => {
     try {

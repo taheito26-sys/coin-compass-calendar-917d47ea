@@ -84,7 +84,7 @@ const TC: Record<string, Record<string, ThemeColors>> = {
 };
 
 const THEMES = ["t1", "t2", "t3", "t4", "t5"] as const;
-const METHODS = ["FIFO", "DCA"];
+const METHODS = ["FIFO", "LIFO", "HIFO", "AVCO"];
 const CURRENCIES = ["USD", "EUR", "GBP", "QAR"];
 const TIMEZONES = [
   { id: "local", name: "Local (Browser)" },

@@ -34,7 +34,8 @@ const OUT_TYPES = new Set(["sell", "transfer_out", "withdrawal", "fee", "adjustm
 export async function recalculateLots(
   supabase: SupabaseClient,
   userId: string,
-  assetId: string
+  assetId: string,
+  method: string = 'FIFO'
 ) {
   // 1. Fetch all transactions for this user and asset, ordered by timestamp
   const { data: txs, error: txError } = await supabase
@@ -47,8 +48,8 @@ export async function recalculateLots(
   if (txError) throw txError;
   if (!txs) return;
 
-  // 2. Run FIFO logic
-  const openLots: Lot[] = [];
+  // 2. Process transactions
+  let openLots: Lot[] = [];
   let realizedPnl = 0;
 
   for (const tx of txs) {
@@ -77,21 +78,52 @@ export async function recalculateLots(
         status: 'open'
       });
     } else if (OUT_TYPES.has(type)) {
-      // Consume existing lots FIFO
+      // Consume existing lots based on method
       let remainingToConsume = qty;
       let costConsumed = 0;
 
-      for (const lot of openLots) {
-        if (remainingToConsume <= 0) break;
-        if (lot.remaining_qty <= 0) continue;
+      // Sort open lots based on accounting method
+      const lotsToConsume = [...openLots].filter(l => l.remaining_qty > 0);
+      
+      if (method === 'LIFO') {
+        lotsToConsume.sort((a, b) => new Date(b.acquired_at).getTime() - new Date(a.acquired_at).getTime());
+      } else if (method === 'HIFO') {
+        lotsToConsume.sort((a, b) => b.unit_cost - a.unit_cost);
+      } else if (method === 'AVCO') {
+        // Average cost: calculate total average and consume proportionally
+        const totalQty = lotsToConsume.reduce((s, l) => s + l.remaining_qty, 0);
+        const totalCost = lotsToConsume.reduce((s, l) => s + l.remaining_qty * l.unit_cost, 0);
+        const avgUnitCost = totalQty > 0 ? totalCost / totalQty : 0;
+        
+        // In AVCO, we consume based on the average unit cost at that exact moment
+        for (const lot of openLots) {
+          if (remainingToConsume <= 0) break;
+          if (lot.remaining_qty <= 0) continue;
+          const take = Math.min(lot.remaining_qty, remainingToConsume);
+          costConsumed += take * avgUnitCost;
+          lot.remaining_qty -= take;
+          remainingToConsume -= take;
+          if (lot.remaining_qty <= 0) lot.status = 'consumed';
+        }
+      } else {
+        // Default: FIFO (already sorted by acquired_at because openLots preserves push order)
+        // No explicit sort needed, but let's be safe
+        lotsToConsume.sort((a, b) => new Date(a.acquired_at).getTime() - new Date(b.acquired_at).getTime());
+      }
 
-        const take = Math.min(lot.remaining_qty, remainingToConsume);
-        costConsumed += take * lot.unit_cost;
-        lot.remaining_qty -= take;
-        remainingToConsume -= take;
-
-        if (lot.remaining_qty <= 0) {
-          lot.status = 'consumed';
+      if (method !== 'AVCO') {
+        for (const lot of lotsToConsume) {
+          if (remainingToConsume <= 0) break;
+          const take = Math.min(lot.remaining_qty, remainingToConsume);
+          costConsumed += take * lot.unit_cost;
+          
+          // Find the original lot in openLots to update it
+          const originalLot = openLots.find(l => l.transaction_id === lot.transaction_id);
+          if (originalLot) {
+            originalLot.remaining_qty -= take;
+            if (originalLot.remaining_qty <= 0) originalLot.status = 'consumed';
+          }
+          remainingToConsume -= take;
         }
       }
 
@@ -126,6 +158,33 @@ export async function recalculateLots(
 }
 
 /**
+ * Compares total cost basis across all methods for a specific user and asset.
+ */
+export async function compareMethods(
+  supabase: SupabaseClient,
+  userId: string,
+  assetId: string
+) {
+  const methods = ['FIFO', 'LIFO', 'HIFO', 'AVCO'];
+  const results: Record<string, { costBasis: number; realizedPnl: number }> = {};
+
+  for (const m of methods) {
+    // Note: This is an in-memory recalculation that doesn't persist to the DB.
+    // We already fetch all txs in recalculateLots.
+    const res = await recalculateLots(supabase, userId, assetId, m);
+    
+    // Calculate total cost basis of remaining lots
+    const costBasis = (res.openLots || []).reduce((s, l) => s + (Number(l.remaining_qty) * Number(l.unit_cost)), 0);
+    results[m] = { 
+      costBasis, 
+      realizedPnl: res.realizedPnl 
+    };
+  }
+
+  return results;
+}
+
+/**
  * Derives current positions for a user based on the lots table.
  */
 export async function getPositions(supabase: SupabaseClient, userId: string) {
@@ -153,4 +212,40 @@ export async function getPositions(supabase: SupabaseClient, userId: string) {
     cost_basis: data.cost,
     avg_cost: data.qty > 0 ? data.cost / data.qty : 0
   }));
+}
+
+/**
+ * Calculates risk metrics (Max Drawdown, Volatility, Session P&L) for a user.
+ */
+export async function getRiskMetrics(supabase: SupabaseClient, userId: string) {
+  // 1. Fetch historical snapshots ordered by date
+  const { data: snapshots, error } = await supabase
+    .from("portfolio_snapshots" as any)
+    .select("date, total_market_value")
+    .eq("user_id", userId)
+    .order("date", { ascending: true });
+
+  if (error) throw error;
+  if (!snapshots || snapshots.length === 0) {
+    return { maxDrawdown: 0, sessionPnl: 0, peakValue: 0 };
+  }
+
+  // 2. Max Drawdown logic
+  let peak = -Infinity;
+  let maxDrawdown = 0;
+  
+  for (const s of snapshots) {
+    const val = Number(s.total_market_value);
+    if (val > peak) peak = val;
+    const drawdown = peak > 0 ? (val - peak) / peak : 0;
+    if (drawdown < maxDrawdown) maxDrawdown = drawdown;
+  }
+
+  // 3. Session P&L (Today vs Yesterday)
+  const current = Number(snapshots[snapshots.length - 1].total_market_value);
+  const previous = snapshots.length > 1 ? Number(snapshots[snapshots.length - 2].total_market_value) : current;
+  const sessionPnl = current - previous;
+  const sessionPnlPct = previous > 0 ? (sessionPnl / previous) * 100 : 0;
+
+  return { peakValue: peak, maxDrawdown: Math.abs(maxDrawdown), sessionPnl, sessionPnlPct };
 }

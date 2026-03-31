@@ -5,10 +5,22 @@ const SK = "crypto_tracker_v1";
 const MIGRATION_KEY = "crypto_tracker_migrated";
 
 export interface CryptoTx {
-  id: string; ts: number; type: string; asset: string; qty: number;
-  price: number; total: number; fee: number; feeAsset: string;
-  accountId: string; note: string; lots?: string;
-  realized?: number; cost?: number;
+  id: string;
+  assetId: string;
+  ts: number;
+  type: string;
+  asset: string;
+  qty: number;
+  price: number;
+  total: number;
+  fee: number;
+  feeAsset: string;
+  accountId: string;
+  note: string;
+  lots?: string;
+  venue?: string;
+  realized?: number;
+  cost?: number;
 }
 
 export interface CryptoLot {
