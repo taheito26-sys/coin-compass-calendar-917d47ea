@@ -4,6 +4,7 @@ import { uid, fmtPx } from "@/lib/cryptoState";
 import { cryptoDerived } from "@/lib/cryptoState";
 import { supabase } from "@/integrations/supabase/client";
 import { repairMultiplierTransactions } from "@/lib/api";
+import RebalancingTool from "@/components/dashboard/RebalancingTool";
 
 // ── Layout & theme metadata ───────────────────────────────────────────────
 

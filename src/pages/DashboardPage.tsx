@@ -530,7 +530,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
           const id = row[0];
           return (
             <div key={`row-${ri}`} draggable={editing} onDragStart={() => handleDragStart(id)} onDragOver={e => handleDragOver(e, id)} onDrop={() => handleDrop(id)} onDragEnd={handleDragEnd}
-              style={{ marginBottom: 10, opacity: draggedId === id ? 0.5 : 1, outline: dragOverId === id ? "2px dashed var(--brand)" : "none", outlineOffset: 2, borderRadius: "var(--lt-radius-sm)", transition: "opacity .15s" }}>
+              style={{ marginBottom: 0, opacity: draggedId === id ? 0.5 : 1, outline: dragOverId === id ? "2px dashed var(--brand)" : "none", outlineOffset: 2, borderRadius: "var(--lt-radius-sm)", transition: "opacity .15s" }}>
               {id === "kpis" && editing && (
                 <div style={{ fontSize: 9, color: "var(--muted)", marginBottom: 2, display: "flex", alignItems: "center", gap: 4 }}>
                   <span style={{ cursor: "grab", fontSize: 14 }}>⠿</span> KPI Summary
