@@ -417,16 +417,6 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
         );
       case "riskBreakdown": return <PerAssetRiskBreakdown compact />;
       case "benchmark": return <BenchmarkChart compact />;
-      case "networth":
-        return (
-          <div className="panel">
-            <div className="panel-head"><DragHandle editing={editing} /><h2>Historical Net Worth</h2></div>
-            <div className="panel-body">
-              <NetWorthChart />
-            </div>
-          </div>
-        );
-
       case "rebalancer":
         return (
           <div className="panel" key="rebalancer" onDragOver={(e) => handleDragOver(e, "rebalancer")} onDrop={() => handleDrop("rebalancer")}>
