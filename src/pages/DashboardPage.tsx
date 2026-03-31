@@ -16,8 +16,6 @@ import { PortfolioHealth } from "@/components/dashboard/PortfolioHealth";
 import { WhaleTracker } from "@/components/dashboard/WhaleTracker";
 
 import { RiskMetrics } from "@/components/dashboard/RiskMetrics";
-import { MonteCarlo } from "@/components/dashboard/MonteCarlo";
-import { TaxHarvesting } from "@/components/dashboard/TaxHarvesting";
 import { BenchmarkComparison } from "@/components/dashboard/BenchmarkComparison";
 import { NewlyListed, TrendingSectors } from "@/components/dashboard/MarketMetadata";
 import { NetworkStatus } from "@/components/dashboard/NetworkStatus";
