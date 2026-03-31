@@ -277,6 +277,7 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
 
       await rehydrateFromBackend();
       toast(`PEPE repair complete: ${result.repaired} row(s) updated`, "good");
+      setTimeout(() => window.location.reload(), 350);
     } catch (err: any) {
       toast(err?.message || "PEPE repair failed", "bad");
     } finally {

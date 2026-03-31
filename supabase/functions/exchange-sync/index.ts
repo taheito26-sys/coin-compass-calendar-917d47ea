@@ -1851,7 +1851,7 @@ async function repairMultiplierTransactions(
     .from("transactions")
     .select("id, qty, unit_price, tags, venue, asset_id, asset:assets(symbol, binance_symbol)")
     .eq("user_id", userId)
-    .in("type", ["buy", "sell"]);
+    .in("type", ["buy", "sell", "transfer_in", "transfer_out"]);
 
   if (options.venue) {
     txQuery = txQuery.eq("venue", options.venue);
