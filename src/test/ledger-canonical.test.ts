@@ -154,7 +154,7 @@ describe("cryptoState — no business data in localStorage", () => {
 
     const state = {
       ...defaultState(),
-      txs: [{ id: "tx_1", ts: Date.now(), type: "buy", asset: "BTC", qty: 1, price: 50000, total: 50000, fee: 0, feeAsset: "USD", accountId: "acc_main", note: "", lots: "" }],
+      txs: [{ id: "tx_1", assetId: "btc-id", ts: Date.now(), type: "buy", asset: "BTC", qty: 1, price: 50000, total: 50000, fee: 0, feeAsset: "USD", accountId: "acc_main", note: "", lots: "", venue: "" }],
     };
 
     saveState(state);
