@@ -315,6 +315,122 @@ export type Database = {
         }
         Relationships: []
       }
+      lots: {
+        Row: {
+          acquired_at: string
+          asset_id: string
+          created_at: string
+          id: string
+          qty: number
+          remaining_qty: number
+          status: string
+          transaction_id: string
+          unit_cost: number
+          user_id: string
+        }
+        Insert: {
+          acquired_at: string
+          asset_id: string
+          created_at?: string
+          id?: string
+          qty?: number
+          remaining_qty?: number
+          status?: string
+          transaction_id: string
+          unit_cost?: number
+          user_id: string
+        }
+        Update: {
+          acquired_at?: string
+          asset_id?: string
+          created_at?: string
+          id?: string
+          qty?: number
+          remaining_qty?: number
+          status?: string
+          transaction_id?: string
+          unit_cost?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      portfolio_snapshots: {
+        Row: {
+          created_at: string
+          date: string
+          id: string
+          realized_pnl: number
+          total_cost_basis: number
+          total_market_value: number
+          unrealized_pnl: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          id?: string
+          realized_pnl?: number
+          total_cost_basis?: number
+          total_market_value?: number
+          unrealized_pnl?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          id?: string
+          realized_pnl?: number
+          total_cost_basis?: number
+          total_market_value?: number
+          unrealized_pnl?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      position_snapshots: {
+        Row: {
+          asset_id: string
+          avg_cost: number
+          cost_basis: number
+          created_at: string
+          id: string
+          market_price: number
+          market_value: number
+          portfolio_snapshot_id: string
+          qty: number
+        }
+        Insert: {
+          asset_id: string
+          avg_cost?: number
+          cost_basis?: number
+          created_at?: string
+          id?: string
+          market_price?: number
+          market_value?: number
+          portfolio_snapshot_id: string
+          qty?: number
+        }
+        Update: {
+          asset_id?: string
+          avg_cost?: number
+          cost_basis?: number
+          created_at?: string
+          id?: string
+          market_price?: number
+          market_value?: number
+          portfolio_snapshot_id?: string
+          qty?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "position_snapshots_portfolio_snapshot_id_fkey"
+            columns: ["portfolio_snapshot_id"]
+            isOneToOne: false
+            referencedRelation: "portfolio_snapshots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       price_cache: {
         Row: {
           asset_id: string
