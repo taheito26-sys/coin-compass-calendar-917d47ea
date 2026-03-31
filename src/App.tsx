@@ -46,8 +46,8 @@ function AppShell({ onLogout, userLabel }: { onLogout: () => Promise<void>; user
           {page === "ledger" && <LedgerPage />}
           {page === "calendar" && <CalendarPage />}
           {page === "markets" && <MarketsPage />}
-          {page === "review" && <ReviewPage />}
-          {page === "settings" && <SettingsPage />}
+              {page === "whale" && <WhalePage />}
+              {page === "settings" && <SettingsPage />}
         </div>
       </div>
       {toastMsg ? <div className={`toast show ${toastMsg.type}`}>{toastMsg.msg}</div> : null}
