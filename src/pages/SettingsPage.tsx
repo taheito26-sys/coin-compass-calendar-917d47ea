@@ -506,6 +506,14 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
         </div>
       </div>
 
+      {/* Rebalancing Tool */}
+      <div className="panel" style={{ marginTop: 10, minWidth: 0 }}>
+        <div className="panel-head"><h2>⚖️ Portfolio Rebalancing</h2></div>
+        <div className="panel-body">
+          <RebalancingTool />
+        </div>
+      </div>
+
       {/* Vault / Snapshots */}
       <VaultSection />
     </div>
