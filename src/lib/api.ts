@@ -733,3 +733,28 @@ export async function repairMultiplierTransactions(request: MultiplierRepairRequ
   }
   return data;
 }
+
+// ─── Accounting / Phase 0 & 1 operations ──────────────────
+
+export async function fetchPositions(): Promise<any[]> {
+  const { data, error } = await supabase.functions.invoke("accounting", {
+    body: { action: "positions" }
+  });
+  if (error) throw error;
+  return data.positions || [];
+}
+
+export async function fetchHistoricalNetWorth(): Promise<any[]> {
+  const { data, error } = await supabase
+    .from("portfolio_snapshots")
+    .select("*")
+    .order("date", { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function recalculateLots(assetId: string): Promise<void> {
+  await supabase.functions.invoke("accounting", {
+    body: { action: "recalculate", assetId }
+  });
+}

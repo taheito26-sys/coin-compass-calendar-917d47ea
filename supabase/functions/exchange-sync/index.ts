@@ -1,5 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { compactTrades, type NormalizedTrade } from "../_shared/compaction.ts";
+import { recalculateLots } from "../_shared/accounting.ts";
+
 import { AppError, UpstreamError, type SyncStage, type ExchangeId, type FetchStats, type FetchResult, type ExchangeRequestParams, type ExchangeResponse } from "../_shared/types.ts";
 import { normalizeTradeEconomics, parseInstrumentSymbol } from "../_shared/instrument-normalization.ts";
 
@@ -493,7 +495,8 @@ Deno.serve(async (req) => {
             : ["buy", "sell", "transfer_in", "transfer_out"],
           preview: !!body.preview,
           coins: Array.isArray(body.coins) ? body.coins : [],
-          minUsdValue: Number(body.minUsdValue ?? 100),
+          minUsdValue: Number(body.minUsdValue ?? 100), // Updated
+
           connectionId: conn.id,
         };
 
