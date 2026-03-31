@@ -1,4 +1,6 @@
 import { useCrypto } from "@/lib/cryptoContext";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import { fmtFiat, fmtQty, fmtPx, fmtTotal } from "@/lib/cryptoState";
 import { useLivePrices } from "@/hooks/useLivePrices";
 import { useUnifiedPortfolio } from "@/hooks/useUnifiedPortfolio";
@@ -8,6 +10,7 @@ import TrendingSectors from "@/components/dashboard/TrendingSectors";
 import NewlyListed from "@/components/dashboard/NewlyListed";
 import PerAssetRiskBreakdown from "@/components/dashboard/PerAssetRiskBreakdown";
 import BenchmarkChart from "@/components/dashboard/BenchmarkChart";
+import { NetWorthChart } from "@/components/dashboard/NetWorthChart";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -25,6 +28,7 @@ interface CardDef {
 
 const ALL_CARDS: CardDef[] = [
   { id: "kpis", label: "KPI Summary", colSpan: 2 },
+  { id: "networth", label: "Historical Net Worth", colSpan: 2 },
   { id: "allocation", label: "Coin Allocation" },
   { id: "heatmap", label: "Heatmap" },
   { id: "marketSentiment", label: "Market Sentiment" },
@@ -329,6 +333,15 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
       case "newlyListed": return <NewlyListed />;
       case "riskBreakdown": return <PerAssetRiskBreakdown compact />;
       case "benchmark": return <BenchmarkChart compact />;
+      case "networth":
+        return (
+          <div className="panel">
+            <div className="panel-head"><DragHandle editing={editing} /><h2>Historical Net Worth</h2></div>
+            <div className="panel-body">
+              <NetWorthChart />
+            </div>
+          </div>
+        );
 
       case "movers":
         return (
@@ -454,6 +467,21 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
         <span className="pill">{base}</span>
         <div style={{ flex: 1 }} />
+        <button 
+          className="btn tiny secondary" 
+          onClick={async () => {
+            const toastId = toast.loading("Generating portfolio snapshot...");
+            try {
+              await supabase.functions.invoke("daily-snapshot");
+              toast.success("Snapshot generated!", { id: toastId });
+              window.location.reload();
+            } catch (err) {
+              toast.error("Failed to generate snapshot", { id: toastId });
+            }
+          }}
+        >
+          ⚡ Sync & Snapshot
+        </button>
         <button className={`btn tiny ${editing ? "" : "secondary"}`} onClick={() => setEditing(!editing)}
           style={editing ? { background: "var(--brand)", color: "#fff", border: "none" } : {}}>
           {editing ? "✓ Done" : "⚙ Customize"}
