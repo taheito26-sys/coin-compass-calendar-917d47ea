@@ -32,9 +32,7 @@ interface CardDef {
 
 const ALL_CARDS: CardDef[] = [
   { id: "kpis", label: "KPI Summary", colSpan: 2 },
-  { id: "networth", label: "Historical Net Worth", colSpan: 2 },
   { id: "whale", label: "Whale Alert Feed", colSpan: 1 },
-  { id: "risk-advanced", label: "Advanced Risk Metrics", colSpan: 1 },
   { id: "benchmark-v2", label: "Market Alpha Analysis", colSpan: 1 },
   { id: "breakEven", label: "Break-Even Targets" },
   { id: "rebalancer", label: "Rebalancing Tool" },
