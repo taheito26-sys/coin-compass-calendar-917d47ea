@@ -1194,9 +1194,9 @@ table { table-layout: auto; }
   .ledger-top-grid{grid-template-columns:1fr !important;}
 }
 @media(max-width:560px){
-  .kpis{grid-template-columns:1fr;}
+  .kpis{grid-template-columns:1fr 1fr;}
   .kpis-3{grid-template-columns:1fr;}
-  .kpis-5{grid-template-columns:1fr;}
+  .kpis-5{grid-template-columns:1fr 1fr;}
   .cal-stats{grid-template-columns:1fr;}
 }
 
