@@ -378,9 +378,32 @@ export default function OpportunitiesPage() {
     }
   };
 
+  // Auto-refresh: fetch on mount, then poll every 60s
   useEffect(() => {
     fetchEvents();
     fetchAirdrops();
+
+    const interval = setInterval(() => {
+      fetchEvents();
+      fetchAirdrops();
+    }, 60_000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Background ingest on first load (silent, no toast on failure)
+  const hasAutoIngested = useRef(false);
+  useEffect(() => {
+    if (hasAutoIngested.current) return;
+    hasAutoIngested.current = true;
+    supabase.functions.invoke("opportunity-ingest", { method: "POST", body: {} })
+      .then(({ data }) => {
+        if (data?.inserted > 0) {
+          toast.success(`Auto-scan found ${data.inserted} new events`);
+          fetchEvents();
+        }
+      })
+      .catch(() => {}); // silent fail for background ingest
   }, []);
 
   // ── Filtered data ─────────────────────────────────────────────
