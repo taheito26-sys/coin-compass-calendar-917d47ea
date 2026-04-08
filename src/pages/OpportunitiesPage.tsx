@@ -897,7 +897,64 @@ function SentimentTab({
         )}
       </div>
 
-      {/* News feed with filters */}
+      {/* Top 100 Coin Sentiments */}
+      {(data.coinSentiments || []).length > 0 && (
+        <div className="panel" style={{ padding: "10px 14px" }}>
+          <div style={{ fontSize: 10, fontWeight: 800, color: "var(--muted)", textTransform: "uppercase", marginBottom: 8 }}>
+            📊 Top 100 Coin Sentiment — {data.coinSentiments.filter(c => c.mentions > 0).length} mentioned
+          </div>
+          <div className="tableWrap">
+            <table style={{ width: "100%", fontSize: 11 }}>
+              <thead>
+                <tr style={{ color: "var(--muted)", textAlign: "left" }}>
+                  <th style={{ padding: "4px 0" }}>#</th>
+                  <th>Coin</th>
+                  <th>Price</th>
+                  <th>24h</th>
+                  <th>Mentions</th>
+                  <th>Sentiment</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.coinSentiments.slice(0, 50).map((c, i) => (
+                  <tr key={c.symbol} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                    <td style={{ padding: "5px 0", fontSize: 10, color: "var(--muted)" }}>{c.marketCapRank}</td>
+                    <td>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        {c.image && <img src={c.image} alt="" style={{ width: 16, height: 16, borderRadius: 8 }} />}
+                        <span style={{ fontWeight: 800 }}>{c.symbol}</span>
+                        <span style={{ fontSize: 9, color: "var(--muted)" }}>{c.name}</span>
+                      </div>
+                    </td>
+                    <td style={{ fontWeight: 700 }}>${c.price < 1 ? c.price.toPrecision(4) : c.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                    <td style={{ fontWeight: 700, color: (c.change24h || 0) >= 0 ? SENT_COLORS.bullish : SENT_COLORS.bearish }}>
+                      {c.change24h != null ? `${c.change24h >= 0 ? "+" : ""}${c.change24h.toFixed(1)}%` : "—"}
+                    </td>
+                    <td>
+                      {c.mentions > 0 ? (
+                        <span style={{ fontWeight: 800, color: "var(--brand)" }}>🔥 {c.mentions}</span>
+                      ) : (
+                        <span style={{ color: "var(--muted)", fontSize: 10 }}>—</span>
+                      )}
+                    </td>
+                    <td>
+                      <span style={{
+                        fontSize: 9, fontWeight: 800, padding: "2px 6px", borderRadius: 8,
+                        background: c.mentions > 0 ? `${SENT_COLORS[c.sentiment]}18` : "transparent",
+                        color: c.mentions > 0 ? SENT_COLORS[c.sentiment] : "var(--muted)",
+                        textTransform: "uppercase",
+                      }}>
+                        {c.mentions > 0 ? c.sentiment : "—"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       <div>
         <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
           <select className="inp" value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} style={{ fontSize: 11, padding: "4px 8px" }}>
