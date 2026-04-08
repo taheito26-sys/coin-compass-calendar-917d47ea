@@ -67,12 +67,25 @@ interface SentimentTrending {
   score: number;
 }
 
+interface CoinSentiment {
+  symbol: string;
+  name: string;
+  mentions: number;
+  avgSentiment: number;
+  sentiment: "bullish" | "bearish" | "neutral";
+  price: number;
+  change24h: number | null;
+  marketCapRank: number;
+  image: string;
+}
+
 interface SentimentData {
   news: SentimentNewsItem[];
   trending: SentimentTrending[];
   fearGreed: { value: number; label: string; history: { value: number; ts: number }[] };
   marketDominance: { btc: number; eth: number; others: number };
   communityBuzz: { topic: string; mentions: number; sentiment: string }[];
+  coinSentiments: CoinSentiment[];
   lastUpdated: number;
 }
 
