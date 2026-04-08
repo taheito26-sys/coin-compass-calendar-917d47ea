@@ -503,6 +503,41 @@ export default function OpportunitiesPage() {
       .catch(() => {}); // silent fail for background ingest
   }, []);
 
+  // Fetch risk intelligence data from DB
+  const fetchRiskData = useCallback(async () => {
+    setRiskLoading(true);
+    try {
+      const [srcRes, clsRes, sigRes] = await Promise.all([
+        supabase.from("source_reliability").select("*").order("trust_score", { ascending: false }),
+        supabase.from("event_classification").select("*").order("created_at", { ascending: false }).limit(200),
+        supabase.from("risk_signal_aggregate").select("*").order("risk_score", { ascending: false }),
+      ]);
+      setRiskSources(srcRes.data || []);
+      setRiskClassifications(clsRes.data || []);
+      setRiskSignals(sigRes.data || []);
+    } catch {}
+    setRiskLoading(false);
+  }, []);
+
+  const runRiskEngine = async () => {
+    setRiskEngineRunning(true);
+    try {
+      await supabase.functions.invoke("risk-engine", { method: "POST", body: {} });
+      toast.success("Risk engine completed");
+      fetchRiskData();
+    } catch {
+      toast.error("Risk engine failed");
+    }
+    setRiskEngineRunning(false);
+  };
+
+  // Fetch risk data on mount + poll
+  useEffect(() => {
+    fetchRiskData();
+    const interval = setInterval(fetchRiskData, 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
   // ── Filtered data ─────────────────────────────────────────────
   const filteredEvents = useMemo(() => {
     let base = events;
