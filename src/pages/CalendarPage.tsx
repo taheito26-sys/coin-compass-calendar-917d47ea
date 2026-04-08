@@ -48,39 +48,52 @@ export default function CalendarPage() {
     }> = {};
 
     const monthStart = new Date(year, month, 1).getTime();
-    const monthEnd = new Date(year, month + 1, 1).getTime();
     const selected = new Set(selectedCoins.map((c) => c.toUpperCase()));
+
+    // Cap at today — don't project future days
+    const today = new Date();
+    const maxDay = (year === today.getFullYear() && month === today.getMonth())
+      ? today.getDate()
+      : (year < today.getFullYear() || (year === today.getFullYear() && month < today.getMonth()))
+        ? daysInM
+        : 0; // future month → show nothing
+
+    if (maxDay === 0) return data;
 
     const relevantTxs = state.txs
       .map((tx) => ({ ...tx, asset: resolveAssetSymbol(tx.asset) }))
-      .filter((tx) => tx.ts < monthEnd)
       .filter((tx) => selected.size === 0 || selected.has(tx.asset.toUpperCase()))
       .sort((a, b) => a.ts - b.ts);
 
     const realizedByTx = deriveRealizedByTx(relevantTxs);
 
-    // Compute daily snapshots for every day in the month
-    for (let d = 1; d <= daysInM; d++) {
+    let prevUnrealized: number | null = null;
+
+    for (let d = 1; d <= maxDay; d++) {
       const dayEnd = new Date(year, month, d + 1).getTime();
       const dayStart = new Date(year, month, d).getTime();
 
-      // All txs up to end of this day
       const txsUntilEnd = relevantTxs.filter((tx) => tx.ts < dayEnd);
-      if (txsUntilEnd.length === 0) continue;
+      if (txsUntilEnd.length === 0) {
+        prevUnrealized = 0;
+        continue;
+      }
 
       const portfolio = derivePortfolio(txsUntilEnd, priceGetter);
 
-      // Calculate unrealized P&L (current value - cost basis for open positions)
-      const unrealizedPnl = portfolio.totalPnl; // totalPnl from derivePortfolio is unrealized
+      // Cumulative unrealized P&L at end of this day (using current prices — best we have)
+      const cumulativeUnrealized = portfolio.totalPnl;
+      // Daily change in unrealized — shows what changed THIS day
+      const dailyUnrealizedChange = prevUnrealized !== null ? cumulativeUnrealized - prevUnrealized : 0;
+      prevUnrealized = cumulativeUnrealized;
 
-      // Calculate realized P&L for this specific day
+      // Realized P&L for transactions on THIS day only
       let dayRealizedPnl = 0;
       const dayDetails: typeof data[number]["details"] = [];
       let dayTrades = 0;
 
       for (const tx of relevantTxs) {
         if (tx.ts < dayStart || tx.ts >= dayEnd) continue;
-        if (tx.ts < monthStart) continue;
 
         dayTrades++;
         const txRealized = realizedByTx.get(tx.id) ?? 0;
@@ -105,18 +118,10 @@ export default function CalendarPage() {
         });
       }
 
-      // Compute cumulative realized PnL up to this day
-      let cumulativeRealized = 0;
-      for (const tx of txsUntilEnd) {
-        if (tx.type === "sell" || tx.type === "transfer_out") {
-          cumulativeRealized += realizedByTx.get(tx.id) ?? 0;
-        }
-      }
-
       data[d] = {
-        unrealizedPnl,
+        unrealizedPnl: dailyUnrealizedChange,
         realizedPnl: dayRealizedPnl,
-        totalPnl: unrealizedPnl + cumulativeRealized,
+        totalPnl: dailyUnrealizedChange + dayRealizedPnl,
         value: portfolio.totalMV,
         costBasis: portfolio.totalCost,
         trades: dayTrades,
