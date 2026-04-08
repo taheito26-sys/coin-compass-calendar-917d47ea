@@ -12,6 +12,7 @@ import SettingsPage from "@/pages/SettingsPage";
 import LedgerPage from "@/pages/LedgerPage";
 import WhalePage from "@/pages/WhalePage";
 import OpportunitiesPage from "@/pages/OpportunitiesPage";
+import AdminPage from "@/pages/AdminPage";
 import { useSentimentAlerts } from "@/hooks/useSentimentAlerts";
 
 const PAGE_TITLES: Record<string, [string, string]> = {
@@ -23,6 +24,7 @@ const PAGE_TITLES: Record<string, [string, string]> = {
   opportunities: ["Opportunities", "Listings, Airdrops, Delistings"],
   whale: ["Whale Tracker", "Live Whale Movements"],
   settings: ["Settings", "Theme, Data, Vault, Alerts"],
+  admin: ["Admin Panel", "Users, Data Overview"],
 };
 
 function LoadingScreen() {
@@ -68,6 +70,7 @@ function AppShell({ onLogout, userLabel }: { onLogout: () => Promise<void>; user
               {page === "opportunities" && <OpportunitiesPage />}
               {page === "whale" && <WhalePage />}
               {page === "settings" && <SettingsPage />}
+              {page === "admin" && <AdminPage />}
         </div>
       </div>
       {toastMsg ? <div className={`toast show ${toastMsg.type}`}>{toastMsg.msg}</div> : null}
