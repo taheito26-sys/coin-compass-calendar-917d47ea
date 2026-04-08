@@ -37,6 +37,7 @@ function AppShell({ onLogout, userLabel }: { onLogout: () => Promise<void>; user
   const [page, setPage] = useState("dashboard");
   const { toastMsg } = useCrypto() || {};
   const [title, sub] = PAGE_TITLES[page] || ["Crypto Tracker", ""];
+  useSentimentAlerts(); // monitors trending coins for >5% hourly moves
   console.log(`[AppShell] Rendering ${page}`);
   return (
     <div className="app">
