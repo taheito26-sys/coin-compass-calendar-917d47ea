@@ -12,6 +12,7 @@ import SettingsPage from "@/pages/SettingsPage";
 import LedgerPage from "@/pages/LedgerPage";
 import WhalePage from "@/pages/WhalePage";
 import OpportunitiesPage from "@/pages/OpportunitiesPage";
+import { useSentimentAlerts } from "@/hooks/useSentimentAlerts";
 
 const PAGE_TITLES: Record<string, [string, string]> = {
   dashboard: ["Dashboard", "KPIs, Allocation, Heatmap"],
