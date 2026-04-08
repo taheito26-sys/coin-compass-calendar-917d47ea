@@ -40,7 +40,7 @@ interface AirdropTask {
   completed?: boolean;
 }
 
-type Tab = "listings" | "airdrops" | "new_assets" | "delistings" | "sentiment" | "risk";
+type Tab = "listings" | "airdrops" | "new_assets" | "delistings" | "sentiment" | "risk" | "radar" | "survivability";
 
 // ── Sentiment types ─────────────────────────────────────────────────
 interface SentimentNewsItem {
@@ -561,6 +561,8 @@ export default function OpportunitiesPage() {
     { key: "delistings", label: "Delistings", icon: "🔴", count: events.filter(e => ["delisting", "suspension"].includes(e.event_type)).length },
     { key: "sentiment", label: "Sentiment", icon: "📊", count: sentimentData?.news.length || 0 },
     { key: "risk", label: "Risk", icon: "🛡️", count: riskSignals.filter(s => s.risk_level === "HIGH").length },
+    { key: "radar", label: "Radar", icon: "📡", count: 0 },
+    { key: "survivability", label: "Survivability", icon: "💪", count: 0 },
   ];
 
   return (
