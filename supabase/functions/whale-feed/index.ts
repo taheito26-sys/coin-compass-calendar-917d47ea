@@ -234,10 +234,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
       ["litecoin", "LTC", 1e8],
       ["dogecoin", "DOGE", 1e8],
       ["bitcoin-cash", "BCH", 1e8],
+      ["dash", "DASH", 1e8],
+      ["zcash", "ZEC", 1e8],
+      ["bitcoin-sv", "BSV", 1e8],
+      ["groestlcoin", "GRS", 1e8],
     ];
 
     for (const [chain, sym, div] of altChains) {
-      await sleep(600);
+      await sleep(500);
       const chainAlerts = await fetchBlockchairChain(chain, sym, div, prices[sym] ?? 0);
       allAlerts.push(...chainAlerts);
     }
