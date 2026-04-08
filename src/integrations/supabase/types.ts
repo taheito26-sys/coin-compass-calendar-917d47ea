@@ -737,6 +737,36 @@ export type Database = {
         }
         Relationships: []
       }
+      sentiment_history: {
+        Row: {
+          created_at: string
+          id: string
+          mention_count: number
+          sentiment_score: number
+          snapshot_date: string
+          source: string
+          token_symbol: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          mention_count?: number
+          sentiment_score?: number
+          snapshot_date?: string
+          source?: string
+          token_symbol: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          mention_count?: number
+          sentiment_score?: number
+          snapshot_date?: string
+          source?: string
+          token_symbol?: string
+        }
+        Relationships: []
+      }
       source_reliability: {
         Row: {
           false_signal_count: number

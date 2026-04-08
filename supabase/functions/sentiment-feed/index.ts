@@ -270,8 +270,50 @@ async function persistToCache(data: SentimentData) {
       { onConflict: "key" }
     );
     console.log("[sentiment-feed] Persisted to cache");
+
+    // Persist daily sentiment history snapshots
+    await persistSentimentHistory(sb, data);
   } catch (err) {
     console.error("[sentiment-feed] Cache persist error:", err);
+  }
+}
+
+async function persistSentimentHistory(sb: any, data: SentimentData) {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const rows = data.coinSentiments
+      .filter(c => c.symbol && c.mentions > 0)
+      .map(c => ({
+        token_symbol: c.symbol.toUpperCase(),
+        sentiment_score: Math.round(((c.avgSentiment + 1) / 2) * 100), // normalize -1..1 to 0..100
+        source: "aggregate",
+        mention_count: c.mentions,
+        snapshot_date: today,
+      }));
+
+    if (rows.length === 0) return;
+
+    // Check if we already have entries for today to avoid duplicates
+    const { data: existing } = await sb
+      .from("sentiment_history")
+      .select("token_symbol")
+      .eq("snapshot_date", today)
+      .eq("source", "aggregate")
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      console.log("[sentiment-feed] History already recorded for today, skipping");
+      return;
+    }
+
+    const { error } = await sb.from("sentiment_history").insert(rows);
+    if (error) {
+      console.error("[sentiment-feed] History insert error:", error);
+    } else {
+      console.log(`[sentiment-feed] Persisted ${rows.length} sentiment history rows for ${today}`);
+    }
+  } catch (err) {
+    console.error("[sentiment-feed] History persist error:", err);
   }
 }
 

@@ -18,6 +18,7 @@ import LiquidityWarning from "@/components/dashboard/LiquidityWarning";
 import OrderBookDepth from "@/components/dashboard/OrderBookDepth";
 import ProjectRadar from "@/components/dashboard/ProjectRadar";
 import SurvivabilityScore from "@/components/dashboard/SurvivabilityScore";
+import SentimentTrends from "@/components/dashboard/SentimentTrends";
 
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -50,6 +51,7 @@ const ALL_CARDS: CardDef[] = [
   { id: "projectRadar", label: "Project Radar" },
   { id: "survivability", label: "Survivability Score" },
   { id: "movers", label: "Top Movers" },
+  { id: "sentimentTrends", label: "Sentiment Trends" },
 ];
 
 interface DonutSlice {
@@ -454,6 +456,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
           </div>
         );
 
+      case "sentimentTrends": return <SentimentTrends compact />;
       default: return null;
     }
   };
