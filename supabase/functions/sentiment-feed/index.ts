@@ -446,17 +446,11 @@ async function persistSentimentHistory(sb: any, data: SentimentData) {
 
     if (rows.length === 0) return;
 
-    // Check if we already have entries for today to avoid duplicates
-    const { data: existing } = await sb
+    // Upsert: delete today's stale rows then insert fresh data
+    await sb
       .from("sentiment_history")
-      .select("token_symbol")
-      .eq("snapshot_date", today)
-      .limit(1);
-
-    if (existing && existing.length > 0) {
-      console.log("[sentiment-feed] History already recorded for today, skipping");
-      return;
-    }
+      .delete()
+      .eq("snapshot_date", today);
 
     const { error } = await sb.from("sentiment_history").insert(rows);
     if (error) {
