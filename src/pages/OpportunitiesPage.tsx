@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import ProjectRadar from "@/components/dashboard/ProjectRadar";
+import SurvivabilityScore from "@/components/dashboard/SurvivabilityScore";
 
 // ── Types ───────────────────────────────────────────────────────────
 interface ListingEvent {
@@ -600,6 +602,10 @@ export default function OpportunitiesPage() {
               engineRunning={riskEngineRunning}
               onRunEngine={runRiskEngine}
             />
+          ) : tab === "radar" ? (
+            <ProjectRadar />
+          ) : tab === "survivability" ? (
+            <SurvivabilityScore />
           ) : tab === "sentiment" ? (
             <SentimentTab
               data={sentimentData}
