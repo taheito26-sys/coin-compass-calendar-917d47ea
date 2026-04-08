@@ -27,34 +27,24 @@ const TOP_100_SYMBOLS = [
   "NEO","IOTA","XTZ","MINA","CFX","BLUR","APE","1INCH","ANKR","ENS",
 ];
 
-// Build regex patterns dynamically for all 100 coins
-const COIN_PATTERNS = TOP_100_SYMBOLS.map(s => ({
-  sym: s,
-  re: new RegExp(`\\b${s.replace(/\$/g, "\\$")}\\b`, "i"),
-}));
+// Build regex patterns dynamically for all 100 coins (symbol + common names)
+const COIN_NAME_MAP: Record<string, string[]> = {
+  BTC: ["bitcoin"], ETH: ["ethereum"], BNB: ["binance"], SOL: ["solana"],
+  XRP: ["ripple"], DOGE: ["dogecoin"], ADA: ["cardano"], AVAX: ["avalanche"],
+  DOT: ["polkadot"], MATIC: ["polygon"], LINK: ["chainlink"], UNI: ["uniswap"],
+  SHIB: ["shiba"], ARB: ["arbitrum"], LTC: ["litecoin"], NEAR: ["near protocol"],
+  APT: ["aptos"], FIL: ["filecoin"], ICP: ["internet computer"], ATOM: ["cosmos"],
+  PEPE: ["pepe"], TON: ["toncoin"], TRX: ["tron"], SUI: ["sui"],
+  INJ: ["injective"], SEI: ["sei"], TIA: ["celestia"], RUNE: ["thorchain"],
+  RNDR: ["render"], FET: ["fetch"], WLD: ["worldcoin"], TAO: ["bittensor"],
+  AR: ["arweave"], MKR: ["maker"], AAVE: ["aave"], SNX: ["synthetix"],
+};
 
-// ─── Sentiment keywords ───
-const BULLISH = [
-  "bull","pump","moon","rally","surge","soar","breakout","ath","all-time high",
-  "adoption","partnership","approved","launch","upgrade","milestone","record",
-  "growth","gain","profit","win","buy","long","accumulate","bullish","🚀","📈",
-  "institutional","etf","halving","support","mainstream","integration",
-];
-const BEARISH = [
-  "bear","dump","crash","drop","fall","plunge","decline","sell","short",
-  "hack","exploit","rug","scam","fraud","ban","regulate","fear","panic",
-  "liquidat","bankrupt","collapse","warning","risk","bearish","📉","🔴",
-  "lawsuit","sec","fine","penalty","investigation","vulnerability",
-];
-
-function analyzeSentiment(text: string): { sentiment: "bullish"|"bearish"|"neutral"; score: number } {
-  const lower = text.toLowerCase();
-  let score = 0;
-  for (const w of BULLISH) if (lower.includes(w)) score += 1;
-  for (const w of BEARISH) if (lower.includes(w)) score -= 1;
-  const normalized = Math.max(-1, Math.min(1, score / 3));
-  return { sentiment: normalized > 0.15 ? "bullish" : normalized < -0.15 ? "bearish" : "neutral", score: normalized };
-}
+const COIN_PATTERNS = TOP_100_SYMBOLS.map(s => {
+  const names = COIN_NAME_MAP[s] || [];
+  const patterns = [s, ...names].map(p => `\\b${p.replace(/\$/g, "\\$")}\\b`);
+  return { sym: s, re: new RegExp(patterns.join("|"), "i") };
+});
 
 function extractCoins(text: string): string[] {
   const coins: string[] = [];
@@ -281,15 +271,26 @@ async function persistToCache(data: SentimentData) {
 async function persistSentimentHistory(sb: any, data: SentimentData) {
   try {
     const today = new Date().toISOString().slice(0, 10);
-    const rows = data.coinSentiments
-      .filter(c => c.symbol && c.mentions > 0)
-      .map(c => ({
+
+    // Persist ALL top coins, using price movement as proxy sentiment for coins with 0 mentions
+    const rows = data.coinSentiments.map(c => {
+      let score: number;
+      if (c.mentions > 0) {
+        score = Math.round(((c.avgSentiment + 1) / 2) * 100); // -1..1 → 0..100
+      } else {
+        // Derive sentiment from price action for coins without mentions
+        const change = c.change24h ?? 0;
+        score = Math.max(0, Math.min(100, 50 + change * 2)); // neutral baseline + price skew
+      }
+
+      return {
         token_symbol: c.symbol.toUpperCase(),
-        sentiment_score: Math.round(((c.avgSentiment + 1) / 2) * 100), // normalize -1..1 to 0..100
-        source: "aggregate",
+        sentiment_score: Math.round(score),
+        source: c.mentions > 0 ? "aggregate" : "price_derived",
         mention_count: c.mentions,
         snapshot_date: today,
-      }));
+      };
+    }).filter(r => r.token_symbol);
 
     if (rows.length === 0) return;
 
@@ -298,7 +299,6 @@ async function persistSentimentHistory(sb: any, data: SentimentData) {
       .from("sentiment_history")
       .select("token_symbol")
       .eq("snapshot_date", today)
-      .eq("source", "aggregate")
       .limit(1);
 
     if (existing && existing.length > 0) {
