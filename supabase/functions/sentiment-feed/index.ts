@@ -499,7 +499,7 @@ Deno.serve(async (req) => {
 
     const result: SentimentData = {
       news: uniqueNews.slice(0, 75),
-      trending: trending.status === "fulfilled" ? trending.value : [],
+      trending: trendingData,
       fearGreed: fearGreed.status === "fulfilled" ? fearGreed.value : { value: 50, label: "Neutral", history: [] },
       marketDominance: dominance.status === "fulfilled" ? dominance.value : { btc: 50, eth: 18, others: 32 },
       communityBuzz: aggregateBuzz(uniqueNews),
