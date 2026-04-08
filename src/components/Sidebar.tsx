@@ -1,4 +1,5 @@
 import { useCrypto } from "@/lib/cryptoContext";
+import { useAdmin } from "@/hooks/useAdmin";
 
 const pages = [
   { id: "dashboard", label: "Dashboard", sub: "Overview · KPIs", icon: "M4 13h7V4H4v9Zm9 7h7V11h-7v9ZM4 20h7v-5H4v5Zm9-11h7V4h-7v5Z" },
@@ -12,6 +13,11 @@ const pages = [
 ];
 
 export default function Sidebar({ page, onNav, onLogout }: { page: string; onNav: (p: string) => void; onLogout?: () => void }) {
+  const { isAdmin } = useAdmin();
+
+  const visiblePages = isAdmin
+    ? [...pages, { id: "admin", label: "Admin", sub: "Users · Data", icon: "M12 4.354a4 4 0 1 1 0 5.292M15 21H3v-1a6 6 0 0 1 12 0v1Zm0 0h6v-1a6 6 0 0 0-9-5.197" }]
+    : pages;
 
   return (
     <aside className="sidebar">
@@ -25,7 +31,7 @@ export default function Sidebar({ page, onNav, onLogout }: { page: string; onNav
         </div>
       </div>
       <nav className="nav">
-        {pages.map(p => (
+        {visiblePages.map(p => (
           <button key={p.id} className={`navBtn${page === p.id ? " active" : ""}`} onClick={() => onNav(p.id)}>
             <svg viewBox="0 0 24 24" fill="none"><path d={p.icon} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
             <div>
