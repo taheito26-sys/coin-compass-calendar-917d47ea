@@ -587,8 +587,18 @@ export default function OpportunitiesPage() {
             ))}
           </div>
 
-          {/* Sentiment tab */}
-          {tab === "sentiment" ? (
+          {/* Risk tab */}
+          {tab === "risk" ? (
+            <RiskTab
+              sources={riskSources}
+              classifications={riskClassifications}
+              signals={riskSignals}
+              events={events}
+              loading={riskLoading}
+              engineRunning={riskEngineRunning}
+              onRunEngine={runRiskEngine}
+            />
+          ) : tab === "sentiment" ? (
             <SentimentTab
               data={sentimentData}
               loading={sentimentLoading}
