@@ -240,10 +240,16 @@ export default function OpportunitiesPage() {
   const [ingesting, setIngesting] = useState(false);
   const alertedIdsRef = useRef<Set<string>>(new Set());
 
-  // Filters
+  // Filters (shared)
   const [exchangeFilter, setExchangeFilter] = useState<string>("all");
   const [eventTypeFilter, setEventTypeFilter] = useState<string>("all");
   const [minConfidence, setMinConfidence] = useState<number>(0);
+
+  // Airdrop-specific filters
+  const [airdropChainFilter, setAirdropChainFilter] = useState<string>("all");
+  const [airdropMinConfidence, setAirdropMinConfidence] = useState<number>(0);
+  const [airdropTaskTypeFilter, setAirdropTaskTypeFilter] = useState<string>("all");
+  const [airdropSearch, setAirdropSearch] = useState<string>("");
 
   // ── Alert engine ────────────────────────────────────────────────
   const checkAlerts = useCallback((evts: ListingEvent[]) => {
