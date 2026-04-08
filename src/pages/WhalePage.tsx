@@ -345,9 +345,9 @@ export default function WhalePage() {
   }, [alerts]);
 
   return (
-    <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+    <div className="whale-page-root">
       <div className="panel" style={{ marginBottom: 0 }}>
-        <div className="panel-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div className="panel-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
           <h2>🐋 Whale Intelligence</h2>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <StatusBadge source={source} />
@@ -364,7 +364,7 @@ export default function WhalePage() {
 
         <div className="panel-body">
           {/* Stats grid */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 14 }}>
+          <div className="whale-stats-grid">
             <StatCard label="Total Volume" value={fmtUsd(stats.totalVol)} sub={`${stats.txCount} transactions`} color="hsl(var(--primary))" />
             <StatCard label="Largest Tx" value={fmtUsd(stats.largest)} />
             <StatCard label="Avg Size" value={fmtUsd(stats.avgSize)} />
@@ -451,7 +451,7 @@ export default function WhalePage() {
               <div style={{ fontSize: 11, marginTop: 4 }}>Try lowering the minimum USD filter or wait for the next scan</div>
             </div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 10 }}>
+            <div className="whale-feed-grid">
               {filtered.map(a => (
                 <WhaleCard key={a.id} alert={a} threshold={alertThreshold} />
               ))}

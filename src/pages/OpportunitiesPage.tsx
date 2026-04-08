@@ -436,9 +436,9 @@ export default function OpportunitiesPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+    <div className="opps-page-root">
       <div className="panel" style={{ marginBottom: 0 }}>
-        <div className="panel-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div className="panel-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
           <h2>🔍 Opportunity Intelligence</h2>
           <button className="btn" onClick={runIngest} disabled={ingesting} style={{ fontSize: 11, padding: "5px 14px" }}>
             {ingesting ? "⏳ Scanning..." : "🔄 Scan Now"}
@@ -446,13 +446,13 @@ export default function OpportunitiesPage() {
         </div>
         <div className="panel-body">
           {/* Tabs */}
-          <div style={{ display: "flex", gap: 2, marginBottom: 12 }}>
+          <div className="opps-tabs">
             {tabDefs.map(t => (
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
                 className={tab === t.key ? "btn" : "btn secondary"}
-                style={{ fontSize: 11, padding: "5px 12px", flex: 1 }}
+                style={{ fontSize: 11, padding: "5px 12px", flex: "1 1 auto", minWidth: 0 }}
               >
                 {t.icon} {t.label} <span style={{ opacity: 0.6, marginLeft: 4 }}>({t.count})</span>
               </button>
@@ -511,7 +511,7 @@ export default function OpportunitiesPage() {
                 if (airdropTaskTypeFilter !== "all") filtered = filtered.filter(p => p.tasks.some(t => t.task_type === airdropTaskTypeFilter));
 
                 return filtered.length > 0 ? (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+                  <div className="opps-airdrop-grid">
                     {filtered.map(project => (
                       <AirdropCard key={project.id} project={project} onToggleTask={toggleTask} />
                     ))}
