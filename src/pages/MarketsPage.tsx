@@ -1,7 +1,10 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { useCrypto } from "@/lib/cryptoContext";
 import { useLivePrices } from "@/hooks/useLivePrices";
 import HeatmapGrid from "@/components/markets/HeatmapGrid";
+import MarketMovers from "@/components/markets/MarketMovers";
+import MarketOverview from "@/components/markets/MarketOverview";
+import MarketCategories from "@/components/markets/MarketCategories";
 
 const TIME_RANGES = [
   { key: "1h", label: "1 H" },
@@ -11,11 +14,13 @@ const TIME_RANGES = [
 
 const COIN_COUNTS = [50, 100, 200];
 
-const SORT_OPTIONS = [
-  { key: "market_cap", label: "Market Cap" },
-  { key: "change", label: "Top Movers" },
-  { key: "volume", label: "Volume" },
-  { key: "losers", label: "Top Losers" },
+type ViewMode = "heatmap" | "movers" | "overview" | "categories";
+
+const VIEWS: { key: ViewMode; icon: string; label: string }[] = [
+  { key: "heatmap", icon: "▦", label: "Heatmap" },
+  { key: "movers", icon: "⇅", label: "Movers" },
+  { key: "overview", icon: "◫", label: "Overview" },
+  { key: "categories", icon: "◧", label: "Sectors" },
 ];
 
 function formatCompact(n: number): string {
@@ -28,10 +33,10 @@ function formatCompact(n: number): string {
 export default function MarketsPage() {
   const { state } = useCrypto();
   const { coins: allCoins, loading } = useLivePrices();
+  const [view, setView] = useState<ViewMode>("heatmap");
   const [timeRange, setTimeRange] = useState("24h");
   const [coinCount, setCoinCount] = useState(100);
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState("market_cap");
 
   const stats = useMemo(() => {
     if (!allCoins.length) return null;
@@ -55,32 +60,8 @@ export default function MarketsPage() {
         c.name.toLowerCase().includes(q)
       );
     }
-
-    const getChange = (c: typeof allCoins[0]) => {
-      switch (timeRange) {
-        case "1h": return c.price_change_percentage_1h_in_currency || 0;
-        case "7d": return c.price_change_percentage_7d_in_currency || 0;
-        default: return c.price_change_percentage_24h_in_currency || 0;
-      }
-    };
-
-    switch (sortBy) {
-      case "change":
-        filtered = [...filtered].sort((a, b) => Math.abs(getChange(b)) - Math.abs(getChange(a)));
-        break;
-      case "volume":
-        filtered = [...filtered].sort((a, b) => (b.total_volume || 0) - (a.total_volume || 0));
-        break;
-      case "losers":
-        filtered = [...filtered].sort((a, b) => getChange(a) - getChange(b));
-        break;
-      default:
-        // already sorted by market cap
-        break;
-    }
-
     return filtered.slice(0, search.trim() ? 500 : coinCount);
-  }, [allCoins, search, coinCount, sortBy, timeRange]);
+  }, [allCoins, search, coinCount]);
 
   const watchSymbols = state.watch;
 
@@ -119,6 +100,17 @@ export default function MarketsPage() {
       {/* Controls bar */}
       <div className="markets-toolbar">
         <div className="markets-toolbar-left">
+          <div className="seg">
+            {VIEWS.map(v => (
+              <button
+                key={v.key}
+                className={view === v.key ? "active" : ""}
+                onClick={() => setView(v.key)}
+              >
+                <span style={{ fontSize: 11 }}>{v.icon}</span> {v.label}
+              </button>
+            ))}
+          </div>
           <input
             className="markets-search"
             type="text"
@@ -126,17 +118,6 @@ export default function MarketsPage() {
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
-          <div className="seg">
-            {SORT_OPTIONS.map(s => (
-              <button
-                key={s.key}
-                className={sortBy === s.key ? "active" : ""}
-                onClick={() => setSortBy(s.key)}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
         </div>
         <div className="markets-toolbar-right">
           <div className="seg">
@@ -150,17 +131,19 @@ export default function MarketsPage() {
               </button>
             ))}
           </div>
-          <div className="seg">
-            {COIN_COUNTS.map(n => (
-              <button
-                key={n}
-                className={coinCount === n ? "active" : ""}
-                onClick={() => setCoinCount(n)}
-              >
-                {n}
-              </button>
-            ))}
-          </div>
+          {view !== "categories" && (
+            <div className="seg">
+              {COIN_COUNTS.map(n => (
+                <button
+                  key={n}
+                  className={coinCount === n ? "active" : ""}
+                  onClick={() => setCoinCount(n)}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -172,9 +155,18 @@ export default function MarketsPage() {
         </div>
       )}
 
-      {/* Heatmap */}
-      {!loading && (
+      {/* Views */}
+      {!loading && view === "heatmap" && (
         <HeatmapGrid coins={coins} timeRange={timeRange} watchSymbols={watchSymbols} />
+      )}
+      {!loading && view === "movers" && (
+        <MarketMovers coins={coins} timeRange={timeRange} />
+      )}
+      {!loading && view === "overview" && (
+        <MarketOverview coins={coins} timeRange={timeRange} />
+      )}
+      {!loading && view === "categories" && (
+        <MarketCategories coins={allCoins} timeRange={timeRange} />
       )}
     </div>
   );
