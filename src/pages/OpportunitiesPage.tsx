@@ -560,6 +560,7 @@ export default function OpportunitiesPage() {
     { key: "new_assets", label: "New Assets", icon: "✨", count: events.filter(e => e.event_type === "new_asset").length },
     { key: "delistings", label: "Delistings", icon: "🔴", count: events.filter(e => ["delisting", "suspension"].includes(e.event_type)).length },
     { key: "sentiment", label: "Sentiment", icon: "📊", count: sentimentData?.news.length || 0 },
+    { key: "risk", label: "Risk", icon: "🛡️", count: riskSignals.filter(s => s.risk_level === "HIGH").length },
   ];
 
   return (
