@@ -8,6 +8,46 @@ import { resolveAssetSymbol } from "@/lib/assetResolver";
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
+type CalendarDetail = {
+  asset: string;
+  qty: number;
+  unrealizedPnl: number;
+  realizedPnl: number;
+  type: string;
+  price: number;
+};
+
+type CalendarDayData = {
+  unrealizedPnl: number;
+  unrealizedPnlPct: number;
+  dailyPnl: number;
+  dailyPnlPct: number;
+  realizedPnl: number;
+  value: number;
+  costBasis: number;
+  trades: number;
+  details: CalendarDetail[];
+};
+
+function createHistoricalPriceGetter(
+  txsUntilEnd: { asset: string; price: number }[],
+  getLivePrice: (sym: string) => number | null,
+  useLivePrices: boolean,
+) {
+  const historicalPrices = new Map<string, number>();
+
+  for (const tx of txsUntilEnd) {
+    const px = Number(tx.price || 0);
+    if (px > 0) historicalPrices.set(tx.asset.toUpperCase(), px);
+  }
+
+  return (sym: string): number | null => {
+    if (useLivePrices) return getLivePrice(sym);
+    const historical = historicalPrices.get(sym.toUpperCase());
+    return historical ?? null;
+  };
+}
+
 export default function CalendarPage() {
   const { state } = useCrypto();
   const now = new Date();
@@ -37,17 +77,7 @@ export default function CalendarPage() {
   };
 
   const dailyData = useMemo(() => {
-    const data: Record<number, {
-      unrealizedPnl: number;
-      unrealizedPnlPct: number;
-      dailyPnl: number;
-      dailyPnlPct: number;
-      realizedPnl: number;
-      value: number;
-      costBasis: number;
-      trades: number;
-      details: { asset: string; qty: number; unrealizedPnl: number; realizedPnl: number; type: string; price: number }[];
-    }> = {};
+    const data: Record<number, CalendarDayData> = {};
 
     const selected = new Set(selectedCoins.map((c) => c.toUpperCase()));
 
@@ -68,20 +98,23 @@ export default function CalendarPage() {
     const realizedByTx = deriveRealizedByTx(relevantTxs);
 
     let prevMV: number | null = null;
-    let prevCost: number | null = null;
 
     for (let d = 1; d <= maxDay; d++) {
       const dayEnd = new Date(year, month, d + 1).getTime();
       const dayStart = new Date(year, month, d).getTime();
+      const isTodayCell =
+        d === today.getDate() &&
+        year === today.getFullYear() &&
+        month === today.getMonth();
 
       const txsUntilEnd = relevantTxs.filter((tx) => tx.ts < dayEnd);
       if (txsUntilEnd.length === 0) {
         prevMV = 0;
-        prevCost = 0;
         continue;
       }
 
-      const portfolio = derivePortfolio(txsUntilEnd, priceGetter);
+      const dayPriceGetter = createHistoricalPriceGetter(txsUntilEnd, priceGetter, isTodayCell);
+      const portfolio = derivePortfolio(txsUntilEnd, dayPriceGetter);
 
       // Cumulative unrealized P&L = market value - cost basis
       const unrealizedPnl = portfolio.totalPnl;
@@ -94,11 +127,10 @@ export default function CalendarPage() {
         ? (dailyPnl / prevMV) * 100 : 0;
 
       prevMV = portfolio.totalMV;
-      prevCost = portfolio.totalCost;
 
       // Realized P&L for transactions on THIS day only
       let dayRealizedPnl = 0;
-      const dayDetails: typeof data[number]["details"] = [];
+      const dayDetails: CalendarDetail[] = [];
       let dayTrades = 0;
 
       for (const tx of relevantTxs) {
@@ -109,8 +141,8 @@ export default function CalendarPage() {
 
         let txUnrealized = 0;
         if (tx.type === "buy" || tx.type === "transfer_in") {
-          const currentPrice = priceGetter(tx.asset);
-          txUnrealized = currentPrice !== null ? (currentPrice - tx.price) * Math.abs(tx.qty) : 0;
+          const dayPrice = dayPriceGetter(tx.asset);
+          txUnrealized = dayPrice !== null ? (dayPrice - tx.price) * Math.abs(tx.qty) : 0;
         }
 
         if (tx.type === "sell" || tx.type === "transfer_out") {
