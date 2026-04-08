@@ -11,6 +11,7 @@ import MarketsPage from "@/pages/MarketsPage";
 import SettingsPage from "@/pages/SettingsPage";
 import LedgerPage from "@/pages/LedgerPage";
 import WhalePage from "@/pages/WhalePage";
+import OpportunitiesPage from "@/pages/OpportunitiesPage";
 
 const PAGE_TITLES: Record<string, [string, string]> = {
   dashboard: ["Dashboard", "KPIs, Allocation, Heatmap"],
@@ -18,6 +19,7 @@ const PAGE_TITLES: Record<string, [string, string]> = {
   ledger: ["Ledger", "Transactions, Import, Connect"],
   calendar: ["Calendar", "Daily P&L, Per Coin"],
   markets: ["Markets", "Live Prices, Watchlist"],
+  opportunities: ["Opportunities", "Listings, Airdrops, Delistings"],
   whale: ["Whale Tracker", "Live Whale Movements"],
   settings: ["Settings", "Theme, Data, Vault, Alerts"],
 };
@@ -46,6 +48,7 @@ function AppShell({ onLogout, userLabel }: { onLogout: () => Promise<void>; user
           {page === "ledger" && <LedgerPage />}
           {page === "calendar" && <CalendarPage />}
           {page === "markets" && <MarketsPage />}
+              {page === "opportunities" && <OpportunitiesPage />}
               {page === "whale" && <WhalePage />}
               {page === "settings" && <SettingsPage />}
         </div>
