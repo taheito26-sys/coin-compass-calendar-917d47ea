@@ -526,8 +526,18 @@ export default function OpportunitiesPage() {
             ))}
           </div>
 
-          {/* Airdrops tab — special rendering */}
-          {tab === "airdrops" ? (
+          {/* Sentiment tab */}
+          {tab === "sentiment" ? (
+            <SentimentTab
+              data={sentimentData}
+              loading={sentimentLoading}
+              sourceFilter={sentimentSourceFilter}
+              setSourceFilter={setSentimentSourceFilter}
+              typeFilter={sentimentTypeFilter}
+              setTypeFilter={setSentimentTypeFilter}
+              onRefresh={fetchSentiment}
+            />
+          ) : tab === "airdrops" ? (
             <div>
               {/* Airdrop filters */}
               <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
