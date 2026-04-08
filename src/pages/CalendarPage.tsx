@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useCrypto } from "@/lib/cryptoContext";
-import { fmtFiat, fmtQty } from "@/lib/cryptoState";
+import { fmtFiat, fmtTotal, fmtQty } from "@/lib/cryptoState";
 import { derivePortfolio, deriveRealizedByTx } from "@/lib/derivePortfolio";
 import { usePortfolioPriceGetter } from "@/hooks/usePortfolioPriceGetter";
 import { resolveAssetSymbol } from "@/lib/assetResolver";
@@ -39,24 +39,24 @@ export default function CalendarPage() {
   const dailyData = useMemo(() => {
     const data: Record<number, {
       unrealizedPnl: number;
+      unrealizedPnlPct: number;
+      dailyPnl: number;
+      dailyPnlPct: number;
       realizedPnl: number;
-      totalPnl: number;
       value: number;
       costBasis: number;
       trades: number;
       details: { asset: string; qty: number; unrealizedPnl: number; realizedPnl: number; type: string; price: number }[];
     }> = {};
 
-    const monthStart = new Date(year, month, 1).getTime();
     const selected = new Set(selectedCoins.map((c) => c.toUpperCase()));
 
-    // Cap at today — don't project future days
     const today = new Date();
     const maxDay = (year === today.getFullYear() && month === today.getMonth())
       ? today.getDate()
       : (year < today.getFullYear() || (year === today.getFullYear() && month < today.getMonth()))
         ? daysInM
-        : 0; // future month → show nothing
+        : 0;
 
     if (maxDay === 0) return data;
 
@@ -67,7 +67,8 @@ export default function CalendarPage() {
 
     const realizedByTx = deriveRealizedByTx(relevantTxs);
 
-    let prevUnrealized: number | null = null;
+    let prevMV: number | null = null;
+    let prevCost: number | null = null;
 
     for (let d = 1; d <= maxDay; d++) {
       const dayEnd = new Date(year, month, d + 1).getTime();
@@ -75,17 +76,25 @@ export default function CalendarPage() {
 
       const txsUntilEnd = relevantTxs.filter((tx) => tx.ts < dayEnd);
       if (txsUntilEnd.length === 0) {
-        prevUnrealized = 0;
+        prevMV = 0;
+        prevCost = 0;
         continue;
       }
 
       const portfolio = derivePortfolio(txsUntilEnd, priceGetter);
 
-      // Cumulative unrealized P&L at end of this day (using current prices — best we have)
-      const cumulativeUnrealized = portfolio.totalPnl;
-      // Daily change in unrealized — shows what changed THIS day
-      const dailyUnrealizedChange = prevUnrealized !== null ? cumulativeUnrealized - prevUnrealized : 0;
-      prevUnrealized = cumulativeUnrealized;
+      // Cumulative unrealized P&L = market value - cost basis
+      const unrealizedPnl = portfolio.totalPnl;
+      const unrealizedPnlPct = portfolio.totalCost > 0
+        ? (unrealizedPnl / portfolio.totalCost) * 100 : 0;
+
+      // Daily P&L = change in portfolio value from previous day
+      const dailyPnl = prevMV !== null ? portfolio.totalMV - prevMV : 0;
+      const dailyPnlPct = prevMV !== null && prevMV > 0
+        ? (dailyPnl / prevMV) * 100 : 0;
+
+      prevMV = portfolio.totalMV;
+      prevCost = portfolio.totalCost;
 
       // Realized P&L for transactions on THIS day only
       let dayRealizedPnl = 0;
@@ -119,9 +128,11 @@ export default function CalendarPage() {
       }
 
       data[d] = {
-        unrealizedPnl: dailyUnrealizedChange,
+        unrealizedPnl,
+        unrealizedPnlPct,
+        dailyPnl,
+        dailyPnlPct,
         realizedPnl: dayRealizedPnl,
-        totalPnl: dailyUnrealizedChange + dayRealizedPnl,
         value: portfolio.totalMV,
         costBasis: portfolio.totalCost,
         trades: dayTrades,
@@ -132,10 +143,26 @@ export default function CalendarPage() {
     return data;
   }, [state.txs, year, month, daysInM, selectedCoins, priceGetter]);
 
-  const monthUnrealized = useMemo(() => {
-    // Last day with data
+  // Month-level KPIs: use last available day's cumulative unrealized
+  const lastDayData = useMemo(() => {
     const days = Object.keys(dailyData).map(Number).sort((a, b) => b - a);
-    return days.length > 0 ? dailyData[days[0]].unrealizedPnl : 0;
+    return days.length > 0 ? dailyData[days[0]] : null;
+  }, [dailyData]);
+
+  const monthUnrealized = lastDayData?.unrealizedPnl ?? 0;
+  const monthUnrealizedPct = lastDayData?.unrealizedPnlPct ?? 0;
+
+  // Sum of all daily P&L changes across the month
+  const monthDailyPnl = useMemo(() => {
+    return Object.values(dailyData).reduce((s, d) => s + d.dailyPnl, 0);
+  }, [dailyData]);
+  const monthDailyPnlPct = useMemo(() => {
+    // first day's prev MV as base
+    const days = Object.keys(dailyData).map(Number).sort((a, b) => a - b);
+    if (days.length < 2) return 0;
+    const firstVal = dailyData[days[0]]?.value ?? 0;
+    const lastVal = dailyData[days[days.length - 1]]?.value ?? 0;
+    return firstVal > 0 ? ((lastVal - firstVal) / firstVal) * 100 : 0;
   }, [dailyData]);
 
   const monthRealized = useMemo(() => {
@@ -157,6 +184,8 @@ export default function CalendarPage() {
     if (m > 11) { m = 0; y++; }
     setMonth(m); setYear(y); setSelectedDay(null);
   };
+
+  const fmtPct = (v: number) => (v >= 0 ? "+" : "") + v.toFixed(2) + "%";
 
   return (
     <>
@@ -197,15 +226,27 @@ export default function CalendarPage() {
       {/* Monthly stats */}
       <div className="cal-stats">
         <div className="cal-stat">
-          <div className="kpi-lbl">Unrealized P&L</div>
+          <div className="kpi-lbl">UNREALIZED P&L</div>
           <div className={`kpi-val ${monthUnrealized >= 0 ? "good" : "bad"}`}>
-            {(monthUnrealized >= 0 ? "+" : "") + fmtFiat(monthUnrealized, state.base)}
+            {(monthUnrealized >= 0 ? "+" : "") + fmtTotal(monthUnrealized)}
+          </div>
+          <div className={`kpi-sub ${monthUnrealizedPct >= 0 ? "good" : "bad"}`} style={{ fontSize: 11 }}>
+            {fmtPct(monthUnrealizedPct)}
+          </div>
+        </div>
+        <div className="cal-stat">
+          <div className="kpi-lbl">DAILY P&L</div>
+          <div className={`kpi-val ${monthDailyPnl >= 0 ? "good" : "bad"}`}>
+            {(monthDailyPnl >= 0 ? "+" : "") + fmtTotal(monthDailyPnl)}
+          </div>
+          <div className={`kpi-sub ${monthDailyPnlPct >= 0 ? "good" : "bad"}`} style={{ fontSize: 11 }}>
+            {fmtPct(monthDailyPnlPct)}
           </div>
         </div>
         <div className="cal-stat">
           <div className="kpi-lbl">Realized P&L</div>
           <div className={`kpi-val ${monthRealized >= 0 ? "good" : "bad"}`}>
-            {(monthRealized >= 0 ? "+" : "") + fmtFiat(monthRealized, state.base)}
+            {(monthRealized >= 0 ? "+" : "") + fmtTotal(monthRealized)}
           </div>
         </div>
         <div className="cal-stat">
@@ -238,7 +279,7 @@ export default function CalendarPage() {
               const isToday = d === now.getDate() && year === now.getFullYear() && month === now.getMonth();
               const isSel = d === selectedDay;
               const hasTrades = dd && dd.trades > 0;
-              const displayPnl = dd ? dd.unrealizedPnl : 0;
+              const displayPnl = dd ? dd.dailyPnl : 0;
               const cls = [
                 "cal-day",
                 dd && displayPnl > 0 ? "has-profit" : dd && displayPnl < 0 ? "has-loss" : "",
@@ -250,12 +291,15 @@ export default function CalendarPage() {
                   <div className="cal-num">{d}</div>
                   {dd && (
                     <>
-                      <div className={`cal-profit ${dd.unrealizedPnl >= 0 ? "good" : "bad"}`} style={{ fontSize: 9 }}>
-                        U: {(dd.unrealizedPnl >= 0 ? "+" : "") + fmtFiat(dd.unrealizedPnl, state.base)}
+                      <div className={`cal-profit ${dd.dailyPnl >= 0 ? "good" : "bad"}`} style={{ fontSize: 9 }}>
+                        {(dd.dailyPnl >= 0 ? "+" : "") + fmtTotal(dd.dailyPnl)}
+                      </div>
+                      <div className={`cal-profit ${dd.dailyPnlPct >= 0 ? "good" : "bad"}`} style={{ fontSize: 8, opacity: 0.7 }}>
+                        {fmtPct(dd.dailyPnlPct)}
                       </div>
                       {dd.realizedPnl !== 0 && (
                         <div className={`cal-profit ${dd.realizedPnl >= 0 ? "good" : "bad"}`} style={{ fontSize: 8, opacity: 0.8 }}>
-                          R: {(dd.realizedPnl >= 0 ? "+" : "") + fmtFiat(dd.realizedPnl, state.base)}
+                          R: {(dd.realizedPnl >= 0 ? "+" : "") + fmtTotal(dd.realizedPnl)}
                         </div>
                       )}
                       {hasTrades && <div className="cal-count">{dd.trades}t</div>}
@@ -274,28 +318,40 @@ export default function CalendarPage() {
           <div className="panel-head">
             <h2>📅 {MONTHS[month]} {selectedDay}</h2>
             {selData.value > 0 && (
-              <span className="pill">Portfolio: {fmtFiat(selData.value, state.base)}</span>
+              <span className="pill">Portfolio: {fmtTotal(selData.value)}</span>
             )}
           </div>
           <div className="panel-body">
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8, marginBottom: 12 }}>
               <div className="cal-stat">
-                <div className="kpi-lbl">Unrealized P&L</div>
+                <div className="kpi-lbl">UNREALIZED P&L</div>
                 <div className={`kpi-val ${selData.unrealizedPnl >= 0 ? "good" : "bad"}`}>
-                  {(selData.unrealizedPnl >= 0 ? "+" : "") + fmtFiat(selData.unrealizedPnl, state.base)}
+                  {(selData.unrealizedPnl >= 0 ? "+" : "") + fmtTotal(selData.unrealizedPnl)}
+                </div>
+                <div className={`kpi-sub ${selData.unrealizedPnlPct >= 0 ? "good" : "bad"}`} style={{ fontSize: 11 }}>
+                  {fmtPct(selData.unrealizedPnlPct)}
+                </div>
+              </div>
+              <div className="cal-stat">
+                <div className="kpi-lbl">DAILY P&L</div>
+                <div className={`kpi-val ${selData.dailyPnl >= 0 ? "good" : "bad"}`}>
+                  {(selData.dailyPnl >= 0 ? "+" : "") + fmtTotal(selData.dailyPnl)}
+                </div>
+                <div className={`kpi-sub ${selData.dailyPnlPct >= 0 ? "good" : "bad"}`} style={{ fontSize: 11 }}>
+                  {fmtPct(selData.dailyPnlPct)}
                 </div>
               </div>
               <div className="cal-stat">
                 <div className="kpi-lbl">Realized P&L</div>
                 <div className={`kpi-val ${selData.realizedPnl >= 0 ? "good" : "bad"}`}>
                   {selData.realizedPnl !== 0
-                    ? (selData.realizedPnl >= 0 ? "+" : "") + fmtFiat(selData.realizedPnl, state.base)
+                    ? (selData.realizedPnl >= 0 ? "+" : "") + fmtTotal(selData.realizedPnl)
                     : "—"}
                 </div>
               </div>
               <div className="cal-stat">
                 <div className="kpi-lbl">Cost Basis</div>
-                <div className="kpi-val">{fmtFiat(selData.costBasis, state.base)}</div>
+                <div className="kpi-val">{fmtTotal(selData.costBasis)}</div>
               </div>
               <div className="cal-stat">
                 <div className="kpi-lbl">Entries</div>
@@ -322,12 +378,12 @@ export default function CalendarPage() {
                         <td className="mono">{fmtFiat(d.price, state.base)}</td>
                         <td className={`mono ${d.unrealizedPnl >= 0 ? "good" : "bad"}`} style={{ fontWeight: 700 }}>
                           {d.type === "buy" || d.type === "transfer_in"
-                            ? (d.unrealizedPnl >= 0 ? "+" : "") + fmtFiat(d.unrealizedPnl, state.base)
+                            ? (d.unrealizedPnl >= 0 ? "+" : "") + fmtTotal(d.unrealizedPnl)
                             : "—"}
                         </td>
                         <td className={`mono ${d.realizedPnl >= 0 ? "good" : "bad"}`} style={{ fontWeight: 700 }}>
                           {d.type === "sell" || d.type === "transfer_out"
-                            ? (d.realizedPnl >= 0 ? "+" : "") + fmtFiat(d.realizedPnl, state.base)
+                            ? (d.realizedPnl >= 0 ? "+" : "") + fmtTotal(d.realizedPnl)
                             : "—"}
                         </td>
                       </tr>
