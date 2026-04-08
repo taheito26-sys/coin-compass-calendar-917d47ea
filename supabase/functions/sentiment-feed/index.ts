@@ -445,12 +445,14 @@ Deno.serve(async (req) => {
     // Full fetch from all sources concurrently
     const [
       redditCrypto, redditBitcoin, redditDefi, redditAltcoin,
+      cryptoPanic,
       trending, top100, categoryNews, fearGreed, dominance,
     ] = await Promise.allSettled([
       fetchReddit("CryptoCurrency"),
       fetchReddit("Bitcoin"),
       fetchReddit("defi"),
       fetchReddit("altcoin"),
+      fetchCryptoPanic(),
       fetchCoinGeckoTrending(),
       fetchCoinGeckoTop100(),
       fetchCategoryNews(),
@@ -463,8 +465,14 @@ Deno.serve(async (req) => {
       ...(redditBitcoin.status === "fulfilled" ? redditBitcoin.value : []),
       ...(redditDefi.status === "fulfilled" ? redditDefi.value : []),
       ...(redditAltcoin.status === "fulfilled" ? redditAltcoin.value : []),
+      ...(cryptoPanic.status === "fulfilled" ? cryptoPanic.value : []),
       ...(categoryNews.status === "fulfilled" ? categoryNews.value : []),
     ];
+    console.log(`[sentiment-feed] Total news items: ${allNews.length} (Reddit: ${
+      [redditCrypto, redditBitcoin, redditDefi, redditAltcoin]
+        .filter(r => r.status === "fulfilled")
+        .reduce((s, r) => s + (r as PromiseFulfilledResult<NewsItem[]>).value.length, 0)
+    }, CryptoPanic: ${cryptoPanic.status === "fulfilled" ? cryptoPanic.value.length : 0}, Categories: ${categoryNews.status === "fulfilled" ? categoryNews.value.length : 0})`);
 
     // Deduplicate
     const seen = new Set<string>();
