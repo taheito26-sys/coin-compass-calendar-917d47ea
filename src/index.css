@@ -1169,7 +1169,7 @@ table { table-layout: auto; }
 @media(max-width:900px){
   .app{display:block;height:auto;min-height:100vh;} .sidebar{display:none;} .mobileNav{display:block;}
   .mainWrap{height:auto;max-height:none;overflow:visible;}
-  .scroll{padding-bottom:calc(150px + env(safe-area-inset-bottom));overflow-x:hidden;overflow-y:auto;} .kpis{grid-template-columns:1fr 1fr;} .kpis-3{grid-template-columns:1fr 1fr;} .kpis-5{grid-template-columns:1fr 1fr;}
+  .scroll{padding-bottom:calc(150px + env(safe-area-inset-bottom));overflow-x:hidden;overflow-y:auto;} .kpis{grid-template-columns:repeat(3, 1fr);} .kpis-3{grid-template-columns:1fr 1fr;} .kpis-5{grid-template-columns:repeat(3, 1fr);}
   .dashboard-charts-grid{grid-template-columns:1fr !important;}
   .ledger-top-grid{grid-template-columns:1fr !important;}
   .mainWrap,.topbar,.scroll{width:100%;max-width:100%;box-sizing:border-box;}
