@@ -216,9 +216,6 @@ async function fetchCoinGeckoNews(): Promise<NewsItem[]> {
     return [];
   }
 }
-    } as NewsItem;
-  });
-}
 
 async function fetchCoinGeckoTrending(): Promise<TrendingCoin[]> {
   try {
