@@ -274,6 +274,12 @@ export default function OpportunitiesPage() {
   const [ingesting, setIngesting] = useState(false);
   const alertedIdsRef = useRef<Set<string>>(new Set());
 
+  // Sentiment state
+  const [sentimentData, setSentimentData] = useState<SentimentData | null>(null);
+  const [sentimentLoading, setSentimentLoading] = useState(false);
+  const [sentimentSourceFilter, setSentimentSourceFilter] = useState<string>("all");
+  const [sentimentTypeFilter, setSentimentTypeFilter] = useState<string>("all");
+
   // Filters (shared)
   const [exchangeFilter, setExchangeFilter] = useState<string>("all");
   const [eventTypeFilter, setEventTypeFilter] = useState<string>("all");
