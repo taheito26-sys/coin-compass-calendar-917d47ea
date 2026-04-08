@@ -295,6 +295,321 @@ async function fetchCoinbase(): Promise<NormalizedEvent[]> {
   return events;
 }
 
+// ── Airdrop project type ────────────────────────────────────────────
+interface DiscoveredAirdrop {
+  project_name: string;
+  token_symbol: string | null;
+  chain: string | null;
+  confidence_score: number;
+  eligibility_requirements: string | null;
+  official_url: string | null;
+  snapshot_date: string | null;
+  distribution_date: string | null;
+  tasks: { task_type: string; description: string; required: boolean }[];
+}
+
+// ── AIRDROP ADAPTER: Binance Launchpad/Megadrop ─────────────────────
+async function discoverBinanceAirdrops(): Promise<DiscoveredAirdrop[]> {
+  const airdrops: DiscoveredAirdrop[] = [];
+  try {
+    const res = await fetch(
+      "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=1&catalogId=48&pageNo=1&pageSize=20",
+      { signal: AbortSignal.timeout(10000) }
+    );
+    if (!res.ok) return airdrops;
+    const data = await res.json();
+    const articles = data?.data?.catalogs?.[0]?.articles ?? data?.data?.articles ?? [];
+
+    for (const a of articles) {
+      const title = (a.title || "");
+      const upper = title.toUpperCase();
+      if (!upper.includes("LAUNCHPOOL") && !upper.includes("MEGADROP") && !upper.includes("AIRDROP") && !upper.includes("HODLer")) continue;
+
+      const symbolMatch = upper.match(/\(([A-Z0-9]{2,10})\)/);
+      const symbol = symbolMatch ? symbolMatch[1] : null;
+
+      let programType = "Launchpool";
+      if (upper.includes("MEGADROP")) programType = "Megadrop";
+      else if (upper.includes("HODLER")) programType = "HODLer Airdrop";
+
+      airdrops.push({
+        project_name: `Binance ${programType} - ${symbol || title.slice(0, 30)}`,
+        token_symbol: symbol,
+        chain: "BNB Chain",
+        confidence_score: 90,
+        eligibility_requirements: `Participate in Binance ${programType}`,
+        official_url: `https://www.binance.com/en/support/announcement/${a.code || ""}`,
+        snapshot_date: null,
+        distribution_date: null,
+        tasks: [
+          { task_type: "staking", description: `Stake BNB or FDUSD in Binance ${programType}`, required: true },
+          { task_type: "kyc", description: "Complete KYC verification on Binance", required: true },
+          ...(programType === "Megadrop" ? [{ task_type: "quest", description: "Complete Web3 quests in Megadrop portal", required: true }] : []),
+        ],
+      });
+    }
+  } catch (err) {
+    console.error("Binance airdrop discovery error:", err);
+  }
+  return airdrops;
+}
+
+// ── AIRDROP ADAPTER: Bybit Launchpool ───────────────────────────────
+async function discoverBybitAirdrops(): Promise<DiscoveredAirdrop[]> {
+  const airdrops: DiscoveredAirdrop[] = [];
+  try {
+    const res = await fetch(
+      "https://api.bybit.com/v5/announcements/index?locale=en-US&type=new_crypto&limit=20",
+      { signal: AbortSignal.timeout(10000) }
+    );
+    if (!res.ok) return airdrops;
+    const data = await res.json();
+    const items = data?.result?.list || [];
+
+    for (const item of items) {
+      const title = (item.title || "");
+      const upper = title.toUpperCase();
+      if (!upper.includes("LAUNCHPOOL") && !upper.includes("AIRDROP") && !upper.includes("TOKEN DISTRIBUTION")) continue;
+
+      const symbolMatch = upper.match(/\(([A-Z0-9]{2,10})\)/);
+      const symbol = symbolMatch ? symbolMatch[1] : null;
+
+      airdrops.push({
+        project_name: `Bybit Launchpool - ${symbol || title.slice(0, 30)}`,
+        token_symbol: symbol,
+        chain: "Multi-chain",
+        confidence_score: 78,
+        eligibility_requirements: "Stake USDT or MNT in Bybit Launchpool",
+        official_url: item.url || "https://www.bybit.com/en/launchpool",
+        snapshot_date: null,
+        distribution_date: null,
+        tasks: [
+          { task_type: "staking", description: "Stake USDT or MNT in active Launchpool", required: true },
+          { task_type: "kyc", description: "Complete identity verification on Bybit", required: true },
+        ],
+      });
+    }
+  } catch (err) {
+    console.error("Bybit airdrop discovery error:", err);
+  }
+  return airdrops;
+}
+
+// ── AIRDROP ADAPTER: KuCoin Spotlight/Burningdrop ───────────────────
+async function discoverKuCoinAirdrops(): Promise<DiscoveredAirdrop[]> {
+  const airdrops: DiscoveredAirdrop[] = [];
+  try {
+    const res = await fetch(
+      "https://www.kucoin.com/_api/cms/articles?page=1&pageSize=10&category=listing&lang=en_US",
+      { signal: AbortSignal.timeout(10000) }
+    );
+    if (!res.ok) return airdrops;
+    const data = await res.json();
+    const items = data?.items || data?.data?.items || [];
+
+    for (const item of items) {
+      const title = (item.title || "");
+      const upper = title.toUpperCase();
+      if (!upper.includes("SPOTLIGHT") && !upper.includes("BURNINGDROP") && !upper.includes("AIRDROP")) continue;
+
+      const symbolMatch = upper.match(/\(([A-Z0-9]{2,10})\)/);
+      const symbol = symbolMatch ? symbolMatch[1] : null;
+
+      let programType = "Spotlight";
+      if (upper.includes("BURNINGDROP")) programType = "BurningDrop";
+
+      airdrops.push({
+        project_name: `KuCoin ${programType} - ${symbol || title.slice(0, 30)}`,
+        token_symbol: symbol,
+        chain: "Multi-chain",
+        confidence_score: 72,
+        eligibility_requirements: `Hold KCS and participate in KuCoin ${programType}`,
+        official_url: item.url || "https://www.kucoin.com/spotlight",
+        snapshot_date: null,
+        distribution_date: null,
+        tasks: [
+          { task_type: "staking", description: `Hold KCS tokens for ${programType} eligibility`, required: true },
+          { task_type: "kyc", description: "Complete KYC on KuCoin", required: true },
+        ],
+      });
+    }
+  } catch (err) {
+    console.error("KuCoin airdrop discovery error:", err);
+  }
+  return airdrops;
+}
+
+// ── AIRDROP ADAPTER: OKX Jumpstart ──────────────────────────────────
+async function discoverOKXAirdrops(): Promise<DiscoveredAirdrop[]> {
+  const airdrops: DiscoveredAirdrop[] = [];
+  try {
+    const res = await fetch(
+      "https://www.okx.com/v2/support/home/web?page=1&pageSize=10&t=" + Date.now(),
+      { signal: AbortSignal.timeout(10000) }
+    );
+    if (!res.ok) return airdrops;
+    const data = await res.json();
+    const articles = data?.data?.notices || [];
+
+    for (const a of articles) {
+      const title = (a.title || "");
+      const upper = title.toUpperCase();
+      if (!upper.includes("JUMPSTART") && !upper.includes("AIRDROP")) continue;
+
+      const symbolMatch = upper.match(/\(([A-Z0-9]{2,10})\)/);
+      const symbol = symbolMatch ? symbolMatch[1] : null;
+
+      airdrops.push({
+        project_name: `OKX Jumpstart - ${symbol || title.slice(0, 30)}`,
+        token_symbol: symbol,
+        chain: "Multi-chain",
+        confidence_score: 80,
+        eligibility_requirements: "Hold OKB tokens, participate in Jumpstart",
+        official_url: a.url || "https://www.okx.com/jumpstart",
+        snapshot_date: null,
+        distribution_date: null,
+        tasks: [
+          { task_type: "staking", description: "Hold minimum OKB balance for Jumpstart eligibility", required: true },
+          { task_type: "kyc", description: "Complete KYC on OKX", required: true },
+        ],
+      });
+    }
+  } catch (err) {
+    console.error("OKX airdrop discovery error:", err);
+  }
+  return airdrops;
+}
+
+// ── AIRDROP ADAPTER: Gate.io Startup ────────────────────────────────
+async function discoverGateAirdrops(): Promise<DiscoveredAirdrop[]> {
+  // Gate.io doesn't have a clean public API for startup, we derive from listing events
+  const airdrops: DiscoveredAirdrop[] = [];
+  try {
+    const res = await fetch(
+      "https://www.gate.io/api/v4/spot/currencies",
+      { signal: AbortSignal.timeout(10000) }
+    );
+    if (!res.ok) return airdrops;
+    const currencies = await res.json();
+    // Take recent additions (last 5)
+    const recent = Array.isArray(currencies) ? currencies.slice(-5) : [];
+    for (const c of recent) {
+      if (c.trade_disabled) continue;
+      const symbol = (c.currency || "").toUpperCase();
+      if (!symbol || symbol.length < 2) continue;
+      airdrops.push({
+        project_name: `Gate.io Startup - ${symbol}`,
+        token_symbol: symbol,
+        chain: c.chain || "Multi-chain",
+        confidence_score: 65,
+        eligibility_requirements: "Hold GT tokens, participate in Gate.io Startup",
+        official_url: "https://www.gate.io/startup",
+        snapshot_date: null,
+        distribution_date: null,
+        tasks: [
+          { task_type: "staking", description: "Hold GT tokens for Startup participation rights", required: true },
+          { task_type: "kyc", description: "Complete KYC on Gate.io", required: true },
+        ],
+      });
+    }
+  } catch (err) {
+    console.error("Gate.io airdrop discovery error:", err);
+  }
+  return airdrops;
+}
+
+// ── AIRDROP ADAPTER: CoinGecko trending (potential airdrops) ────────
+async function discoverCoinGeckoAirdrops(): Promise<DiscoveredAirdrop[]> {
+  const airdrops: DiscoveredAirdrop[] = [];
+  try {
+    const res = await fetch(
+      "https://api.coingecko.com/api/v3/search/trending",
+      { signal: AbortSignal.timeout(10000) }
+    );
+    if (!res.ok) return airdrops;
+    const data = await res.json();
+    const coins = data?.coins || [];
+
+    for (const entry of coins) {
+      const coin = entry.item;
+      if (!coin) continue;
+      const symbol = (coin.symbol || "").toUpperCase();
+      const name = coin.name || symbol;
+      // Only consider coins with high market cap rank as potential airdrop-worthy
+      if (coin.market_cap_rank && coin.market_cap_rank > 500) continue;
+
+      airdrops.push({
+        project_name: `${name} Ecosystem`,
+        token_symbol: symbol,
+        chain: coin.platforms ? Object.keys(coin.platforms)[0] || "Multi-chain" : "Multi-chain",
+        confidence_score: 45,
+        eligibility_requirements: `Use ${name} ecosystem dApps, provide liquidity, participate in governance`,
+        official_url: `https://www.coingecko.com/en/coins/${coin.id}`,
+        snapshot_date: null,
+        distribution_date: null,
+        tasks: [
+          { task_type: "defi", description: `Use ${name} ecosystem applications`, required: true },
+          { task_type: "social", description: `Follow ${name} on social media and join community`, required: false },
+        ],
+      });
+    }
+  } catch (err) {
+    console.error("CoinGecko airdrop discovery error:", err);
+  }
+  return airdrops;
+}
+
+// ── Upsert discovered airdrops ──────────────────────────────────────
+async function upsertAirdrops(sb: ReturnType<typeof createClient>, discovered: DiscoveredAirdrop[]) {
+  let inserted = 0;
+  let skipped = 0;
+
+  for (const airdrop of discovered) {
+    // Check if project already exists by name
+    const { data: existing } = await sb
+      .from("airdrop_projects")
+      .select("id")
+      .eq("project_name", airdrop.project_name)
+      .maybeSingle();
+
+    if (existing) { skipped++; continue; }
+
+    // Insert project
+    const { data: project, error: projErr } = await sb
+      .from("airdrop_projects")
+      .insert({
+        project_name: airdrop.project_name,
+        token_symbol: airdrop.token_symbol,
+        chain: airdrop.chain,
+        confidence_score: airdrop.confidence_score,
+        eligibility_requirements: airdrop.eligibility_requirements,
+        official_url: airdrop.official_url,
+        snapshot_date: airdrop.snapshot_date,
+        distribution_date: airdrop.distribution_date,
+      })
+      .select("id")
+      .single();
+
+    if (projErr || !project) { skipped++; continue; }
+
+    // Insert tasks
+    if (airdrop.tasks.length > 0) {
+      await sb.from("airdrop_tasks").insert(
+        airdrop.tasks.map(t => ({
+          project_id: project.id,
+          task_type: t.task_type,
+          description: t.description,
+          required: t.required,
+        }))
+      );
+    }
+
+    inserted++;
+  }
+
+  return { inserted, skipped };
+}
+
 // ── MAIN HANDLER ────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -306,16 +621,25 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const sb = createClient(supabaseUrl, serviceKey);
 
-    // Run all adapters in parallel
-    const [binance, coingecko, kucoin, okx, bybit, coinbase] = await Promise.allSettled([
-      fetchBinance(),
-      fetchCoinGeckoNewCoins(),
-      fetchKuCoin(),
-      fetchOKX(),
-      fetchBybit(),
-      fetchCoinbase(),
-    ]);
+    // Run all adapters in parallel (listings + airdrops)
+    const [binance, coingecko, kucoin, okx, bybit, coinbase,
+           airdropBinance, airdropBybit, airdropKuCoin, airdropOKX, airdropGate, airdropCoinGecko] =
+      await Promise.allSettled([
+        fetchBinance(),
+        fetchCoinGeckoNewCoins(),
+        fetchKuCoin(),
+        fetchOKX(),
+        fetchBybit(),
+        fetchCoinbase(),
+        discoverBinanceAirdrops(),
+        discoverBybitAirdrops(),
+        discoverKuCoinAirdrops(),
+        discoverOKXAirdrops(),
+        discoverGateAirdrops(),
+        discoverCoinGeckoAirdrops(),
+      ]);
 
+    // ── Process listing events ───────────────────────────────────
     const allEvents: NormalizedEvent[] = [];
     for (const result of [binance, coingecko, kucoin, okx, bybit, coinbase]) {
       if (result.status === "fulfilled") allEvents.push(...result.value);
@@ -323,7 +647,6 @@ Deno.serve(async (req) => {
 
     console.log(`[opportunity-ingest] Collected ${allEvents.length} raw events`);
 
-    // Upsert with dedup (unique index on dedup_hash handles conflicts)
     let inserted = 0;
     let skipped = 0;
     for (const event of allEvents) {
@@ -351,14 +674,24 @@ Deno.serve(async (req) => {
       if (error) { skipped++; } else { inserted++; }
     }
 
-    console.log(`[opportunity-ingest] Inserted ${inserted}, skipped ${skipped}`);
+    console.log(`[opportunity-ingest] Listing events: inserted ${inserted}, skipped ${skipped}`);
+
+    // ── Process airdrop discoveries ──────────────────────────────
+    const allAirdrops: DiscoveredAirdrop[] = [];
+    for (const result of [airdropBinance, airdropBybit, airdropKuCoin, airdropOKX, airdropGate, airdropCoinGecko]) {
+      if (result.status === "fulfilled") allAirdrops.push(...result.value);
+    }
+
+    console.log(`[opportunity-ingest] Discovered ${allAirdrops.length} potential airdrops`);
+
+    const airdropResult = await upsertAirdrops(sb, allAirdrops);
+    console.log(`[opportunity-ingest] Airdrops: inserted ${airdropResult.inserted}, skipped ${airdropResult.skipped}`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        total: allEvents.length,
-        inserted,
-        skipped,
+        listings: { total: allEvents.length, inserted, skipped },
+        airdrops: { discovered: allAirdrops.length, ...airdropResult },
         sources: {
           binance: binance.status === "fulfilled" ? binance.value.length : 0,
           coingecko: coingecko.status === "fulfilled" ? coingecko.value.length : 0,
