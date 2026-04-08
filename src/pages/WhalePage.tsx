@@ -68,6 +68,10 @@ const CHAIN_COLORS: Record<string, string> = {
   solana: "hsl(270 80% 60%)",
   avalanche: "hsl(0 84% 60%)",
   polkadot: "hsl(328 77% 57%)",
+  dash: "hsl(207 90% 54%)",
+  zcash: "hsl(40 100% 50%)",
+  "bitcoin-sv": "hsl(195 53% 50%)",
+  groestlcoin: "hsl(210 60% 45%)",
 };
 
 const EXPLORER_BASE: Record<string, string> = {

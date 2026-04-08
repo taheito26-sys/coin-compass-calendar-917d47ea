@@ -248,7 +248,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     // Sort by USD value descending, take top 12
     allAlerts.sort((a, b) => b.amount_usd - a.amount_usd);
-    const topAlerts = allAlerts.slice(0, 12);
+    const topAlerts = allAlerts.slice(0, 25);
 
     if (topAlerts.length > 0) {
       // Cache in background (don't block response)
