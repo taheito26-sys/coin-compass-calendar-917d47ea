@@ -1,32 +1,31 @@
-## Implementation Plan
 
-### Phase 1: Database Schema
-Create all required tables via migration:
-- `listing_sources` — exchange source registry
-- `listing_events` — normalized listing/delisting/airdrop events
-- `airdrop_projects` — airdrop tracking
-- `airdrop_tasks` + `user_airdrop_progress` — task completion tracking
-- `token_risk_flags` — risk warnings
+# Phase 1: Signal Integrity Foundation
 
-### Phase 2: Edge Function — `opportunity-ingest`
-- Fetches announcements from Binance, Coinbase, KuCoin, OKX, Bybit via their public announcement APIs
-- Fetches new coins from CoinGecko
-- Normalizes events, deduplicates via SHA-256 hash within 30-min window
-- Computes confidence scores and lead time
-- Stores results in `listing_events`
+## Deliverables
 
-### Phase 3: UI — Opportunities Page
-- New page with 4 tabs: Listings, Airdrops, New Assets, Delistings
-- Filterable/sortable tables
-- Confidence badges, lead time display
-- In-app toast alerts for high-confidence events
+### 1. Database Tables (Migration)
+- `source_reliability` — tracks trust scores per event source (0-100)
+- `event_classification` — classifies events as RUMOR/LEAK/UNCONFIRMED/CONFIRMED/OFFICIAL/LIVE
+- `risk_signal_aggregate` — per-token risk score aggregation
 
-### Phase 4: Navigation + Scheduler
-- Add "Opportunities" to sidebar navigation
-- Add route in App.tsx
-- Document cron setup for 5/10/15 min polling
+### 2. Edge Function: `risk-engine`
+- Processes all listing_events against source reliability scores
+- Auto-classifies events based on source trust thresholds
+- Computes per-token risk scores from aggregated signals
+- Persists results to DB for frontend consumption
+- Scheduled via pg_cron every 5 minutes
 
-### Scope Lock
-- No changes to Portfolio, Ledger, Calendar, Vault, Settings
-- No trading execution or wallet integration
-- No social media rumor ingestion
+### 3. Frontend: Risk Intelligence Panel
+- New "Risk" sub-tab on Opportunities page
+- Source reliability table with trust scores
+- Event classification badges (RUMOR → OFFICIAL)
+- Per-token risk score cards with level indicators
+- Real-time updates from DB cache
+
+## Phase Gate
+- ≥95% of event sources classified
+- All scores explainable and deterministic
+- No AI black boxes
+
+## NOT included in Phase 1
+- Phases 2-4 (sequential — built after Phase 1 gate passes)
