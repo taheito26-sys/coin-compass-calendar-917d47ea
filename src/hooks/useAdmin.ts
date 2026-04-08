@@ -4,9 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 export interface AdminUser {
   id: string;
-  email: string;
   created_at: string;
-  last_sign_in_at: string | null;
 }
 
 export function useAdmin() {
@@ -36,59 +34,34 @@ export function useAdmin() {
   return { isAdmin, loading };
 }
 
+/** Discover all users who have data in the system (admin only — requires admin RLS policies) */
 export async function fetchAllUsers(): Promise<AdminUser[]> {
-  // We query transactions to discover distinct user_ids, since we can't query auth.users
-  const { data, error } = await supabase
+  // Collect distinct user_ids from transactions
+  const { data: txData } = await supabase
     .from("transactions")
     .select("user_id, created_at")
     .order("created_at", { ascending: true });
 
-  if (error) throw error;
-
-  const userMap = new Map<string, { id: string; earliest: string }>();
-  for (const row of data || []) {
+  const userMap = new Map<string, string>();
+  for (const row of txData || []) {
     if (!userMap.has(row.user_id)) {
-      userMap.set(row.user_id, { id: row.user_id, earliest: row.created_at || "" });
+      userMap.set(row.user_id, row.created_at || "");
     }
   }
 
-  // Also check user_preferences for users who might not have transactions
+  // Also check user_preferences for users without transactions
   const { data: prefs } = await supabase
     .from("user_preferences")
     .select("user_id");
 
   for (const row of prefs || []) {
     if (!userMap.has(row.user_id)) {
-      userMap.set(row.user_id, { id: row.user_id, earliest: "" });
+      userMap.set(row.user_id, "");
     }
   }
 
-  return Array.from(userMap.values()).map((u) => ({
-    id: u.id,
-    email: "", // We'll try to resolve this differently
-    created_at: u.earliest,
-    last_sign_in_at: null,
+  return Array.from(userMap.entries()).map(([id, created_at]) => ({
+    id,
+    created_at,
   }));
-}
-
-export async function fetchUserTransactions(userId: string) {
-  const { data, error } = await supabase
-    .from("transactions")
-    .select("*, assets!transactions_asset_id_fkey(symbol, name, category, binance_symbol, coingecko_id)")
-    .eq("user_id", userId)
-    .order("timestamp", { ascending: true });
-
-  if (error) throw error;
-  return data || [];
-}
-
-export async function fetchUserPortfolioSnapshots(userId: string) {
-  const { data, error } = await supabase
-    .from("portfolio_snapshots")
-    .select("*")
-    .eq("user_id", userId)
-    .order("date", { ascending: false });
-
-  if (error) throw error;
-  return data || [];
 }

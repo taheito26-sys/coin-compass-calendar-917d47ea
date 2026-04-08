@@ -29,6 +29,7 @@ const fallbackCtx: CryptoCtx = {
 };
 
 const Ctx = createContext<CryptoCtx>(fallbackCtx);
+export { Ctx as CryptoCtxRaw };
 export const useCrypto = () => useContext(Ctx);
 
 /** Map backend ApiTransaction[] to CryptoTx[] using asset catalog */
