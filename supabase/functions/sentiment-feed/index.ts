@@ -264,7 +264,7 @@ async function fetchCoinTelegraphRSS(): Promise<NewsItem[]> {
   }
 }
 
-
+async function fetchCoinGeckoTrending(): Promise<TrendingCoin[]> {
   try {
     const r = await fetch("https://api.coingecko.com/api/v3/search/trending", { signal: AbortSignal.timeout(8000) });
     if (!r.ok) return [];
