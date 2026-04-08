@@ -645,6 +645,27 @@ export type Database = {
           },
         ]
       }
+      sentiment_cache: {
+        Row: {
+          id: string
+          key: string
+          payload: Json
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          key: string
+          payload?: Json
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          key?: string
+          payload?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       token_risk_flags: {
         Row: {
           created_at: string
