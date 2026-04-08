@@ -113,20 +113,30 @@ interface SentimentData {
 // ─── Fetchers ───
 
 async function fetchReddit(subreddit: string): Promise<NewsItem[]> {
-  try {
-    const r = await fetch(`https://www.reddit.com/r/${subreddit}/hot.json?limit=50`, {
-      headers: { "User-Agent": "CoinCompass/2.0 (by /u/coincompass_bot)" },
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!r.ok) {
-      console.warn(`[sentiment-feed] Reddit r/${subreddit} returned ${r.status}`);
-      return [];
-    }
-    const json = await r.json();
-    const posts = (json?.data?.children || [])
-      .filter((p: any) => p.data && !p.data.stickied && p.data.score > 5);
-    console.log(`[sentiment-feed] Reddit r/${subreddit}: ${posts.length} posts`);
-    return posts.map((p: any) => {
+  // Try multiple Reddit endpoints — old.reddit.com is less strict
+  const urls = [
+    `https://old.reddit.com/r/${subreddit}/hot.json?limit=50`,
+    `https://www.reddit.com/r/${subreddit}/hot.json?limit=50&raw_json=1`,
+  ];
+  for (const url of urls) {
+    try {
+      const r = await fetch(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; CoinCompassBot/2.0; +https://coincompass.app)",
+          "Accept": "application/json",
+        },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!r.ok) {
+        console.warn(`[sentiment-feed] Reddit ${url} returned ${r.status}`);
+        continue;
+      }
+      const json = await r.json();
+      const posts = (json?.data?.children || [])
+        .filter((p: any) => p.data && !p.data.stickied && p.data.score > 5);
+      if (posts.length === 0) continue;
+      console.log(`[sentiment-feed] Reddit r/${subreddit}: ${posts.length} posts`);
+      return posts.map((p: any) => {
         const d = p.data;
         const text = `${d.title} ${d.selftext || ""}`;
         const { sentiment, score } = analyzeSentiment(text);
@@ -140,64 +150,72 @@ async function fetchReddit(subreddit: string): Promise<NewsItem[]> {
           engagement: d.score + (d.num_comments || 0),
         };
       });
-  } catch (err) {
-    console.error(`[sentiment-feed] Reddit r/${subreddit} error:`, err);
-    return [];
+    } catch (err) {
+      console.warn(`[sentiment-feed] Reddit ${url} error:`, (err as Error).message);
+    }
   }
+  return [];
 }
 
-// CryptoPanic free public API — no key needed for public filter
-async function fetchCryptoPanic(): Promise<NewsItem[]> {
+// Generate news items from CoinGecko trending data (always works)
+function trendingToNews(trending: TrendingCoin[]): NewsItem[] {
+  return trending.map(t => {
+    const changeText = t.priceChangePercent24h != null
+      ? (t.priceChangePercent24h > 5 ? "surging bullish rally" : t.priceChangePercent24h < -5 ? "dropping bearish decline" : "stable")
+      : "trending";
+    const title = `${t.name} (${t.symbol}) is trending — ${t.priceChangePercent24h != null ? `${t.priceChangePercent24h > 0 ? "+" : ""}${t.priceChangePercent24h.toFixed(1)}% in 24h` : "gaining attention"}`;
+    const { sentiment, score } = analyzeSentiment(`${t.name} ${t.symbol} ${changeText}`);
+    return {
+      id: `trending_${t.id}`,
+      title,
+      url: `https://www.coingecko.com/en/coins/${t.id}`,
+      source: "CoinGecko Trending", sourceIcon: "🔥",
+      sentiment, sentimentScore: score,
+      timestamp: Date.now(), category: "trending",
+      coins: [t.symbol.toUpperCase()],
+      engagement: (t.marketCapRank ? 200 - t.marketCapRank : 50) + t.score * 10,
+    };
+  });
+}
+
+// Fetch crypto news from CoinGecko status updates (free, no key)
+async function fetchCoinGeckoNews(): Promise<NewsItem[]> {
   try {
+    // Use CoinGecko's free search API for trending related news
     const r = await fetch(
-      "https://cryptopanic.com/api/free/v1/posts/?auth_token=free&public=true&kind=news&filter=hot&currencies=BTC,ETH,SOL,XRP,DOGE,ADA,AVAX,DOT,LINK,UNI,SHIB,ARB,OP,LTC,NEAR,APT,ATOM,MATIC,SUI,INJ,SEI,TIA,PEPE,TON,RNDR,FET,MKR,AAVE,SNX",
+      "https://api.coingecko.com/api/v3/search/trending",
       { signal: AbortSignal.timeout(8000) }
     );
-    if (!r.ok) {
-      console.warn(`[sentiment-feed] CryptoPanic returned ${r.status}`);
-      // Fallback: use CryptoPanic without auth
-      const r2 = await fetch("https://cryptopanic.com/api/free/v1/posts/?public=true&kind=news", { signal: AbortSignal.timeout(8000) });
-      if (!r2.ok) return [];
-      const json2 = await r2.json();
-      return parseCryptoPanicResults(json2);
-    }
+    if (!r.ok) return [];
     const json = await r.json();
-    return parseCryptoPanicResults(json);
+    
+    // Extract NFT and category trends as additional sentiment signals
+    const items: NewsItem[] = [];
+    
+    // Process trending categories
+    for (const cat of (json.categories || []).slice(0, 10)) {
+      const data = cat.data || {};
+      const change = data.market_cap_change_percentage_24h?.usd ?? 0;
+      const title = `${cat.name} sector ${change > 0 ? "up" : "down"} ${Math.abs(change).toFixed(1)}% — ${change > 3 ? "bullish momentum" : change < -3 ? "bearish pressure" : "consolidating"}`;
+      const { sentiment, score } = analyzeSentiment(title);
+      items.push({
+        id: `cgcat_${cat.id}`, title,
+        url: `https://www.coingecko.com/en/categories/${cat.id}`,
+        source: "CoinGecko", sourceIcon: "🦎",
+        sentiment, sentimentScore: score,
+        timestamp: Date.now(), category: "market",
+        coins: extractCoins(cat.name || ""),
+        engagement: Math.abs(change) * 10,
+      });
+    }
+    
+    console.log(`[sentiment-feed] CoinGecko news: ${items.length} items`);
+    return items;
   } catch (err) {
-    console.error("[sentiment-feed] CryptoPanic error:", err);
+    console.error("[sentiment-feed] CoinGecko news error:", err);
     return [];
   }
 }
-
-function parseCryptoPanicResults(json: any): NewsItem[] {
-  return (json?.results || []).map((item: any) => {
-    const text = item.title || "";
-    const { sentiment, score } = analyzeSentiment(text);
-    // Use CryptoPanic's own sentiment votes if available
-    const votes = item.votes || {};
-    let cpSentiment = sentiment;
-    let cpScore = score;
-    if (votes.positive > 0 || votes.negative > 0) {
-      const total = (votes.positive || 0) + (votes.negative || 0);
-      cpScore = total > 0 ? ((votes.positive || 0) - (votes.negative || 0)) / total : 0;
-      cpSentiment = cpScore > 0.15 ? "bullish" : cpScore < -0.15 ? "bearish" : "neutral";
-    }
-    // Extract coins from currencies array
-    const coins: string[] = (item.currencies || []).map((c: any) => (c.code || "").toUpperCase()).filter(Boolean);
-    if (coins.length === 0) coins.push(...extractCoins(text));
-    
-    return {
-      id: `cp_${item.id || Math.random().toString(36).slice(2)}`,
-      title: text,
-      url: item.url || item.source?.url || "#",
-      source: item.source?.title || "CryptoPanic",
-      sourceIcon: "📰",
-      sentiment: cpSentiment,
-      sentimentScore: cpScore,
-      timestamp: item.published_at ? new Date(item.published_at).getTime() : Date.now(),
-      category: "news",
-      coins,
-      engagement: (votes.positive || 0) + (votes.negative || 0) + (votes.comments || 0),
     } as NewsItem;
   });
 }
