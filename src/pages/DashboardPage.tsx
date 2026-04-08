@@ -456,6 +456,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
           </div>
         );
 
+      case "sentimentTrends": return <SentimentTrends compact />;
       default: return null;
     }
   };
