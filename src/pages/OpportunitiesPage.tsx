@@ -728,3 +728,243 @@ function EventTable({ events }: { events: ListingEvent[] }) {
     </div>
   );
 }
+
+// ── Sentiment Tab ───────────────────────────────────────────────────
+const SENT_COLORS = { bullish: "hsl(142 71% 45%)", bearish: "hsl(0 84% 60%)", neutral: "hsl(43 96% 56%)" };
+
+function SentimentTab({
+  data,
+  loading,
+  sourceFilter,
+  setSourceFilter,
+  typeFilter,
+  setTypeFilter,
+  onRefresh,
+}: {
+  data: SentimentData | null;
+  loading: boolean;
+  sourceFilter: string;
+  setSourceFilter: (v: string) => void;
+  typeFilter: string;
+  setTypeFilter: (v: string) => void;
+  onRefresh: () => void;
+}) {
+  if (loading && !data) {
+    return <div style={{ textAlign: "center", padding: 40, color: "var(--muted)" }}>Loading sentiment data from Reddit, CoinGecko & more...</div>;
+  }
+  if (!data) {
+    return <EmptyState message="Failed to load sentiment data. Try refreshing." />;
+  }
+
+  const sources = [...new Set(data.news.map(n => n.source))].sort();
+  let filteredNews = data.news;
+  if (sourceFilter !== "all") filteredNews = filteredNews.filter(n => n.source === sourceFilter);
+  if (typeFilter !== "all") filteredNews = filteredNews.filter(n => n.sentiment === typeFilter);
+
+  const bullishCount = data.news.filter(n => n.sentiment === "bullish").length;
+  const bearishCount = data.news.filter(n => n.sentiment === "bearish").length;
+  const neutralCount = data.news.filter(n => n.sentiment === "neutral").length;
+  const overallScore = data.news.length > 0 ? data.news.reduce((s, n) => s + n.sentimentScore, 0) / data.news.length : 0;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* Top stats row */}
+      <div className="sentiment-stats-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
+        {/* Fear & Greed */}
+        <div className="panel" style={{ padding: "10px 14px" }}>
+          <div style={{ fontSize: 9, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Fear & Greed</div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+            <span style={{ fontSize: 28, fontWeight: 900, color: data.fearGreed.value <= 25 ? "var(--bad)" : data.fearGreed.value >= 75 ? "var(--good)" : "var(--warn)" }}>
+              {data.fearGreed.value}
+            </span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>{data.fearGreed.label}</span>
+          </div>
+          {data.fearGreed.history.length > 1 && (
+            <MiniSparkline data={data.fearGreed.history.map(h => h.value)} color="var(--brand)" />
+          )}
+        </div>
+
+        {/* Overall Sentiment */}
+        <div className="panel" style={{ padding: "10px 14px" }}>
+          <div style={{ fontSize: 9, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Community Mood</div>
+          <div style={{ fontSize: 28, fontWeight: 900, color: overallScore > 0.1 ? SENT_COLORS.bullish : overallScore < -0.1 ? SENT_COLORS.bearish : SENT_COLORS.neutral }}>
+            {overallScore > 0.1 ? "Bullish" : overallScore < -0.1 ? "Bearish" : "Neutral"}
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 4, fontSize: 10, fontWeight: 700 }}>
+            <span style={{ color: SENT_COLORS.bullish }}>🟢 {bullishCount}</span>
+            <span style={{ color: SENT_COLORS.neutral }}>🟡 {neutralCount}</span>
+            <span style={{ color: SENT_COLORS.bearish }}>🔴 {bearishCount}</span>
+          </div>
+        </div>
+
+        {/* Market Dominance */}
+        <div className="panel" style={{ padding: "10px 14px" }}>
+          <div style={{ fontSize: 9, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Market Dominance</div>
+          <div style={{ display: "flex", gap: 2, height: 10, borderRadius: 5, overflow: "hidden", marginBottom: 6 }}>
+            <div style={{ width: `${data.marketDominance.btc}%`, background: "#F7931A", height: "100%" }} />
+            <div style={{ width: `${data.marketDominance.eth}%`, background: "#627EEA", height: "100%" }} />
+            <div style={{ width: `${data.marketDominance.others}%`, background: "var(--muted2)", height: "100%" }} />
+          </div>
+          <div style={{ display: "flex", gap: 10, fontSize: 10, fontWeight: 700 }}>
+            <span style={{ color: "#F7931A" }}>BTC {data.marketDominance.btc.toFixed(1)}%</span>
+            <span style={{ color: "#627EEA" }}>ETH {data.marketDominance.eth.toFixed(1)}%</span>
+          </div>
+        </div>
+
+        {/* Sources */}
+        <div className="panel" style={{ padding: "10px 14px" }}>
+          <div style={{ fontSize: 9, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Sources</div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text)" }}>
+            {sources.length} feeds active
+          </div>
+          <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
+            Reddit · CoinGecko · Alt.me
+          </div>
+          <div style={{ fontSize: 9, color: "var(--muted)", marginTop: 4 }}>
+            Updated {new Date(data.lastUpdated).toLocaleTimeString()}
+          </div>
+        </div>
+      </div>
+
+      {/* Trending + Buzz row */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }} className="sentiment-two-col">
+        {/* Trending Coins */}
+        {data.trending.length > 0 && (
+          <div className="panel" style={{ padding: "10px 14px" }}>
+            <div style={{ fontSize: 10, fontWeight: 800, color: "var(--muted)", textTransform: "uppercase", marginBottom: 8 }}>🔥 Trending on CoinGecko</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {data.trending.slice(0, 7).map((coin, i) => (
+                <div key={coin.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                  <span style={{ fontSize: 10, fontWeight: 800, color: "var(--muted)", width: 16 }}>#{i + 1}</span>
+                  {coin.thumb && <img src={coin.thumb} alt="" style={{ width: 18, height: 18, borderRadius: 9 }} />}
+                  <span style={{ fontWeight: 800, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {coin.symbol.toUpperCase()}
+                  </span>
+                  <span style={{ fontSize: 10, color: "var(--muted)" }}>{coin.name}</span>
+                  {coin.priceChangePercent24h != null && (
+                    <span style={{
+                      fontSize: 10, fontWeight: 800, minWidth: 50, textAlign: "right",
+                      color: coin.priceChangePercent24h >= 0 ? SENT_COLORS.bullish : SENT_COLORS.bearish
+                    }}>
+                      {coin.priceChangePercent24h >= 0 ? "+" : ""}{coin.priceChangePercent24h.toFixed(1)}%
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Community Buzz */}
+        {data.communityBuzz.length > 0 && (
+          <div className="panel" style={{ padding: "10px 14px" }}>
+            <div style={{ fontSize: 10, fontWeight: 800, color: "var(--muted)", textTransform: "uppercase", marginBottom: 8 }}>💬 Community Buzz</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {data.communityBuzz.map(b => (
+                <span
+                  key={b.topic}
+                  style={{
+                    padding: "4px 10px", borderRadius: 12, fontSize: 11, fontWeight: 800,
+                    background: `${SENT_COLORS[b.sentiment as keyof typeof SENT_COLORS] || SENT_COLORS.neutral}18`,
+                    color: SENT_COLORS[b.sentiment as keyof typeof SENT_COLORS] || SENT_COLORS.neutral,
+                    border: `1px solid ${SENT_COLORS[b.sentiment as keyof typeof SENT_COLORS] || SENT_COLORS.neutral}30`,
+                  }}
+                >
+                  {b.topic} <span style={{ opacity: 0.6 }}>×{b.mentions}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* News feed with filters */}
+      <div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <select className="inp" value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} style={{ fontSize: 11, padding: "4px 8px" }}>
+            <option value="all">All Sources</option>
+            {sources.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <select className="inp" value={typeFilter} onChange={e => setTypeFilter(e.target.value)} style={{ fontSize: 11, padding: "4px 8px" }}>
+            <option value="all">All Sentiment</option>
+            <option value="bullish">🟢 Bullish</option>
+            <option value="bearish">🔴 Bearish</option>
+            <option value="neutral">🟡 Neutral</option>
+          </select>
+          <button className="btn secondary" onClick={onRefresh} style={{ fontSize: 10, padding: "4px 10px" }}>↻ Refresh</button>
+          <span style={{ fontSize: 10, color: "var(--muted)", marginLeft: "auto" }}>{filteredNews.length} posts</span>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {filteredNews.slice(0, 30).map(item => (
+            <a
+              key={item.id}
+              href={item.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="panel"
+              style={{
+                padding: "10px 14px", display: "flex", gap: 10, alignItems: "flex-start",
+                textDecoration: "none", color: "inherit", transition: "opacity 0.15s",
+              }}
+              onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
+              onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+            >
+              <div style={{
+                fontSize: 16, minWidth: 24, textAlign: "center", marginTop: 2,
+              }}>
+                {item.sourceIcon}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.4, marginBottom: 4 }}>
+                  {item.title}
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <span style={{ fontSize: 10, color: "var(--muted)" }}>{item.source}</span>
+                  <span style={{
+                    fontSize: 9, fontWeight: 800, padding: "2px 6px", borderRadius: 8,
+                    background: `${SENT_COLORS[item.sentiment]}18`,
+                    color: SENT_COLORS[item.sentiment],
+                    textTransform: "uppercase",
+                  }}>
+                    {item.sentiment}
+                  </span>
+                  {item.coins.length > 0 && (
+                    <span style={{ fontSize: 9, color: "var(--brand)", fontWeight: 700 }}>
+                      {item.coins.join(" · ")}
+                    </span>
+                  )}
+                  <span style={{ fontSize: 9, color: "var(--muted)" }}>
+                    🔥 {item.engagement > 1000 ? `${(item.engagement / 1000).toFixed(1)}k` : item.engagement}
+                  </span>
+                  <span style={{ fontSize: 9, color: "var(--muted)", marginLeft: "auto" }}>
+                    {timeAgo(new Date(item.timestamp).toISOString())}
+                  </span>
+                </div>
+              </div>
+            </a>
+          ))}
+          {filteredNews.length === 0 && (
+            <EmptyState message="No posts match the current filters." />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MiniSparkline({ data, color }: { data: number[]; color: string }) {
+  if (data.length < 2) return null;
+  const w = 80, h = 20;
+  const min = Math.min(...data), max = Math.max(...data);
+  const range = max - min || 1;
+  const points = data.map((v, i) =>
+    `${(i / (data.length - 1)) * w},${h - ((v - min) / range) * h}`
+  ).join(" ");
+
+  return (
+    <svg width="100%" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display: "block", marginTop: 4 }}>
+      <polyline points={points} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
+    </svg>
+  );
+}
