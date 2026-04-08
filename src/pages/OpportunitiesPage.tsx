@@ -40,7 +40,7 @@ interface AirdropTask {
   completed?: boolean;
 }
 
-type Tab = "listings" | "airdrops" | "new_assets" | "delistings" | "sentiment";
+type Tab = "listings" | "airdrops" | "new_assets" | "delistings" | "sentiment" | "risk";
 
 // ── Sentiment types ─────────────────────────────────────────────────
 interface SentimentNewsItem {
