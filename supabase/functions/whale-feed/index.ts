@@ -19,20 +19,24 @@ interface WhaleAlert {
   tx_hash: string;
 }
 
-// Chain configs: [blockchainName, symbol, satoshiDivisor, explorerBase]
+// Chain configs: [blockchainName, symbol, satoshiDivisor]
 const CHAINS: [string, string, number][] = [
   ["ethereum", "ETH", 1e18],
   ["bitcoin", "BTC", 1e8],
   ["litecoin", "LTC", 1e8],
   ["dogecoin", "DOGE", 1e8],
   ["bitcoin-cash", "BCH", 1e8],
+  ["dash", "DASH", 1e8],
+  ["zcash", "ZEC", 1e8],
+  ["bitcoin-sv", "BSV", 1e8],
+  ["groestlcoin", "GRS", 1e8],
 ];
 
 // Approximate USD prices fetched once per invocation
 async function fetchPrices(): Promise<Record<string, number>> {
   try {
     const res = await fetch(
-      "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,litecoin,dogecoin,bitcoin-cash,solana,cardano,polkadot,avalanche-2,chainlink,uniswap,matic-network&vs_currencies=usd",
+      "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,litecoin,dogecoin,bitcoin-cash,solana,cardano,polkadot,avalanche-2,chainlink,uniswap,matic-network,dash,zcash,bitcoin-cash-sv,groestlcoin,ripple,stellar,tron,cosmos,near,fantom,algorand&vs_currencies=usd",
       { signal: AbortSignal.timeout(8000) }
     );
     if (!res.ok) throw new Error(`CoinGecko ${res.status}`);
@@ -50,16 +54,26 @@ async function fetchPrices(): Promise<Record<string, number>> {
       LINK: data.chainlink?.usd ?? 0,
       UNI: data.uniswap?.usd ?? 0,
       MATIC: data["matic-network"]?.usd ?? 0,
+      DASH: data.dash?.usd ?? 0,
+      ZEC: data.zcash?.usd ?? 0,
+      BSV: data["bitcoin-cash-sv"]?.usd ?? 0,
+      GRS: data.groestlcoin?.usd ?? 0,
+      XRP: data.ripple?.usd ?? 0,
+      XLM: data.stellar?.usd ?? 0,
+      TRX: data.tron?.usd ?? 0,
+      ATOM: data.cosmos?.usd ?? 0,
+      NEAR: data.near?.usd ?? 0,
+      FTM: data.fantom?.usd ?? 0,
+      ALGO: data.algorand?.usd ?? 0,
     };
   } catch (e) {
     console.error("Price fetch failed:", e);
-    // Fallback to mempool for BTC only
     try {
       const r = await fetch("https://mempool.space/api/v1/prices", { signal: AbortSignal.timeout(5000) });
       const d = await r.json();
-      return { BTC: d.USD ?? 0, ETH: 0, LTC: 0, DOGE: 0, BCH: 0, SOL: 0, ADA: 0, DOT: 0, AVAX: 0, LINK: 0, UNI: 0, MATIC: 0 };
+      return { BTC: d.USD ?? 0 };
     } catch {
-      return { BTC: 0, ETH: 0, LTC: 0, DOGE: 0, BCH: 0, SOL: 0, ADA: 0, DOT: 0, AVAX: 0, LINK: 0, UNI: 0, MATIC: 0 };
+      return {};
     }
   }
 }
@@ -220,17 +234,21 @@ Deno.serve(async (req: Request): Promise<Response> => {
       ["litecoin", "LTC", 1e8],
       ["dogecoin", "DOGE", 1e8],
       ["bitcoin-cash", "BCH", 1e8],
+      ["dash", "DASH", 1e8],
+      ["zcash", "ZEC", 1e8],
+      ["bitcoin-sv", "BSV", 1e8],
+      ["groestlcoin", "GRS", 1e8],
     ];
 
     for (const [chain, sym, div] of altChains) {
-      await sleep(600);
+      await sleep(500);
       const chainAlerts = await fetchBlockchairChain(chain, sym, div, prices[sym] ?? 0);
       allAlerts.push(...chainAlerts);
     }
 
     // Sort by USD value descending, take top 12
     allAlerts.sort((a, b) => b.amount_usd - a.amount_usd);
-    const topAlerts = allAlerts.slice(0, 12);
+    const topAlerts = allAlerts.slice(0, 25);
 
     if (topAlerts.length > 0) {
       // Cache in background (don't block response)

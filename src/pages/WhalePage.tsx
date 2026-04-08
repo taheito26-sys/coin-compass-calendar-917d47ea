@@ -57,6 +57,7 @@ function labelAddress(addr: string): { label: string | null; isExchange: boolean
 const CHAIN_ICONS: Record<string, string> = {
   bitcoin: "₿", ethereum: "Ξ", litecoin: "Ł", dogecoin: "Ð",
   "bitcoin-cash": "₿C", solana: "◎", avalanche: "▲", polkadot: "●",
+  dash: "⟐", zcash: "Ⓩ", "bitcoin-sv": "₿S", groestlcoin: "G",
 };
 
 const CHAIN_COLORS: Record<string, string> = {
@@ -68,6 +69,10 @@ const CHAIN_COLORS: Record<string, string> = {
   solana: "hsl(270 80% 60%)",
   avalanche: "hsl(0 84% 60%)",
   polkadot: "hsl(328 77% 57%)",
+  dash: "hsl(207 90% 54%)",
+  zcash: "hsl(40 100% 50%)",
+  "bitcoin-sv": "hsl(195 53% 50%)",
+  groestlcoin: "hsl(210 60% 45%)",
 };
 
 const EXPLORER_BASE: Record<string, string> = {
@@ -77,6 +82,10 @@ const EXPLORER_BASE: Record<string, string> = {
   dogecoin: "https://blockchair.com/dogecoin/transaction/",
   "bitcoin-cash": "https://blockchair.com/bitcoin-cash/transaction/",
   solana: "https://solscan.io/tx/",
+  dash: "https://blockchair.com/dash/transaction/",
+  zcash: "https://blockchair.com/zcash/transaction/",
+  "bitcoin-sv": "https://blockchair.com/bitcoin-sv/transaction/",
+  groestlcoin: "https://blockchair.com/groestlcoin/transaction/",
 };
 
 const TX_TYPE_ICONS: Record<string, string> = {
