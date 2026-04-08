@@ -356,11 +356,6 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
               <div className={`kpi-val ${totalPnlCombined >= 0 ? "good" : "bad"}`}>{(totalPnlCombined >= 0 ? "+" : "") + fmtTotal(totalPnlCombined)}</div>
               <div className="kpi-sub">Realized + Unrealized</div>
             </div>
-            <div className="kpi-card">
-              <div className="kpi-lbl">TX COUNT</div>
-              <div className="kpi-val">{txCount}</div>
-              <div className="kpi-sub">Total events</div>
-            </div>
           </div>
         );
 
