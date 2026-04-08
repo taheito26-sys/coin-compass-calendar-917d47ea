@@ -81,6 +81,103 @@ function MiniSparkline({ data, color }: { data: number[]; color: string }) {
   );
 }
 
+function CoinDrillDown({ symbol, history, coinData }: { symbol: string; history: HistoryRow[]; coinData: CoinHealth }) {
+  const coinHistory = history
+    .filter(h => h.token_symbol.toUpperCase() === symbol)
+    .sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date));
+
+  if (coinHistory.length === 0) {
+    return <div style={{ marginTop: 10, fontSize: 10, color: "var(--muted)" }}>No detailed history available.</div>;
+  }
+
+  const maxMention = Math.max(1, ...coinHistory.map(h => h.mention_count));
+
+  return (
+    <div style={{ marginTop: 10, borderTop: "1px solid var(--line)", paddingTop: 10 }} onClick={e => e.stopPropagation()}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>
+        📊 {symbol} Sentiment Timeline
+      </div>
+
+      {/* Sentiment score timeline as SVG area chart */}
+      <div style={{ marginBottom: 10 }}>
+        <svg width="100%" height={60} viewBox={`0 0 ${coinHistory.length * 20} 60`} preserveAspectRatio="none" style={{ display: "block" }}>
+          <defs>
+            <linearGradient id={`grad-${symbol}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={coinData.gradeColor} stopOpacity="0.3" />
+              <stop offset="100%" stopColor={coinData.gradeColor} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          {coinHistory.length > 1 && (
+            <>
+              <polygon
+                points={[
+                  ...coinHistory.map((h, i) => `${i * 20},${60 - (h.sentiment_score / 100) * 56}`),
+                  `${(coinHistory.length - 1) * 20},60`,
+                  `0,60`,
+                ].join(" ")}
+                fill={`url(#grad-${symbol})`}
+              />
+              <polyline
+                points={coinHistory.map((h, i) => `${i * 20},${60 - (h.sentiment_score / 100) * 56}`).join(" ")}
+                fill="none"
+                stroke={coinData.gradeColor}
+                strokeWidth="2"
+              />
+            </>
+          )}
+        </svg>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 8, color: "var(--muted2)" }}>
+          <span>{coinHistory[0]?.snapshot_date}</span>
+          <span>{coinHistory[coinHistory.length - 1]?.snapshot_date}</span>
+        </div>
+      </div>
+
+      {/* Mention breakdown bars */}
+      <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>
+        📝 Mention History
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        {coinHistory.slice(-10).map((h, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 9 }}>
+            <span style={{ width: 50, color: "var(--muted)", flexShrink: 0 }}>{h.snapshot_date.slice(5)}</span>
+            <div style={{ flex: 1, height: 10, borderRadius: 3, background: "var(--panel2, rgba(0,0,0,.1))", overflow: "hidden" }}>
+              <div style={{
+                height: "100%", borderRadius: 3,
+                width: `${(h.mention_count / maxMention) * 100}%`,
+                background: h.sentiment_score >= 60 ? "var(--good)" : h.sentiment_score <= 40 ? "var(--bad)" : "var(--warn)",
+                transition: "width .3s",
+              }} />
+            </div>
+            <span style={{ width: 24, textAlign: "right", fontFamily: "var(--lt-font-mono)", fontWeight: 600 }}>{h.mention_count}</span>
+            <span style={{
+              width: 24, textAlign: "right", fontFamily: "var(--lt-font-mono)", fontWeight: 700,
+              color: h.sentiment_score >= 60 ? "var(--good)" : h.sentiment_score <= 40 ? "var(--bad)" : "var(--text)",
+            }}>{h.sentiment_score}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Quick stats */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, marginTop: 10 }}>
+        <div style={{ textAlign: "center", padding: "6px 4px", background: "var(--panel2, rgba(0,0,0,.05))", borderRadius: 6 }}>
+          <div style={{ fontSize: 8, color: "var(--muted)", fontWeight: 600 }}>VOLATILITY</div>
+          <div style={{ fontSize: 12, fontWeight: 800, color: coinData.volatility < 10 ? "var(--good)" : "var(--warn)" }}>
+            {coinData.volatility.toFixed(1)}
+          </div>
+        </div>
+        <div style={{ textAlign: "center", padding: "6px 4px", background: "var(--panel2, rgba(0,0,0,.05))", borderRadius: 6 }}>
+          <div style={{ fontSize: 8, color: "var(--muted)", fontWeight: 600 }}>DATA POINTS</div>
+          <div style={{ fontSize: 12, fontWeight: 800 }}>{coinData.dataPoints}</div>
+        </div>
+        <div style={{ textAlign: "center", padding: "6px 4px", background: "var(--panel2, rgba(0,0,0,.05))", borderRadius: 6 }}>
+          <div style={{ fontSize: 8, color: "var(--muted)", fontWeight: 600 }}>COMPOSITE</div>
+          <div style={{ fontSize: 12, fontWeight: 800, color: coinData.gradeColor }}>{coinData.composite.toFixed(0)}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CommunityHealth() {
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [loading, setLoading] = useState(true);
