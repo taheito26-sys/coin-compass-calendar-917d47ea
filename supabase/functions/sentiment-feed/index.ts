@@ -216,6 +216,53 @@ async function fetchCoinGeckoNews(): Promise<NewsItem[]> {
     return [];
   }
 }
+// CoinTelegraph RSS feed — reliable crypto news source
+async function fetchCoinTelegraphRSS(): Promise<NewsItem[]> {
+  try {
+    const r = await fetch("https://cointelegraph.com/rss", {
+      headers: { "Accept": "application/rss+xml, application/xml, text/xml" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) {
+      console.warn(`[sentiment-feed] CoinTelegraph RSS returned ${r.status}`);
+      return [];
+    }
+    const xml = await r.text();
+    // Simple XML parsing for RSS items
+    const items: NewsItem[] = [];
+    const itemRegex = /<item>([\s\S]*?)<\/item>/g;
+    let match;
+    while ((match = itemRegex.exec(xml)) !== null && items.length < 30) {
+      const block = match[1];
+      const title = block.match(/<title><!\[CDATA\[(.*?)\]\]>|<title>(.*?)<\/title>/)?.[1] || block.match(/<title>(.*?)<\/title>/)?.[1] || "";
+      const link = block.match(/<link>(.*?)<\/link>/)?.[1] || "";
+      const pubDate = block.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || "";
+      
+      if (!title) continue;
+      const { sentiment, score } = analyzeSentiment(title);
+      const coins = extractCoins(title);
+      
+      items.push({
+        id: `ct_${link.split("/").pop() || Math.random().toString(36).slice(2)}`,
+        title: title.replace(/<[^>]+>/g, "").trim(),
+        url: link,
+        source: "CoinTelegraph",
+        sourceIcon: "📡",
+        sentiment,
+        sentimentScore: score,
+        timestamp: pubDate ? new Date(pubDate).getTime() : Date.now(),
+        category: "news",
+        coins,
+        engagement: coins.length * 5 + 10,
+      });
+    }
+    console.log(`[sentiment-feed] CoinTelegraph RSS: ${items.length} items`);
+    return items;
+  } catch (err) {
+    console.error("[sentiment-feed] CoinTelegraph RSS error:", err);
+    return [];
+  }
+}
 
 async function fetchCoinGeckoTrending(): Promise<TrendingCoin[]> {
   try {
@@ -460,12 +507,13 @@ Deno.serve(async (req) => {
     // Full fetch from all sources concurrently
     const [
       redditCrypto, redditBitcoin,
-      cgNews,
+      cgNews, ctRSS,
       trending, top100, categoryNews, fearGreed, dominance,
     ] = await Promise.allSettled([
       fetchReddit("CryptoCurrency"),
       fetchReddit("Bitcoin"),
       fetchCoinGeckoNews(),
+      fetchCoinTelegraphRSS(),
       fetchCoinGeckoTrending(),
       fetchCoinGeckoTop100(),
       fetchCategoryNews(),
@@ -481,11 +529,13 @@ Deno.serve(async (req) => {
       ...(redditCrypto.status === "fulfilled" ? redditCrypto.value : []),
       ...(redditBitcoin.status === "fulfilled" ? redditBitcoin.value : []),
       ...(cgNews.status === "fulfilled" ? cgNews.value : []),
+      ...(ctRSS.status === "fulfilled" ? ctRSS.value : []),
       ...trendingNews,
       ...(categoryNews.status === "fulfilled" ? categoryNews.value : []),
     ];
     const redditCount = [redditCrypto, redditBitcoin].filter(r => r.status === "fulfilled").reduce((s, r) => s + (r as PromiseFulfilledResult<NewsItem[]>).value.length, 0);
-    console.log(`[sentiment-feed] Total news: ${allNews.length} (Reddit: ${redditCount}, Trending: ${trendingNews.length}, CG News: ${cgNews.status === "fulfilled" ? cgNews.value.length : 0}, Categories: ${categoryNews.status === "fulfilled" ? categoryNews.value.length : 0})`);
+    const ctCount = ctRSS.status === "fulfilled" ? ctRSS.value.length : 0;
+    console.log(`[sentiment-feed] Total news: ${allNews.length} (Reddit: ${redditCount}, CT RSS: ${ctCount}, Trending: ${trendingNews.length}, CG News: ${cgNews.status === "fulfilled" ? cgNews.value.length : 0}, Categories: ${categoryNews.status === "fulfilled" ? categoryNews.value.length : 0})`);
 
     // Deduplicate
     const seen = new Set<string>();
