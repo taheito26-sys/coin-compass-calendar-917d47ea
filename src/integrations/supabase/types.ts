@@ -127,6 +127,47 @@ export type Database = {
         }
         Relationships: []
       }
+      event_classification: {
+        Row: {
+          classification: string
+          confidence: number
+          created_at: string
+          event_id: string
+          id: string
+          reasoning: string | null
+          source_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          classification?: string
+          confidence?: number
+          created_at?: string
+          event_id: string
+          id?: string
+          reasoning?: string | null
+          source_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          classification?: string
+          confidence?: number
+          created_at?: string
+          event_id?: string
+          id?: string
+          reasoning?: string | null
+          source_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_classification_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "source_reliability"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       exchange_connections: {
         Row: {
           api_key: string
@@ -645,6 +686,36 @@ export type Database = {
           },
         ]
       }
+      risk_signal_aggregate: {
+        Row: {
+          id: string
+          last_updated: string
+          risk_level: string
+          risk_score: number
+          signal_count: number
+          signals: Json
+          token_symbol: string
+        }
+        Insert: {
+          id?: string
+          last_updated?: string
+          risk_level?: string
+          risk_score?: number
+          signal_count?: number
+          signals?: Json
+          token_symbol: string
+        }
+        Update: {
+          id?: string
+          last_updated?: string
+          risk_level?: string
+          risk_score?: number
+          signal_count?: number
+          signals?: Json
+          token_symbol?: string
+        }
+        Relationships: []
+      }
       sentiment_cache: {
         Row: {
           id: string
@@ -663,6 +734,45 @@ export type Database = {
           key?: string
           payload?: Json
           updated_at?: string
+        }
+        Relationships: []
+      }
+      source_reliability: {
+        Row: {
+          false_signal_count: number
+          historical_accuracy: number
+          id: string
+          last_updated: string
+          latency_score: number
+          source_name: string
+          source_type: string
+          total_signal_count: number
+          trust_score: number
+          verification_method: string | null
+        }
+        Insert: {
+          false_signal_count?: number
+          historical_accuracy?: number
+          id?: string
+          last_updated?: string
+          latency_score?: number
+          source_name: string
+          source_type?: string
+          total_signal_count?: number
+          trust_score?: number
+          verification_method?: string | null
+        }
+        Update: {
+          false_signal_count?: number
+          historical_accuracy?: number
+          id?: string
+          last_updated?: string
+          latency_score?: number
+          source_name?: string
+          source_type?: string
+          total_signal_count?: number
+          trust_score?: number
+          verification_method?: string | null
         }
         Relationships: []
       }

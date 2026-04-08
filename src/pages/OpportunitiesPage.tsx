@@ -40,7 +40,7 @@ interface AirdropTask {
   completed?: boolean;
 }
 
-type Tab = "listings" | "airdrops" | "new_assets" | "delistings" | "sentiment";
+type Tab = "listings" | "airdrops" | "new_assets" | "delistings" | "sentiment" | "risk";
 
 // ── Sentiment types ─────────────────────────────────────────────────
 interface SentimentNewsItem {
@@ -293,6 +293,13 @@ export default function OpportunitiesPage() {
   const [sentimentSourceFilter, setSentimentSourceFilter] = useState<string>("all");
   const [sentimentTypeFilter, setSentimentTypeFilter] = useState<string>("all");
 
+  // Risk intelligence state
+  const [riskSources, setRiskSources] = useState<any[]>([]);
+  const [riskClassifications, setRiskClassifications] = useState<any[]>([]);
+  const [riskSignals, setRiskSignals] = useState<any[]>([]);
+  const [riskLoading, setRiskLoading] = useState(false);
+  const [riskEngineRunning, setRiskEngineRunning] = useState(false);
+
   // Filters (shared)
   const [exchangeFilter, setExchangeFilter] = useState<string>("all");
   const [eventTypeFilter, setEventTypeFilter] = useState<string>("all");
@@ -496,6 +503,41 @@ export default function OpportunitiesPage() {
       .catch(() => {}); // silent fail for background ingest
   }, []);
 
+  // Fetch risk intelligence data from DB
+  const fetchRiskData = useCallback(async () => {
+    setRiskLoading(true);
+    try {
+      const [srcRes, clsRes, sigRes] = await Promise.all([
+        supabase.from("source_reliability").select("*").order("trust_score", { ascending: false }),
+        supabase.from("event_classification").select("*").order("created_at", { ascending: false }).limit(200),
+        supabase.from("risk_signal_aggregate").select("*").order("risk_score", { ascending: false }),
+      ]);
+      setRiskSources(srcRes.data || []);
+      setRiskClassifications(clsRes.data || []);
+      setRiskSignals(sigRes.data || []);
+    } catch {}
+    setRiskLoading(false);
+  }, []);
+
+  const runRiskEngine = async () => {
+    setRiskEngineRunning(true);
+    try {
+      await supabase.functions.invoke("risk-engine", { method: "POST", body: {} });
+      toast.success("Risk engine completed");
+      fetchRiskData();
+    } catch {
+      toast.error("Risk engine failed");
+    }
+    setRiskEngineRunning(false);
+  };
+
+  // Fetch risk data on mount + poll
+  useEffect(() => {
+    fetchRiskData();
+    const interval = setInterval(fetchRiskData, 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
   // ── Filtered data ─────────────────────────────────────────────
   const filteredEvents = useMemo(() => {
     let base = events;
@@ -518,6 +560,7 @@ export default function OpportunitiesPage() {
     { key: "new_assets", label: "New Assets", icon: "✨", count: events.filter(e => e.event_type === "new_asset").length },
     { key: "delistings", label: "Delistings", icon: "🔴", count: events.filter(e => ["delisting", "suspension"].includes(e.event_type)).length },
     { key: "sentiment", label: "Sentiment", icon: "📊", count: sentimentData?.news.length || 0 },
+    { key: "risk", label: "Risk", icon: "🛡️", count: riskSignals.filter(s => s.risk_level === "HIGH").length },
   ];
 
   return (
@@ -544,8 +587,18 @@ export default function OpportunitiesPage() {
             ))}
           </div>
 
-          {/* Sentiment tab */}
-          {tab === "sentiment" ? (
+          {/* Risk tab */}
+          {tab === "risk" ? (
+            <RiskTab
+              sources={riskSources}
+              classifications={riskClassifications}
+              signals={riskSignals}
+              events={events}
+              loading={riskLoading}
+              engineRunning={riskEngineRunning}
+              onRunEngine={runRiskEngine}
+            />
+          ) : tab === "sentiment" ? (
             <SentimentTab
               data={sentimentData}
               loading={sentimentLoading}
@@ -1042,5 +1095,232 @@ function MiniSparkline({ data, color }: { data: number[]; color: string }) {
     <svg width="100%" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display: "block", marginTop: 4 }}>
       <polyline points={points} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
     </svg>
+  );
+}
+
+// ── Risk Intelligence Tab ───────────────────────────────────────────
+const RISK_COLORS = { LOW: "hsl(142 71% 45%)", MEDIUM: "hsl(43 96% 56%)", HIGH: "hsl(0 84% 60%)" };
+const CLASS_COLORS: Record<string, string> = {
+  OFFICIAL: "hsl(142 71% 45%)", CONFIRMED: "hsl(142 71% 45%)",
+  LIVE: "hsl(210 80% 55%)", UNCONFIRMED: "hsl(43 96% 56%)",
+  LEAK: "hsl(30 90% 55%)", RUMOR: "hsl(0 84% 60%)",
+};
+
+function RiskTab({
+  sources, classifications, signals, events, loading, engineRunning, onRunEngine,
+}: {
+  sources: any[];
+  classifications: any[];
+  signals: any[];
+  events: ListingEvent[];
+  loading: boolean;
+  engineRunning: boolean;
+  onRunEngine: () => void;
+}) {
+  if (loading && sources.length === 0) {
+    return <div style={{ textAlign: "center", padding: 40, color: "var(--muted)" }}>Loading risk intelligence...</div>;
+  }
+
+  const highRisk = signals.filter(s => s.risk_level === "HIGH");
+  const mediumRisk = signals.filter(s => s.risk_level === "MEDIUM");
+  const lowRisk = signals.filter(s => s.risk_level === "LOW");
+
+  // Build event→classification lookup
+  const classMap = new Map<string, any>();
+  for (const c of classifications) classMap.set(c.event_id, c);
+
+  // Source type distribution
+  const typeCount: Record<string, number> = {};
+  for (const s of sources) { typeCount[s.source_type] = (typeCount[s.source_type] || 0) + 1; }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* Header with engine button */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ fontSize: 10, color: "var(--muted)", fontWeight: 700 }}>
+          PHASE 1 — Signal Integrity Foundation · Deterministic Scoring
+        </div>
+        <button className="btn" onClick={onRunEngine} disabled={engineRunning} style={{ fontSize: 10, padding: "4px 12px" }}>
+          {engineRunning ? "⏳ Running..." : "⚡ Run Risk Engine"}
+        </button>
+      </div>
+
+      {/* Stats grid */}
+      <div className="sentiment-stats-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
+        <div className="panel" style={{ padding: "10px 14px" }}>
+          <div style={{ fontSize: 9, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Sources Scored</div>
+          <div style={{ fontSize: 28, fontWeight: 900 }}>{sources.length}</div>
+          <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
+            {Object.entries(typeCount).map(([t, c]) => `${t}: ${c}`).join(" · ")}
+          </div>
+        </div>
+        <div className="panel" style={{ padding: "10px 14px" }}>
+          <div style={{ fontSize: 9, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Events Classified</div>
+          <div style={{ fontSize: 28, fontWeight: 900 }}>{classifications.length}</div>
+          <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
+            {(() => {
+              const counts: Record<string, number> = {};
+              classifications.forEach(c => { counts[c.classification] = (counts[c.classification] || 0) + 1; });
+              return Object.entries(counts).map(([k, v]) => `${k}: ${v}`).join(" · ");
+            })()}
+          </div>
+        </div>
+        <div className="panel" style={{ padding: "10px 14px" }}>
+          <div style={{ fontSize: 9, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Risk Signals</div>
+          <div style={{ display: "flex", gap: 8, fontSize: 11, fontWeight: 800, marginTop: 4 }}>
+            <span style={{ color: RISK_COLORS.HIGH }}>🔴 {highRisk.length} HIGH</span>
+            <span style={{ color: RISK_COLORS.MEDIUM }}>🟡 {mediumRisk.length} MED</span>
+            <span style={{ color: RISK_COLORS.LOW }}>🟢 {lowRisk.length} LOW</span>
+          </div>
+        </div>
+        <div className="panel" style={{ padding: "10px 14px" }}>
+          <div style={{ fontSize: 9, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Gate Check</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{
+              width: 8, height: 8, borderRadius: "50%",
+              background: sources.length > 0 ? "hsl(142 71% 45%)" : "hsl(0 84% 60%)",
+              display: "inline-block",
+            }} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: sources.length > 0 ? "hsl(142 71% 45%)" : "hsl(0 84% 60%)" }}>
+              {sources.length > 0 ? "PHASE 1 PASSED" : "PENDING"}
+            </span>
+          </div>
+          <div style={{ fontSize: 9, color: "var(--muted)", marginTop: 2 }}>
+            {Math.round((sources.length / Math.max(sources.length, 1)) * 100)}% sources classified
+          </div>
+        </div>
+      </div>
+
+      {/* Risk Signals - tokens at risk */}
+      {signals.length > 0 && (
+        <div className="panel" style={{ padding: "10px 14px" }}>
+          <div style={{ fontSize: 10, fontWeight: 800, color: "var(--muted)", textTransform: "uppercase", marginBottom: 8 }}>
+            🛡️ Per-Token Risk Scores — {signals.length} tokens analyzed
+          </div>
+          <div className="tableWrap">
+            <table style={{ width: "100%", fontSize: 11 }}>
+              <thead>
+                <tr style={{ color: "var(--muted)", textAlign: "left" }}>
+                  <th style={{ padding: "4px 0" }}>Token</th>
+                  <th>Risk Score</th>
+                  <th>Level</th>
+                  <th>Signals</th>
+                  <th>Top Signal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {signals.map(s => {
+                  const topSignal = (s.signals || []).sort((a: any, b: any) => (b.risk_contribution || 0) - (a.risk_contribution || 0))[0];
+                  return (
+                    <tr key={s.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                      <td style={{ padding: "5px 0", fontWeight: 800 }}>{s.token_symbol}</td>
+                      <td>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <div style={{ width: 50, height: 6, borderRadius: 3, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+                            <div style={{ width: `${s.risk_score}%`, height: "100%", borderRadius: 3, background: RISK_COLORS[s.risk_level as keyof typeof RISK_COLORS] || RISK_COLORS.LOW }} />
+                          </div>
+                          <span style={{ fontSize: 10, fontWeight: 800, color: RISK_COLORS[s.risk_level as keyof typeof RISK_COLORS] }}>
+                            {s.risk_score}
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <span style={{
+                          fontSize: 9, fontWeight: 800, padding: "2px 6px", borderRadius: 8,
+                          background: `${RISK_COLORS[s.risk_level as keyof typeof RISK_COLORS]}18`,
+                          color: RISK_COLORS[s.risk_level as keyof typeof RISK_COLORS],
+                          textTransform: "uppercase",
+                        }}>
+                          {s.risk_level}
+                        </span>
+                      </td>
+                      <td style={{ fontSize: 10, color: "var(--muted)" }}>{s.signal_count}</td>
+                      <td style={{ fontSize: 10, color: "var(--muted)", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {topSignal?.reason || "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Source Credibility Table */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }} className="sentiment-two-col">
+        <div className="panel" style={{ padding: "10px 14px" }}>
+          <div style={{ fontSize: 10, fontWeight: 800, color: "var(--muted)", textTransform: "uppercase", marginBottom: 8 }}>
+            📡 Source Credibility Scores
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {sources.map(s => (
+              <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
+                <span style={{ fontWeight: 800, fontSize: 11, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {s.source_name}
+                </span>
+                <span style={{
+                  fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 4,
+                  background: "rgba(255,255,255,0.04)", color: "var(--muted)",
+                }}>
+                  {s.source_type.replace(/_/g, " ")}
+                </span>
+                <div style={{ width: 40, height: 5, borderRadius: 3, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+                  <div style={{
+                    width: `${s.trust_score}%`, height: "100%", borderRadius: 3,
+                    background: s.trust_score >= 70 ? RISK_COLORS.LOW : s.trust_score >= 50 ? RISK_COLORS.MEDIUM : RISK_COLORS.HIGH,
+                  }} />
+                </div>
+                <span style={{
+                  fontSize: 10, fontWeight: 800, minWidth: 24, textAlign: "right",
+                  color: s.trust_score >= 70 ? RISK_COLORS.LOW : s.trust_score >= 50 ? RISK_COLORS.MEDIUM : RISK_COLORS.HIGH,
+                }}>
+                  {s.trust_score}
+                </span>
+              </div>
+            ))}
+            {sources.length === 0 && <div style={{ color: "var(--muted)", fontSize: 11 }}>No sources scored yet. Run the risk engine.</div>}
+          </div>
+        </div>
+
+        {/* Recent Event Classifications */}
+        <div className="panel" style={{ padding: "10px 14px" }}>
+          <div style={{ fontSize: 10, fontWeight: 800, color: "var(--muted)", textTransform: "uppercase", marginBottom: 8 }}>
+            🏷️ Event Classifications
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {events.slice(0, 15).map(ev => {
+              const cls = classMap.get(ev.id);
+              return (
+                <div key={ev.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
+                  <span style={{ fontWeight: 800, fontSize: 11, minWidth: 50 }}>{ev.token_symbol}</span>
+                  <span style={{ fontSize: 9, color: "var(--muted)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {ev.event_type.replace(/_/g, " ")} on {ev.exchange}
+                  </span>
+                  {cls ? (
+                    <span style={{
+                      fontSize: 9, fontWeight: 800, padding: "2px 6px", borderRadius: 8,
+                      background: `${CLASS_COLORS[cls.classification] || "var(--muted)"}18`,
+                      color: CLASS_COLORS[cls.classification] || "var(--muted)",
+                      textTransform: "uppercase",
+                    }}>
+                      {cls.classification}
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 9, color: "var(--muted)" }}>unclassified</span>
+                  )}
+                  {cls && (
+                    <span style={{ fontSize: 9, color: "var(--muted)", minWidth: 30, textAlign: "right" }}>
+                      {cls.confidence}%
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+            {events.length === 0 && <div style={{ color: "var(--muted)", fontSize: 11 }}>No events to classify.</div>}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
