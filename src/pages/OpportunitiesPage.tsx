@@ -40,7 +40,41 @@ interface AirdropTask {
   completed?: boolean;
 }
 
-type Tab = "listings" | "airdrops" | "new_assets" | "delistings";
+type Tab = "listings" | "airdrops" | "new_assets" | "delistings" | "sentiment";
+
+// ── Sentiment types ─────────────────────────────────────────────────
+interface SentimentNewsItem {
+  id: string;
+  title: string;
+  url: string;
+  source: string;
+  sourceIcon: string;
+  sentiment: "bullish" | "bearish" | "neutral";
+  sentimentScore: number;
+  timestamp: number;
+  category: string;
+  coins: string[];
+  engagement: number;
+}
+
+interface SentimentTrending {
+  id: string;
+  symbol: string;
+  name: string;
+  thumb: string;
+  marketCapRank: number | null;
+  priceChangePercent24h: number | null;
+  score: number;
+}
+
+interface SentimentData {
+  news: SentimentNewsItem[];
+  trending: SentimentTrending[];
+  fearGreed: { value: number; label: string; history: { value: number; ts: number }[] };
+  marketDominance: { btc: number; eth: number; others: number };
+  communityBuzz: { topic: string; mentions: number; sentiment: string }[];
+  lastUpdated: number;
+}
 
 const EVENT_TYPE_COLORS: Record<string, string> = {
   listing: "hsl(142 71% 45%)",
