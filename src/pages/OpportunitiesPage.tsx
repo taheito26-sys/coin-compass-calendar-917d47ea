@@ -553,7 +553,7 @@ export default function OpportunitiesPage() {
               setSourceFilter={setSentimentSourceFilter}
               typeFilter={sentimentTypeFilter}
               setTypeFilter={setSentimentTypeFilter}
-              onRefresh={fetchSentiment}
+              onRefresh={() => fetchSentiment(true)}
             />
           ) : tab === "airdrops" ? (
             <div>
