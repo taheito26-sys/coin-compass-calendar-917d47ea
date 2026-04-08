@@ -12,7 +12,7 @@ import BenchmarkChart from "@/components/dashboard/BenchmarkChart";
 import { BreakEvenWidget } from "@/components/dashboard/BreakEvenWidget";
 
 import { BenchmarkComparison } from "@/components/dashboard/BenchmarkComparison";
-import { NewlyListed, TrendingSectors } from "@/components/dashboard/MarketMetadata";
+
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -37,8 +37,6 @@ const ALL_CARDS: CardDef[] = [
   { id: "benchmark", label: "Portfolio vs Benchmarks" },
   { id: "benchmark-v2", label: "Market Alpha Analysis", colSpan: 1 },
   { id: "breakEven", label: "Break-Even Targets" },
-  { id: "trendingSectors", label: "Trending Sectors" },
-  { id: "newlyListed", label: "Newly Listed" },
   { id: "movers", label: "Top Movers" },
 ];
 
@@ -223,7 +221,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
     let order: string[] = [];
     switch (preset) {
       case "trader": 
-        order = ["kpis", "news", "whale", "correlation", "risk-advanced", "movers", "marketSentiment", "trendingSectors", "heatmap", "positions"];
+        order = ["kpis", "news", "whale", "correlation", "risk-advanced", "movers", "marketSentiment", "heatmap", "positions"];
         break;
       case "taxes":
         order = ["kpis", "breakEven", "positions"];
@@ -382,30 +380,6 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
         );
 
       case "marketSentiment": return <MarketSentiment />;
-      case "trendingSectors":
-        return (
-          <div className="panel" key="trendingSectors" onDragOver={(e) => handleDragOver(e, "trendingSectors")} onDrop={() => handleDrop("trendingSectors")}>
-            <div className="panel-head">
-              <DragHandle editing={editing} onDragStart={() => handleDragStart("trendingSectors")} onDragEnd={handleDragEnd} />
-              <h2>Trending Sectors</h2>
-            </div>
-            <div className="panel-body">
-              <TrendingSectors />
-            </div>
-          </div>
-        );
-      case "newlyListed":
-        return (
-          <div className="panel" key="newlyListed" onDragOver={(e) => handleDragOver(e, "newlyListed")} onDrop={() => handleDrop("newlyListed")}>
-            <div className="panel-head">
-              <DragHandle editing={editing} onDragStart={() => handleDragStart("newlyListed")} onDragEnd={handleDragEnd} />
-              <h2>Newly Listed</h2>
-            </div>
-            <div className="panel-body">
-              <NewlyListed />
-            </div>
-          </div>
-        );
       case "riskBreakdown": return <PerAssetRiskBreakdown compact />;
       case "benchmark": return <BenchmarkChart compact />;
       case "breakEven":
