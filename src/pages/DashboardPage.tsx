@@ -12,6 +12,8 @@ import BenchmarkChart from "@/components/dashboard/BenchmarkChart";
 import { BreakEvenWidget } from "@/components/dashboard/BreakEvenWidget";
 
 import { BenchmarkComparison } from "@/components/dashboard/BenchmarkComparison";
+import ConcentrationRisk from "@/components/dashboard/ConcentrationRisk";
+import CorrelationMatrix from "@/components/dashboard/CorrelationMatrix";
 
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -37,6 +39,8 @@ const ALL_CARDS: CardDef[] = [
   { id: "benchmark", label: "Portfolio vs Benchmarks" },
   { id: "benchmark-v2", label: "Market Alpha Analysis", colSpan: 1 },
   { id: "breakEven", label: "Break-Even Targets" },
+  { id: "concentrationRisk", label: "Concentration Risk" },
+  { id: "correlationMatrix", label: "Correlation Risk" },
   { id: "movers", label: "Top Movers" },
 ];
 
@@ -381,6 +385,8 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
 
       case "marketSentiment": return <MarketSentiment />;
       case "riskBreakdown": return <PerAssetRiskBreakdown compact />;
+      case "concentrationRisk": return <ConcentrationRisk compact />;
+      case "correlationMatrix": return <CorrelationMatrix compact />;
       case "benchmark": return <BenchmarkChart compact />;
       case "breakEven":
         return (
