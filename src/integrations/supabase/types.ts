@@ -14,6 +14,83 @@ export type Database = {
   }
   public: {
     Tables: {
+      airdrop_projects: {
+        Row: {
+          chain: string | null
+          confidence_score: number
+          created_at: string
+          distribution_date: string | null
+          eligibility_requirements: string | null
+          id: string
+          official_url: string | null
+          project_name: string
+          snapshot_date: string | null
+          token_symbol: string | null
+        }
+        Insert: {
+          chain?: string | null
+          confidence_score?: number
+          created_at?: string
+          distribution_date?: string | null
+          eligibility_requirements?: string | null
+          id?: string
+          official_url?: string | null
+          project_name: string
+          snapshot_date?: string | null
+          token_symbol?: string | null
+        }
+        Update: {
+          chain?: string | null
+          confidence_score?: number
+          created_at?: string
+          distribution_date?: string | null
+          eligibility_requirements?: string | null
+          id?: string
+          official_url?: string | null
+          project_name?: string
+          snapshot_date?: string | null
+          token_symbol?: string | null
+        }
+        Relationships: []
+      }
+      airdrop_tasks: {
+        Row: {
+          created_at: string
+          deadline: string | null
+          description: string
+          id: string
+          project_id: string
+          required: boolean
+          task_type: string
+        }
+        Insert: {
+          created_at?: string
+          deadline?: string | null
+          description: string
+          id?: string
+          project_id: string
+          required?: boolean
+          task_type: string
+        }
+        Update: {
+          created_at?: string
+          deadline?: string | null
+          description?: string
+          id?: string
+          project_id?: string
+          required?: boolean
+          task_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "airdrop_tasks_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "airdrop_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       assets: {
         Row: {
           binance_symbol: string | null
@@ -315,6 +392,99 @@ export type Database = {
         }
         Relationships: []
       }
+      listing_events: {
+        Row: {
+          announcement_time: string | null
+          chain: string | null
+          confidence_score: number
+          contract_address: string | null
+          created_at: string
+          dedup_hash: string | null
+          detected_time: string
+          event_type: string
+          exchange: string
+          id: string
+          lead_time_minutes: number | null
+          pair: string | null
+          raw_payload: string | null
+          source_url: string | null
+          status: string
+          token_name: string | null
+          token_symbol: string
+          updated_at: string
+        }
+        Insert: {
+          announcement_time?: string | null
+          chain?: string | null
+          confidence_score?: number
+          contract_address?: string | null
+          created_at?: string
+          dedup_hash?: string | null
+          detected_time?: string
+          event_type: string
+          exchange: string
+          id?: string
+          lead_time_minutes?: number | null
+          pair?: string | null
+          raw_payload?: string | null
+          source_url?: string | null
+          status?: string
+          token_name?: string | null
+          token_symbol: string
+          updated_at?: string
+        }
+        Update: {
+          announcement_time?: string | null
+          chain?: string | null
+          confidence_score?: number
+          contract_address?: string | null
+          created_at?: string
+          dedup_hash?: string | null
+          detected_time?: string
+          event_type?: string
+          exchange?: string
+          id?: string
+          lead_time_minutes?: number | null
+          pair?: string | null
+          raw_payload?: string | null
+          source_url?: string | null
+          status?: string
+          token_name?: string | null
+          token_symbol?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      listing_sources: {
+        Row: {
+          base_url: string | null
+          created_at: string
+          enabled: boolean
+          id: string
+          name: string
+          priority: number
+          type: string
+        }
+        Insert: {
+          base_url?: string | null
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          name: string
+          priority?: number
+          type: string
+        }
+        Update: {
+          base_url?: string | null
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          name?: string
+          priority?: number
+          type?: string
+        }
+        Relationships: []
+      }
       lots: {
         Row: {
           acquired_at: string
@@ -475,6 +645,33 @@ export type Database = {
           },
         ]
       }
+      token_risk_flags: {
+        Row: {
+          created_at: string
+          description: string | null
+          flag_type: string
+          id: string
+          severity: number
+          token_symbol: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          flag_type: string
+          id?: string
+          severity?: number
+          token_symbol: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          flag_type?: string
+          id?: string
+          severity?: number
+          token_symbol?: string
+        }
+        Relationships: []
+      }
       tracking_preferences: {
         Row: {
           asset_id: string | null
@@ -568,6 +765,38 @@ export type Database = {
             columns: ["asset_id"]
             isOneToOne: false
             referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_airdrop_progress: {
+        Row: {
+          completed: boolean
+          completed_at: string | null
+          id: string
+          task_id: string
+          user_id: string
+        }
+        Insert: {
+          completed?: boolean
+          completed_at?: string | null
+          id?: string
+          task_id: string
+          user_id: string
+        }
+        Update: {
+          completed?: boolean
+          completed_at?: string | null
+          id?: string
+          task_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_airdrop_progress_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "airdrop_tasks"
             referencedColumns: ["id"]
           },
         ]
