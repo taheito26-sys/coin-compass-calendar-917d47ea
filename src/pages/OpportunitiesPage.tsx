@@ -462,14 +462,64 @@ export default function OpportunitiesPage() {
           {/* Airdrops tab — special rendering */}
           {tab === "airdrops" ? (
             <div>
-              {/* Airdrop projects with task tracking */}
-              {airdrops.length > 0 && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
-                  {airdrops.map(project => (
-                    <AirdropCard key={project.id} project={project} onToggleTask={toggleTask} />
+              {/* Airdrop filters */}
+              <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
+                <input
+                  className="inp"
+                  type="text"
+                  placeholder="Search projects..."
+                  value={airdropSearch}
+                  onChange={e => setAirdropSearch(e.target.value)}
+                  style={{ fontSize: 11, padding: "4px 8px", minWidth: 140 }}
+                />
+                <select className="inp" value={airdropChainFilter} onChange={e => setAirdropChainFilter(e.target.value)} style={{ fontSize: 11, padding: "4px 8px" }}>
+                  <option value="all">All Chains</option>
+                  {[...new Set(airdrops.map(a => a.chain).filter(Boolean))].sort().map(c => (
+                    <option key={c!} value={c!}>{c}</option>
                   ))}
+                </select>
+                <select className="inp" value={airdropTaskTypeFilter} onChange={e => setAirdropTaskTypeFilter(e.target.value)} style={{ fontSize: 11, padding: "4px 8px" }}>
+                  <option value="all">All Task Types</option>
+                  {[...new Set(airdrops.flatMap(a => a.tasks.map(t => t.task_type)))].sort().map(tt => (
+                    <option key={tt} value={tt}>{tt}</option>
+                  ))}
+                </select>
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ fontSize: 10, color: "var(--muted)" }}>Min Confidence:</span>
+                  <input
+                    type="number" className="inp" value={airdropMinConfidence || ""}
+                    onChange={e => setAirdropMinConfidence(parseInt(e.target.value) || 0)}
+                    placeholder="0" min={0} max={100}
+                    style={{ width: 50, fontSize: 11, padding: "4px 6px" }}
+                  />
                 </div>
-              )}
+              </div>
+
+              {/* Filtered airdrop projects */}
+              {(() => {
+                let filtered = airdrops;
+                if (airdropSearch) {
+                  const q = airdropSearch.toLowerCase();
+                  filtered = filtered.filter(p =>
+                    p.project_name.toLowerCase().includes(q) ||
+                    (p.token_symbol || "").toLowerCase().includes(q) ||
+                    (p.chain || "").toLowerCase().includes(q)
+                  );
+                }
+                if (airdropChainFilter !== "all") filtered = filtered.filter(p => p.chain === airdropChainFilter);
+                if (airdropMinConfidence > 0) filtered = filtered.filter(p => p.confidence_score >= airdropMinConfidence);
+                if (airdropTaskTypeFilter !== "all") filtered = filtered.filter(p => p.tasks.some(t => t.task_type === airdropTaskTypeFilter));
+
+                return filtered.length > 0 ? (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+                    {filtered.map(project => (
+                      <AirdropCard key={project.id} project={project} onToggleTask={toggleTask} />
+                    ))}
+                  </div>
+                ) : !loading ? (
+                  <EmptyState message="No airdrops match the current filters." />
+                ) : null;
+              })()}
 
               {/* Airdrop events from listings */}
               {filteredEvents.length > 0 && (
