@@ -54,6 +54,33 @@ function extractCoins(text: string): string[] {
   return [...new Set(coins)];
 }
 
+// ─── Sentiment Analysis ───
+const BULLISH_WORDS = new Set([
+  "bull","bullish","surge","rally","moon","pump","breakout","gain","soar","rocket",
+  "ath","buy","long","uptrend","recovery","green","optimistic","accumulate","hodl",
+  "adoption","upgrade","partnership","launch","listing","institutional","whale buying",
+]);
+const BEARISH_WORDS = new Set([
+  "bear","bearish","crash","dump","drop","plunge","sell","short","decline","dip",
+  "scam","rug","hack","exploit","fear","panic","liquidat","capitulat","red","loss",
+  "ban","regulation","sec","lawsuit","delisting","bankrupt","insolvent",
+]);
+
+function analyzeSentiment(text: string): { sentiment: "bullish"|"bearish"|"neutral"; score: number } {
+  const lower = text.toLowerCase();
+  const words = lower.split(/\W+/);
+  let bullCount = 0, bearCount = 0;
+  for (const w of words) {
+    if (BULLISH_WORDS.has(w)) bullCount++;
+    if (BEARISH_WORDS.has(w)) bearCount++;
+  }
+  const total = bullCount + bearCount;
+  if (total === 0) return { sentiment: "neutral", score: 0 };
+  const score = (bullCount - bearCount) / total; // -1 to 1
+  const sentiment = score > 0.15 ? "bullish" : score < -0.15 ? "bearish" : "neutral";
+  return { sentiment, score };
+}
+
 // ─── Types ───
 interface NewsItem {
   id: string; title: string; url: string; source: string; sourceIcon: string;
