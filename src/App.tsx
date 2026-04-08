@@ -27,8 +27,23 @@ const PAGE_TITLES: Record<string, [string, string]> = {
 
 function LoadingScreen() {
   return (
-    <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#0a0a0a", color: "#a1a1aa" }}>
-      Loading authentication...
+    <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#080808" }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 20 }}>
+        <div
+          style={{
+            width: 40,
+            height: 40,
+            border: "3px solid rgba(141, 27, 61, 0.2)",
+            borderTopColor: "#8D1B3D",
+            borderRadius: "50%",
+            animation: "spin 0.8s linear infinite",
+          }}
+        />
+        <span style={{ color: "#a1a1aa", fontSize: 14, letterSpacing: "0.02em" }}>
+          Authenticating…
+        </span>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
     </div>
   );
 }
