@@ -161,11 +161,17 @@ export async function createAsset(input: {
 
 // ─── Transaction operations ────────────────────────────────
 
-export async function fetchTransactions(): Promise<ApiTransaction[]> {
-  const { data, error } = await supabase
+export async function fetchTransactions(forUserId?: string): Promise<ApiTransaction[]> {
+  let query = supabase
     .from("transactions")
     .select("*")
     .order("timestamp", { ascending: true });
+  
+  if (forUserId) {
+    query = query.eq("user_id", forUserId);
+  }
+
+  const { data, error } = await query;
   if (error) throw new Error(`fetchTransactions: ${error.message}`);
   return (data || []).map((tx) => ({
     id: tx.id,
@@ -481,11 +487,17 @@ export async function setTrackingPreference(trackingMode: string, assetId?: stri
 
 // ─── Imported files ────────────────────────────────────────
 
-export async function fetchImportedFiles(): Promise<any[]> {
-  const { data, error } = await supabase
+export async function fetchImportedFiles(forUserId?: string): Promise<any[]> {
+  let query = supabase
     .from("imported_files")
     .select("*")
     .order("imported_at", { ascending: false });
+  
+  if (forUserId) {
+    query = query.eq("user_id", forUserId);
+  }
+
+  const { data, error } = await query;
   if (error) throw new Error(`fetchImportedFiles: ${error.message}`);
   return data || [];
 }
@@ -607,11 +619,16 @@ export async function recordImportBatch(input: any): Promise<{ ok: boolean; batc
 
 // ─── User preferences ─────────────────────────────────────
 
-export async function fetchUserPreferences(): Promise<Record<string, string>> {
-  const { data, error } = await supabase
+export async function fetchUserPreferences(forUserId?: string): Promise<Record<string, string>> {
+  let query = supabase
     .from("user_preferences")
     .select("key, value");
 
+  if (forUserId) {
+    query = query.eq("user_id", forUserId);
+  }
+
+  const { data, error } = await query;
   if (error) throw new Error(`fetchUserPreferences: ${error.message}`);
   const prefs: Record<string, string> = {};
   for (const row of data || []) {
