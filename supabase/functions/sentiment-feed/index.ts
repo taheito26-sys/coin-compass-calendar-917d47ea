@@ -54,6 +54,33 @@ function extractCoins(text: string): string[] {
   return [...new Set(coins)];
 }
 
+// ─── Sentiment Analysis ───
+const BULLISH_WORDS = new Set([
+  "bull","bullish","surge","rally","moon","pump","breakout","gain","soar","rocket",
+  "ath","buy","long","uptrend","recovery","green","optimistic","accumulate","hodl",
+  "adoption","upgrade","partnership","launch","listing","institutional","whale buying",
+]);
+const BEARISH_WORDS = new Set([
+  "bear","bearish","crash","dump","drop","plunge","sell","short","decline","dip",
+  "scam","rug","hack","exploit","fear","panic","liquidat","capitulat","red","loss",
+  "ban","regulation","sec","lawsuit","delisting","bankrupt","insolvent",
+]);
+
+function analyzeSentiment(text: string): { sentiment: "bullish"|"bearish"|"neutral"; score: number } {
+  const lower = text.toLowerCase();
+  const words = lower.split(/\W+/);
+  let bullCount = 0, bearCount = 0;
+  for (const w of words) {
+    if (BULLISH_WORDS.has(w)) bullCount++;
+    if (BEARISH_WORDS.has(w)) bearCount++;
+  }
+  const total = bullCount + bearCount;
+  if (total === 0) return { sentiment: "neutral", score: 0 };
+  const score = (bullCount - bearCount) / total; // -1 to 1
+  const sentiment = score > 0.15 ? "bullish" : score < -0.15 ? "bearish" : "neutral";
+  return { sentiment, score };
+}
+
 // ─── Types ───
 interface NewsItem {
   id: string; title: string; url: string; source: string; sourceIcon: string;
@@ -86,16 +113,30 @@ interface SentimentData {
 // ─── Fetchers ───
 
 async function fetchReddit(subreddit: string): Promise<NewsItem[]> {
-  try {
-    const r = await fetch(`https://www.reddit.com/r/${subreddit}/hot.json?limit=50`, {
-      headers: { "User-Agent": "CoinCompass/2.0" },
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!r.ok) return [];
-    const json = await r.json();
-    return (json?.data?.children || [])
-      .filter((p: any) => p.data && !p.data.stickied && p.data.score > 5)
-      .map((p: any) => {
+  // Try multiple Reddit endpoints — old.reddit.com is less strict
+  const urls = [
+    `https://old.reddit.com/r/${subreddit}/hot.json?limit=50`,
+    `https://www.reddit.com/r/${subreddit}/hot.json?limit=50&raw_json=1`,
+  ];
+  for (const url of urls) {
+    try {
+      const r = await fetch(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; CoinCompassBot/2.0; +https://coincompass.app)",
+          "Accept": "application/json",
+        },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!r.ok) {
+        console.warn(`[sentiment-feed] Reddit ${url} returned ${r.status}`);
+        continue;
+      }
+      const json = await r.json();
+      const posts = (json?.data?.children || [])
+        .filter((p: any) => p.data && !p.data.stickied && p.data.score > 5);
+      if (posts.length === 0) continue;
+      console.log(`[sentiment-feed] Reddit r/${subreddit}: ${posts.length} posts`);
+      return posts.map((p: any) => {
         const d = p.data;
         const text = `${d.title} ${d.selftext || ""}`;
         const { sentiment, score } = analyzeSentiment(text);
@@ -109,7 +150,71 @@ async function fetchReddit(subreddit: string): Promise<NewsItem[]> {
           engagement: d.score + (d.num_comments || 0),
         };
       });
-  } catch { return []; }
+    } catch (err) {
+      console.warn(`[sentiment-feed] Reddit ${url} error:`, (err as Error).message);
+    }
+  }
+  return [];
+}
+
+// Generate news items from CoinGecko trending data (always works)
+function trendingToNews(trending: TrendingCoin[]): NewsItem[] {
+  return trending.map(t => {
+    const changeText = t.priceChangePercent24h != null
+      ? (t.priceChangePercent24h > 5 ? "surging bullish rally" : t.priceChangePercent24h < -5 ? "dropping bearish decline" : "stable")
+      : "trending";
+    const title = `${t.name} (${t.symbol}) is trending — ${t.priceChangePercent24h != null ? `${t.priceChangePercent24h > 0 ? "+" : ""}${t.priceChangePercent24h.toFixed(1)}% in 24h` : "gaining attention"}`;
+    const { sentiment, score } = analyzeSentiment(`${t.name} ${t.symbol} ${changeText}`);
+    return {
+      id: `trending_${t.id}`,
+      title,
+      url: `https://www.coingecko.com/en/coins/${t.id}`,
+      source: "CoinGecko Trending", sourceIcon: "🔥",
+      sentiment, sentimentScore: score,
+      timestamp: Date.now(), category: "trending",
+      coins: [t.symbol.toUpperCase()],
+      engagement: (t.marketCapRank ? 200 - t.marketCapRank : 50) + t.score * 10,
+    };
+  });
+}
+
+// Fetch crypto news from CoinGecko status updates (free, no key)
+async function fetchCoinGeckoNews(): Promise<NewsItem[]> {
+  try {
+    // Use CoinGecko's free search API for trending related news
+    const r = await fetch(
+      "https://api.coingecko.com/api/v3/search/trending",
+      { signal: AbortSignal.timeout(8000) }
+    );
+    if (!r.ok) return [];
+    const json = await r.json();
+    
+    // Extract NFT and category trends as additional sentiment signals
+    const items: NewsItem[] = [];
+    
+    // Process trending categories
+    for (const cat of (json.categories || []).slice(0, 10)) {
+      const data = cat.data || {};
+      const change = data.market_cap_change_percentage_24h?.usd ?? 0;
+      const title = `${cat.name} sector ${change > 0 ? "up" : "down"} ${Math.abs(change).toFixed(1)}% — ${change > 3 ? "bullish momentum" : change < -3 ? "bearish pressure" : "consolidating"}`;
+      const { sentiment, score } = analyzeSentiment(title);
+      items.push({
+        id: `cgcat_${cat.id}`, title,
+        url: `https://www.coingecko.com/en/categories/${cat.id}`,
+        source: "CoinGecko", sourceIcon: "🦎",
+        sentiment, sentimentScore: score,
+        timestamp: Date.now(), category: "market",
+        coins: extractCoins(cat.name || ""),
+        engagement: Math.abs(change) * 10,
+      });
+    }
+    
+    console.log(`[sentiment-feed] CoinGecko news: ${items.length} items`);
+    return items;
+  } catch (err) {
+    console.error("[sentiment-feed] CoinGecko news error:", err);
+    return [];
+  }
 }
 
 async function fetchCoinGeckoTrending(): Promise<TrendingCoin[]> {
@@ -354,13 +459,13 @@ Deno.serve(async (req) => {
 
     // Full fetch from all sources concurrently
     const [
-      redditCrypto, redditBitcoin, redditDefi, redditAltcoin,
+      redditCrypto, redditBitcoin,
+      cgNews,
       trending, top100, categoryNews, fearGreed, dominance,
     ] = await Promise.allSettled([
       fetchReddit("CryptoCurrency"),
       fetchReddit("Bitcoin"),
-      fetchReddit("defi"),
-      fetchReddit("altcoin"),
+      fetchCoinGeckoNews(),
       fetchCoinGeckoTrending(),
       fetchCoinGeckoTop100(),
       fetchCategoryNews(),
@@ -368,13 +473,19 @@ Deno.serve(async (req) => {
       fetchMarketDominance(),
     ]);
 
+    // Convert trending coins into news items with coin mentions
+    const trendingData = trending.status === "fulfilled" ? trending.value : [];
+    const trendingNews = trendingToNews(trendingData);
+
     const allNews: NewsItem[] = [
       ...(redditCrypto.status === "fulfilled" ? redditCrypto.value : []),
       ...(redditBitcoin.status === "fulfilled" ? redditBitcoin.value : []),
-      ...(redditDefi.status === "fulfilled" ? redditDefi.value : []),
-      ...(redditAltcoin.status === "fulfilled" ? redditAltcoin.value : []),
+      ...(cgNews.status === "fulfilled" ? cgNews.value : []),
+      ...trendingNews,
       ...(categoryNews.status === "fulfilled" ? categoryNews.value : []),
     ];
+    const redditCount = [redditCrypto, redditBitcoin].filter(r => r.status === "fulfilled").reduce((s, r) => s + (r as PromiseFulfilledResult<NewsItem[]>).value.length, 0);
+    console.log(`[sentiment-feed] Total news: ${allNews.length} (Reddit: ${redditCount}, Trending: ${trendingNews.length}, CG News: ${cgNews.status === "fulfilled" ? cgNews.value.length : 0}, Categories: ${categoryNews.status === "fulfilled" ? categoryNews.value.length : 0})`);
 
     // Deduplicate
     const seen = new Set<string>();
@@ -385,7 +496,7 @@ Deno.serve(async (req) => {
 
     const result: SentimentData = {
       news: uniqueNews.slice(0, 75),
-      trending: trending.status === "fulfilled" ? trending.value : [],
+      trending: trendingData,
       fearGreed: fearGreed.status === "fulfilled" ? fearGreed.value : { value: 50, label: "Neutral", history: [] },
       marketDominance: dominance.status === "fulfilled" ? dominance.value : { btc: 50, eth: 18, others: 32 },
       communityBuzz: aggregateBuzz(uniqueNews),
