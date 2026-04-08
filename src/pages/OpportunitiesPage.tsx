@@ -424,14 +424,40 @@ export default function OpportunitiesPage() {
     }
   };
 
+  // Fetch sentiment data
+  const fetchSentiment = async () => {
+    setSentimentLoading(true);
+    try {
+      // Try cached first
+      const cached = localStorage.getItem("lt_sentiment");
+      if (cached) {
+        const p = JSON.parse(cached);
+        if (p.lastUpdated && Date.now() - p.lastUpdated < 300_000) {
+          setSentimentData(p);
+          setSentimentLoading(false);
+        }
+      }
+      const { data, error } = await supabase.functions.invoke("sentiment-feed", { method: "POST", body: {} });
+      if (error) throw error;
+      setSentimentData(data);
+      localStorage.setItem("lt_sentiment", JSON.stringify(data));
+    } catch (err) {
+      console.error("Sentiment fetch error:", err);
+    } finally {
+      setSentimentLoading(false);
+    }
+  };
+
   // Auto-refresh: fetch on mount, then poll every 60s
   useEffect(() => {
     fetchEvents();
     fetchAirdrops();
+    fetchSentiment();
 
     const interval = setInterval(() => {
       fetchEvents();
       fetchAirdrops();
+      fetchSentiment();
     }, 60_000);
 
     return () => clearInterval(interval);
