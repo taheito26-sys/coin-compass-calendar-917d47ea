@@ -293,6 +293,13 @@ export default function OpportunitiesPage() {
   const [sentimentSourceFilter, setSentimentSourceFilter] = useState<string>("all");
   const [sentimentTypeFilter, setSentimentTypeFilter] = useState<string>("all");
 
+  // Risk intelligence state
+  const [riskSources, setRiskSources] = useState<any[]>([]);
+  const [riskClassifications, setRiskClassifications] = useState<any[]>([]);
+  const [riskSignals, setRiskSignals] = useState<any[]>([]);
+  const [riskLoading, setRiskLoading] = useState(false);
+  const [riskEngineRunning, setRiskEngineRunning] = useState(false);
+
   // Filters (shared)
   const [exchangeFilter, setExchangeFilter] = useState<string>("all");
   const [eventTypeFilter, setEventTypeFilter] = useState<string>("all");
