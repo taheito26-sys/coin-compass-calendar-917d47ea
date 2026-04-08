@@ -829,17 +829,18 @@ function SentimentTab({
           </div>
         </div>
 
-        {/* Sources */}
+        {/* Live Status */}
         <div className="panel" style={{ padding: "10px 14px" }}>
-          <div style={{ fontSize: 9, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Sources</div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text)" }}>
-            {sources.length} feeds active
+          <div style={{ fontSize: 9, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Live Engine</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "hsl(142 71% 45%)", display: "inline-block", animation: "pulse 2s infinite" }} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: "hsl(142 71% 45%)" }}>LIVE</span>
           </div>
           <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
-            Reddit · CoinGecko · Alt.me
+            {sources.length} feeds · {(data.coinSentiments || []).length} coins
           </div>
           <div style={{ fontSize: 9, color: "var(--muted)", marginTop: 4 }}>
-            Updated {new Date(data.lastUpdated).toLocaleTimeString()}
+            {new Date(data.lastUpdated).toLocaleTimeString()}
           </div>
         </div>
       </div>
