@@ -85,6 +85,7 @@ export default function CommunityHealth() {
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<"grade" | "sentiment" | "mentions" | "consistency">("grade");
+  const [expandedCoin, setExpandedCoin] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -221,7 +222,9 @@ export default function CommunityHealth() {
         display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 8,
       }}>
         {coins.map(c => (
-          <div key={c.symbol} className="panel" style={{ padding: "12px 14px" }}>
+          <div key={c.symbol} className="panel" style={{ padding: "12px 14px", cursor: "pointer", transition: "box-shadow .15s" }}
+            onClick={() => setExpandedCoin(expandedCoin === c.symbol ? null : c.symbol)}
+          >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{
@@ -262,6 +265,11 @@ export default function CommunityHealth() {
               <span>{c.totalMentions} total mentions</span>
               <span>Score: {c.composite.toFixed(0)}</span>
             </div>
+
+            {/* Drill-down detail */}
+            {expandedCoin === c.symbol && (
+              <CoinDrillDown symbol={c.symbol} history={history} coinData={c} />
+            )}
           </div>
         ))}
       </div>
