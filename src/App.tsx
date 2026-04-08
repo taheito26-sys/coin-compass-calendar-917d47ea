@@ -12,6 +12,7 @@ import SettingsPage from "@/pages/SettingsPage";
 import LedgerPage from "@/pages/LedgerPage";
 import WhalePage from "@/pages/WhalePage";
 import OpportunitiesPage from "@/pages/OpportunitiesPage";
+import { useSentimentAlerts } from "@/hooks/useSentimentAlerts";
 
 const PAGE_TITLES: Record<string, [string, string]> = {
   dashboard: ["Dashboard", "KPIs, Allocation, Heatmap"],
@@ -36,6 +37,7 @@ function AppShell({ onLogout, userLabel }: { onLogout: () => Promise<void>; user
   const [page, setPage] = useState("dashboard");
   const { toastMsg } = useCrypto() || {};
   const [title, sub] = PAGE_TITLES[page] || ["Crypto Tracker", ""];
+  useSentimentAlerts(); // monitors trending coins for >5% hourly moves
   console.log(`[AppShell] Rendering ${page}`);
   return (
     <div className="app">
