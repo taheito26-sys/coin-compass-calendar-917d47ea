@@ -1,12 +1,11 @@
 /**
- * sentiment-feed — Aggregates crypto sentiment & news from FREE public APIs
- * Sources:
- *   1. CoinGecko Trending (no key)
- *   2. Reddit r/cryptocurrency + r/bitcoin JSON feeds (no key)
- *   3. CoinGecko status updates (no key)
- *   4. Alternative.me Fear & Greed history (no key)
- *   5. CoinGecko global data for market dominance (no key)
+ * sentiment-feed — Live sentiment engine for top 100 crypto coins
+ * Aggregates from FREE public APIs, persists to sentiment_cache table
+ * Sources: CoinGecko (trending, categories, global), Reddit, Alternative.me F&G
+ * Runs on pg_cron every 5 min — frontend just reads cached data
  */
+
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,28 +13,74 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// ─── Top 100 coin symbols for extraction ───
+const TOP_100_SYMBOLS = [
+  "BTC","ETH","BNB","SOL","XRP","DOGE","ADA","AVAX","DOT","MATIC",
+  "LINK","UNI","SHIB","ARB","OP","LTC","BCH","NEAR","APT","FIL",
+  "ICP","ATOM","XLM","HBAR","VET","ALGO","GRT","FTM","AAVE","EOS",
+  "SAND","MANA","AXS","THETA","EGLD","FLOW","CHZ","ENJ","GALA","IMX",
+  "LDO","RPL","SSV","CRV","MKR","SNX","COMP","SUSHI","YFI","BAL",
+  "DYDX","GMX","PENDLE","RUNE","INJ","TIA","SEI","SUI","PEPE","WIF",
+  "FLOKI","BONK","ORDI","STX","KASPA","TON","TRX","LEO","OKB","CRO",
+  "RNDR","FET","AGIX","OCEAN","WLD","TAO","AR","HNT","ROSE","ZIL",
+  "ONE","KAVA","CELO","OSMO","AKT","TWT","QNT","XMR","ZEC","DASH",
+  "NEO","IOTA","XTZ","MINA","CFX","BLUR","APE","1INCH","ANKR","ENS",
+];
+
+// Build regex patterns dynamically for all 100 coins
+const COIN_PATTERNS = TOP_100_SYMBOLS.map(s => ({
+  sym: s,
+  re: new RegExp(`\\b${s.replace(/\$/g, "\\$")}\\b`, "i"),
+}));
+
+// ─── Sentiment keywords ───
+const BULLISH = [
+  "bull","pump","moon","rally","surge","soar","breakout","ath","all-time high",
+  "adoption","partnership","approved","launch","upgrade","milestone","record",
+  "growth","gain","profit","win","buy","long","accumulate","bullish","🚀","📈",
+  "institutional","etf","halving","support","mainstream","integration",
+];
+const BEARISH = [
+  "bear","dump","crash","drop","fall","plunge","decline","sell","short",
+  "hack","exploit","rug","scam","fraud","ban","regulate","fear","panic",
+  "liquidat","bankrupt","collapse","warning","risk","bearish","📉","🔴",
+  "lawsuit","sec","fine","penalty","investigation","vulnerability",
+];
+
+function analyzeSentiment(text: string): { sentiment: "bullish"|"bearish"|"neutral"; score: number } {
+  const lower = text.toLowerCase();
+  let score = 0;
+  for (const w of BULLISH) if (lower.includes(w)) score += 1;
+  for (const w of BEARISH) if (lower.includes(w)) score -= 1;
+  const normalized = Math.max(-1, Math.min(1, score / 3));
+  return { sentiment: normalized > 0.15 ? "bullish" : normalized < -0.15 ? "bearish" : "neutral", score: normalized };
+}
+
+function extractCoins(text: string): string[] {
+  const coins: string[] = [];
+  for (const { sym, re } of COIN_PATTERNS) {
+    if (re.test(text)) coins.push(sym);
+  }
+  return [...new Set(coins)];
+}
+
+// ─── Types ───
 interface NewsItem {
-  id: string;
-  title: string;
-  url: string;
-  source: string;
-  sourceIcon: string;
-  sentiment: "bullish" | "bearish" | "neutral";
-  sentimentScore: number; // -1 to 1
-  timestamp: number;
-  category: string;
-  coins: string[];
-  engagement: number;
+  id: string; title: string; url: string; source: string; sourceIcon: string;
+  sentiment: "bullish"|"bearish"|"neutral"; sentimentScore: number;
+  timestamp: number; category: string; coins: string[]; engagement: number;
 }
 
 interface TrendingCoin {
-  id: string;
-  symbol: string;
-  name: string;
-  thumb: string;
-  marketCapRank: number | null;
-  priceChangePercent24h: number | null;
-  score: number;
+  id: string; symbol: string; name: string; thumb: string;
+  marketCapRank: number|null; priceChangePercent24h: number|null; score: number;
+}
+
+interface CoinSentiment {
+  symbol: string; name: string; mentions: number;
+  avgSentiment: number; sentiment: "bullish"|"bearish"|"neutral";
+  price: number; change24h: number|null; marketCapRank: number;
+  image: string;
 }
 
 interface SentimentData {
@@ -44,120 +89,73 @@ interface SentimentData {
   fearGreed: { value: number; label: string; history: { value: number; ts: number }[] };
   marketDominance: { btc: number; eth: number; others: number };
   communityBuzz: { topic: string; mentions: number; sentiment: string }[];
+  coinSentiments: CoinSentiment[];
   lastUpdated: number;
 }
 
-// ─── Sentiment analysis (keyword-based, no AI needed) ───
-const BULLISH_WORDS = [
-  "bull", "pump", "moon", "rally", "surge", "soar", "breakout", "ath", "all-time high",
-  "adoption", "partnership", "approved", "launch", "upgrade", "milestone", "record",
-  "growth", "gain", "profit", "win", "buy", "long", "accumulate", "bullish", "🚀", "📈",
-  "institutional", "etf", "halving", "support",
-];
-
-const BEARISH_WORDS = [
-  "bear", "dump", "crash", "drop", "fall", "plunge", "decline", "sell", "short",
-  "hack", "exploit", "rug", "scam", "fraud", "ban", "regulate", "fear", "panic",
-  "liquidat", "bankrupt", "collapse", "warning", "risk", "bearish", "📉", "🔴",
-  "lawsuit", "sec", "fine", "penalty",
-];
-
-function analyzeSentiment(text: string): { sentiment: "bullish" | "bearish" | "neutral"; score: number } {
-  const lower = text.toLowerCase();
-  let score = 0;
-  for (const w of BULLISH_WORDS) if (lower.includes(w)) score += 1;
-  for (const w of BEARISH_WORDS) if (lower.includes(w)) score -= 1;
-  const normalized = Math.max(-1, Math.min(1, score / 3));
-  const sentiment = normalized > 0.15 ? "bullish" : normalized < -0.15 ? "bearish" : "neutral";
-  return { sentiment, score: normalized };
-}
-
-function extractCoins(text: string): string[] {
-  const coins: string[] = [];
-  const patterns = [
-    /\b(BTC|Bitcoin)\b/i, /\b(ETH|Ethereum)\b/i, /\b(SOL|Solana)\b/i,
-    /\b(BNB)\b/i, /\b(XRP|Ripple)\b/i, /\b(ADA|Cardano)\b/i,
-    /\b(DOGE|Dogecoin)\b/i, /\b(AVAX|Avalanche)\b/i, /\b(DOT|Polkadot)\b/i,
-    /\b(MATIC|Polygon)\b/i, /\b(LINK|Chainlink)\b/i, /\b(UNI|Uniswap)\b/i,
-    /\b(SHIB)\b/i, /\b(ARB|Arbitrum)\b/i, /\b(OP|Optimism)\b/i,
-  ];
-  for (const p of patterns) {
-    if (p.test(text)) {
-      const m = text.match(p);
-      if (m) coins.push(m[1].toUpperCase());
-    }
-  }
-  return [...new Set(coins)];
-}
-
-// ─── Source fetchers ───
+// ─── Fetchers ───
 
 async function fetchReddit(subreddit: string): Promise<NewsItem[]> {
   try {
-    const r = await fetch(`https://www.reddit.com/r/${subreddit}/hot.json?limit=25`, {
-      headers: { "User-Agent": "CoinCompass/1.0" },
-      signal: AbortSignal.timeout(8000),
+    const r = await fetch(`https://www.reddit.com/r/${subreddit}/hot.json?limit=50`, {
+      headers: { "User-Agent": "CoinCompass/2.0" },
+      signal: AbortSignal.timeout(10000),
     });
     if (!r.ok) return [];
     const json = await r.json();
-    const posts = json?.data?.children || [];
-    return posts
-      .filter((p: any) => p.data && !p.data.stickied && p.data.score > 10)
+    return (json?.data?.children || [])
+      .filter((p: any) => p.data && !p.data.stickied && p.data.score > 5)
       .map((p: any) => {
         const d = p.data;
-        const { sentiment, score } = analyzeSentiment(`${d.title} ${d.selftext || ""}`);
+        const text = `${d.title} ${d.selftext || ""}`;
+        const { sentiment, score } = analyzeSentiment(text);
         return {
-          id: `reddit_${d.id}`,
-          title: d.title,
+          id: `reddit_${d.id}`, title: d.title,
           url: `https://reddit.com${d.permalink}`,
-          source: `r/${subreddit}`,
-          sourceIcon: "🟠",
-          sentiment,
-          sentimentScore: score,
-          timestamp: d.created_utc * 1000,
-          category: "community",
-          coins: extractCoins(`${d.title} ${d.selftext || ""}`),
+          source: `r/${subreddit}`, sourceIcon: "🟠",
+          sentiment, sentimentScore: score,
+          timestamp: d.created_utc * 1000, category: "community",
+          coins: extractCoins(text),
           engagement: d.score + (d.num_comments || 0),
         };
       });
-  } catch {
-    return [];
-  }
+  } catch { return []; }
 }
 
 async function fetchCoinGeckoTrending(): Promise<TrendingCoin[]> {
   try {
-    const r = await fetch("https://api.coingecko.com/api/v3/search/trending", {
-      signal: AbortSignal.timeout(8000),
-    });
+    const r = await fetch("https://api.coingecko.com/api/v3/search/trending", { signal: AbortSignal.timeout(8000) });
     if (!r.ok) return [];
     const json = await r.json();
     return (json.coins || []).map((c: any, i: number) => ({
-      id: c.item.id,
-      symbol: c.item.symbol,
-      name: c.item.name,
+      id: c.item.id, symbol: c.item.symbol, name: c.item.name,
       thumb: c.item.thumb || c.item.small || "",
       marketCapRank: c.item.market_cap_rank || null,
       priceChangePercent24h: c.item.data?.price_change_percentage_24h?.usd ?? null,
       score: i + 1,
     }));
-  } catch {
-    return [];
-  }
+  } catch { return []; }
 }
 
-async function fetchCoinGeckoStatusUpdates(): Promise<NewsItem[]> {
+async function fetchCoinGeckoTop100(): Promise<any[]> {
   try {
-    // Use CoinGecko's categories list for market context (free, no key)
-    const r = await fetch("https://api.coingecko.com/api/v3/coins/categories", {
-      signal: AbortSignal.timeout(8000),
-    });
+    const r = await fetch(
+      "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=false&price_change_percentage=24h",
+      { signal: AbortSignal.timeout(10000) }
+    );
+    if (!r.ok) return [];
+    return await r.json();
+  } catch { return []; }
+}
+
+async function fetchCategoryNews(): Promise<NewsItem[]> {
+  try {
+    const r = await fetch("https://api.coingecko.com/api/v3/coins/categories", { signal: AbortSignal.timeout(8000) });
     if (!r.ok) return [];
     const cats = await r.json();
-    // Generate "news" from top movers in categories
     return cats
       .filter((c: any) => c.market_cap_change_24h != null && Math.abs(c.market_cap_change_24h) > 3)
-      .slice(0, 15)
+      .slice(0, 20)
       .map((c: any) => {
         const change = c.market_cap_change_24h;
         const { sentiment, score } = analyzeSentiment(
@@ -167,80 +165,126 @@ async function fetchCoinGeckoStatusUpdates(): Promise<NewsItem[]> {
           id: `cat_${c.id}`,
           title: `${c.name}: ${change > 0 ? "+" : ""}${change.toFixed(1)}% market cap change (24h)`,
           url: `https://www.coingecko.com/en/categories/${c.id}`,
-          source: "CoinGecko",
-          sourceIcon: "🦎",
-          sentiment,
-          sentimentScore: score,
-          timestamp: Date.now(),
-          category: "market",
-          coins: [],
-          engagement: c.top_3_coins?.length || 0,
+          source: "CoinGecko", sourceIcon: "🦎",
+          sentiment, sentimentScore: score,
+          timestamp: Date.now(), category: "market",
+          coins: [], engagement: c.top_3_coins?.length || 0,
         };
       });
-  } catch {
-    return [];
-  }
+  } catch { return []; }
 }
 
 async function fetchFearGreed() {
   try {
-    const r = await fetch("https://api.alternative.me/fng/?limit=30&format=json", {
-      signal: AbortSignal.timeout(6000),
-    });
+    const r = await fetch("https://api.alternative.me/fng/?limit=30&format=json", { signal: AbortSignal.timeout(6000) });
     if (!r.ok) throw new Error();
     const json = await r.json();
     const current = json.data[0];
     return {
       value: parseInt(current.value),
       label: current.value_classification,
-      history: json.data.map((d: any) => ({
-        value: parseInt(d.value),
-        ts: parseInt(d.timestamp) * 1000,
-      })),
+      history: json.data.map((d: any) => ({ value: parseInt(d.value), ts: parseInt(d.timestamp) * 1000 })),
     };
-  } catch {
-    return { value: 50, label: "Neutral", history: [] };
-  }
+  } catch { return { value: 50, label: "Neutral", history: [] }; }
 }
 
 async function fetchMarketDominance() {
   try {
-    const r = await fetch("https://api.coingecko.com/api/v3/global", {
-      signal: AbortSignal.timeout(6000),
-    });
+    const r = await fetch("https://api.coingecko.com/api/v3/global", { signal: AbortSignal.timeout(6000) });
     if (!r.ok) throw new Error();
     const json = await r.json();
     const d = json.data.market_cap_percentage;
-    return {
-      btc: d.btc || 0,
-      eth: d.eth || 0,
-      others: 100 - (d.btc || 0) - (d.eth || 0),
-    };
-  } catch {
-    return { btc: 50, eth: 18, others: 32 };
-  }
+    return { btc: d.btc || 0, eth: d.eth || 0, others: 100 - (d.btc || 0) - (d.eth || 0) };
+  } catch { return { btc: 50, eth: 18, others: 32 }; }
 }
 
-// ─── Community buzz aggregation ───
+// ─── Aggregation ───
+
 function aggregateBuzz(news: NewsItem[]): { topic: string; mentions: number; sentiment: string }[] {
-  const topicMap = new Map<string, { count: number; sentSum: number }>();
+  const m = new Map<string, { count: number; sentSum: number }>();
   for (const n of news) {
     for (const coin of n.coins) {
-      const existing = topicMap.get(coin) || { count: 0, sentSum: 0 };
-      existing.count++;
-      existing.sentSum += n.sentimentScore;
-      topicMap.set(coin, existing);
+      const e = m.get(coin) || { count: 0, sentSum: 0 };
+      e.count++; e.sentSum += n.sentimentScore;
+      m.set(coin, e);
     }
   }
-  return [...topicMap.entries()]
+  return [...m.entries()]
     .sort((a, b) => b[1].count - a[1].count)
-    .slice(0, 12)
+    .slice(0, 20)
     .map(([topic, data]) => ({
-      topic,
-      mentions: data.count,
+      topic, mentions: data.count,
       sentiment: data.sentSum > 0.3 ? "bullish" : data.sentSum < -0.3 ? "bearish" : "neutral",
     }));
 }
+
+function buildCoinSentiments(news: NewsItem[], top100: any[]): CoinSentiment[] {
+  // Aggregate mentions + sentiment from news
+  const mentionMap = new Map<string, { count: number; sentSum: number }>();
+  for (const n of news) {
+    for (const coin of n.coins) {
+      const e = mentionMap.get(coin) || { count: 0, sentSum: 0 };
+      e.count++; e.sentSum += n.sentimentScore;
+      mentionMap.set(coin, e);
+    }
+  }
+
+  // Build sentiment for each top 100 coin
+  const results: CoinSentiment[] = [];
+  for (const c of top100) {
+    const sym = (c.symbol || "").toUpperCase();
+    const mention = mentionMap.get(sym);
+    const mentions = mention?.count || 0;
+    const avgSent = mentions > 0 ? (mention!.sentSum / mentions) : 0;
+
+    results.push({
+      symbol: sym,
+      name: c.name || sym,
+      mentions,
+      avgSentiment: avgSent,
+      sentiment: avgSent > 0.15 ? "bullish" : avgSent < -0.15 ? "bearish" : "neutral",
+      price: c.current_price || 0,
+      change24h: c.price_change_percentage_24h ?? null,
+      marketCapRank: c.market_cap_rank || 999,
+      image: c.image || "",
+    });
+  }
+
+  return results.sort((a, b) => b.mentions - a.mentions || a.marketCapRank - b.marketCapRank);
+}
+
+// ─── Supabase client ───
+
+function getSupabaseAdmin() {
+  return createClient(
+    Deno.env.get("SUPABASE_URL") || "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+  );
+}
+
+async function persistToCache(data: SentimentData) {
+  try {
+    const sb = getSupabaseAdmin();
+    await sb.from("sentiment_cache").upsert(
+      { key: "latest", payload: data, updated_at: new Date().toISOString() },
+      { onConflict: "key" }
+    );
+    console.log("[sentiment-feed] Persisted to cache");
+  } catch (err) {
+    console.error("[sentiment-feed] Cache persist error:", err);
+  }
+}
+
+async function readCache(): Promise<SentimentData | null> {
+  try {
+    const sb = getSupabaseAdmin();
+    const { data } = await sb.from("sentiment_cache").select("payload, updated_at").eq("key", "latest").single();
+    if (data) return data.payload as SentimentData;
+  } catch {}
+  return null;
+}
+
+// ─── Main handler ───
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -248,21 +292,36 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Fetch all sources concurrently
+    // Check if caller just wants cached data (GET or body.cached=true)
+    let wantCached = req.method === "GET";
+    if (!wantCached) {
+      try {
+        const body = await req.clone().json();
+        wantCached = body?.cached === true;
+      } catch {}
+    }
+
+    if (wantCached) {
+      const cached = await readCache();
+      if (cached && Date.now() - cached.lastUpdated < 600_000) {
+        return new Response(JSON.stringify(cached), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    // Full fetch from all sources concurrently
     const [
-      redditCrypto,
-      redditBitcoin,
-      redditDefi,
-      trending,
-      categoryNews,
-      fearGreed,
-      dominance,
+      redditCrypto, redditBitcoin, redditDefi, redditAltcoin,
+      trending, top100, categoryNews, fearGreed, dominance,
     ] = await Promise.allSettled([
       fetchReddit("CryptoCurrency"),
       fetchReddit("Bitcoin"),
       fetchReddit("defi"),
+      fetchReddit("altcoin"),
       fetchCoinGeckoTrending(),
-      fetchCoinGeckoStatusUpdates(),
+      fetchCoinGeckoTop100(),
+      fetchCategoryNews(),
       fetchFearGreed(),
       fetchMarketDominance(),
     ]);
@@ -271,35 +330,42 @@ Deno.serve(async (req) => {
       ...(redditCrypto.status === "fulfilled" ? redditCrypto.value : []),
       ...(redditBitcoin.status === "fulfilled" ? redditBitcoin.value : []),
       ...(redditDefi.status === "fulfilled" ? redditDefi.value : []),
+      ...(redditAltcoin.status === "fulfilled" ? redditAltcoin.value : []),
       ...(categoryNews.status === "fulfilled" ? categoryNews.value : []),
     ];
 
-    // Deduplicate by id
+    // Deduplicate
     const seen = new Set<string>();
-    const uniqueNews = allNews.filter(n => {
-      if (seen.has(n.id)) return false;
-      seen.add(n.id);
-      return true;
-    });
-
-    // Sort by engagement then time
+    const uniqueNews = allNews.filter(n => { if (seen.has(n.id)) return false; seen.add(n.id); return true; });
     uniqueNews.sort((a, b) => b.engagement - a.engagement || b.timestamp - a.timestamp);
 
+    const top100Data = top100.status === "fulfilled" ? top100.value : [];
+
     const result: SentimentData = {
-      news: uniqueNews.slice(0, 50),
+      news: uniqueNews.slice(0, 75),
       trending: trending.status === "fulfilled" ? trending.value : [],
       fearGreed: fearGreed.status === "fulfilled" ? fearGreed.value : { value: 50, label: "Neutral", history: [] },
       marketDominance: dominance.status === "fulfilled" ? dominance.value : { btc: 50, eth: 18, others: 32 },
       communityBuzz: aggregateBuzz(uniqueNews),
+      coinSentiments: buildCoinSentiments(uniqueNews, top100Data),
       lastUpdated: Date.now(),
     };
 
+    // Persist in background
+    persistToCache(result).catch(() => {});
+
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 200,
     });
   } catch (err) {
     console.error("Sentiment feed error:", err);
+    // Try returning cached data on error
+    const cached = await readCache();
+    if (cached) {
+      return new Response(JSON.stringify(cached), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     return new Response(JSON.stringify({ error: "Failed to fetch sentiment data" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,

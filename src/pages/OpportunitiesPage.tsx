@@ -67,12 +67,25 @@ interface SentimentTrending {
   score: number;
 }
 
+interface CoinSentiment {
+  symbol: string;
+  name: string;
+  mentions: number;
+  avgSentiment: number;
+  sentiment: "bullish" | "bearish" | "neutral";
+  price: number;
+  change24h: number | null;
+  marketCapRank: number;
+  image: string;
+}
+
 interface SentimentData {
   news: SentimentNewsItem[];
   trending: SentimentTrending[];
   fearGreed: { value: number; label: string; history: { value: number; ts: number }[] };
   marketDominance: { btc: number; eth: number; others: number };
   communityBuzz: { topic: string; mentions: number; sentiment: string }[];
+  coinSentiments: CoinSentiment[];
   lastUpdated: number;
 }
 
@@ -424,41 +437,46 @@ export default function OpportunitiesPage() {
     }
   };
 
-  // Fetch sentiment data
-  const fetchSentiment = async () => {
-    setSentimentLoading(true);
+  // Fetch sentiment data — reads from DB cache (written by pg_cron)
+  const fetchSentiment = useCallback(async (forceRefresh = false) => {
+    setSentimentLoading(prev => !sentimentData ? true : prev);
     try {
-      // Try cached first
-      const cached = localStorage.getItem("lt_sentiment");
-      if (cached) {
-        const p = JSON.parse(cached);
-        if (p.lastUpdated && Date.now() - p.lastUpdated < 300_000) {
-          setSentimentData(p);
+      if (forceRefresh) {
+        // Trigger a live refresh via edge function (POST)
+        const { data, error } = await supabase.functions.invoke("sentiment-feed", { method: "POST", body: {} });
+        if (!error && data) {
+          setSentimentData(data);
           setSentimentLoading(false);
+          return;
         }
       }
-      const { data, error } = await supabase.functions.invoke("sentiment-feed", { method: "POST", body: {} });
-      if (error) throw error;
-      setSentimentData(data);
-      localStorage.setItem("lt_sentiment", JSON.stringify(data));
+      // Read cached data from DB via edge function (GET = cached mode)
+      const { data, error } = await supabase.functions.invoke("sentiment-feed", { method: "POST", body: { cached: true } });
+      if (!error && data) {
+        setSentimentData(data);
+      } else {
+        // Fallback: trigger live fetch
+        const { data: live } = await supabase.functions.invoke("sentiment-feed", { method: "POST", body: {} });
+        if (live) setSentimentData(live);
+      }
     } catch (err) {
       console.error("Sentiment fetch error:", err);
     } finally {
       setSentimentLoading(false);
     }
-  };
+  }, [sentimentData]);
 
-  // Auto-refresh: fetch on mount, then poll every 60s
+  // Auto-refresh: fetch on mount, then poll every 30s for cached data
   useEffect(() => {
     fetchEvents();
     fetchAirdrops();
-    fetchSentiment();
+    fetchSentiment(true); // initial live fetch
 
     const interval = setInterval(() => {
       fetchEvents();
       fetchAirdrops();
-      fetchSentiment();
-    }, 60_000);
+      fetchSentiment(); // reads cache
+    }, 30_000);
 
     return () => clearInterval(interval);
   }, []);
@@ -535,7 +553,7 @@ export default function OpportunitiesPage() {
               setSourceFilter={setSentimentSourceFilter}
               typeFilter={sentimentTypeFilter}
               setTypeFilter={setSentimentTypeFilter}
-              onRefresh={fetchSentiment}
+              onRefresh={() => fetchSentiment(true)}
             />
           ) : tab === "airdrops" ? (
             <div>
@@ -811,17 +829,18 @@ function SentimentTab({
           </div>
         </div>
 
-        {/* Sources */}
+        {/* Live Status */}
         <div className="panel" style={{ padding: "10px 14px" }}>
-          <div style={{ fontSize: 9, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Sources</div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text)" }}>
-            {sources.length} feeds active
+          <div style={{ fontSize: 9, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Live Engine</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "hsl(142 71% 45%)", display: "inline-block", animation: "pulse 2s infinite" }} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: "hsl(142 71% 45%)" }}>LIVE</span>
           </div>
           <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
-            Reddit · CoinGecko · Alt.me
+            {sources.length} feeds · {(data.coinSentiments || []).length} coins
           </div>
           <div style={{ fontSize: 9, color: "var(--muted)", marginTop: 4 }}>
-            Updated {new Date(data.lastUpdated).toLocaleTimeString()}
+            {new Date(data.lastUpdated).toLocaleTimeString()}
           </div>
         </div>
       </div>
@@ -878,7 +897,64 @@ function SentimentTab({
         )}
       </div>
 
-      {/* News feed with filters */}
+      {/* Top 100 Coin Sentiments */}
+      {(data.coinSentiments || []).length > 0 && (
+        <div className="panel" style={{ padding: "10px 14px" }}>
+          <div style={{ fontSize: 10, fontWeight: 800, color: "var(--muted)", textTransform: "uppercase", marginBottom: 8 }}>
+            📊 Top 100 Coin Sentiment — {data.coinSentiments.filter(c => c.mentions > 0).length} mentioned
+          </div>
+          <div className="tableWrap">
+            <table style={{ width: "100%", fontSize: 11 }}>
+              <thead>
+                <tr style={{ color: "var(--muted)", textAlign: "left" }}>
+                  <th style={{ padding: "4px 0" }}>#</th>
+                  <th>Coin</th>
+                  <th>Price</th>
+                  <th>24h</th>
+                  <th>Mentions</th>
+                  <th>Sentiment</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.coinSentiments.slice(0, 50).map((c, i) => (
+                  <tr key={c.symbol} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                    <td style={{ padding: "5px 0", fontSize: 10, color: "var(--muted)" }}>{c.marketCapRank}</td>
+                    <td>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        {c.image && <img src={c.image} alt="" style={{ width: 16, height: 16, borderRadius: 8 }} />}
+                        <span style={{ fontWeight: 800 }}>{c.symbol}</span>
+                        <span style={{ fontSize: 9, color: "var(--muted)" }}>{c.name}</span>
+                      </div>
+                    </td>
+                    <td style={{ fontWeight: 700 }}>${c.price < 1 ? c.price.toPrecision(4) : c.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                    <td style={{ fontWeight: 700, color: (c.change24h || 0) >= 0 ? SENT_COLORS.bullish : SENT_COLORS.bearish }}>
+                      {c.change24h != null ? `${c.change24h >= 0 ? "+" : ""}${c.change24h.toFixed(1)}%` : "—"}
+                    </td>
+                    <td>
+                      {c.mentions > 0 ? (
+                        <span style={{ fontWeight: 800, color: "var(--brand)" }}>🔥 {c.mentions}</span>
+                      ) : (
+                        <span style={{ color: "var(--muted)", fontSize: 10 }}>—</span>
+                      )}
+                    </td>
+                    <td>
+                      <span style={{
+                        fontSize: 9, fontWeight: 800, padding: "2px 6px", borderRadius: 8,
+                        background: c.mentions > 0 ? `${SENT_COLORS[c.sentiment]}18` : "transparent",
+                        color: c.mentions > 0 ? SENT_COLORS[c.sentiment] : "var(--muted)",
+                        textTransform: "uppercase",
+                      }}>
+                        {c.mentions > 0 ? c.sentiment : "—"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       <div>
         <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
           <select className="inp" value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} style={{ fontSize: 11, padding: "4px 8px" }}>
