@@ -14,6 +14,10 @@ import { BreakEvenWidget } from "@/components/dashboard/BreakEvenWidget";
 import { BenchmarkComparison } from "@/components/dashboard/BenchmarkComparison";
 import ConcentrationRisk from "@/components/dashboard/ConcentrationRisk";
 import CorrelationMatrix from "@/components/dashboard/CorrelationMatrix";
+import LiquidityWarning from "@/components/dashboard/LiquidityWarning";
+import OrderBookDepth from "@/components/dashboard/OrderBookDepth";
+import ProjectRadar from "@/components/dashboard/ProjectRadar";
+import SurvivabilityScore from "@/components/dashboard/SurvivabilityScore";
 
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -41,6 +45,10 @@ const ALL_CARDS: CardDef[] = [
   { id: "breakEven", label: "Break-Even Targets" },
   { id: "concentrationRisk", label: "Concentration Risk" },
   { id: "correlationMatrix", label: "Correlation Risk" },
+  { id: "liquidityWarning", label: "Liquidity Monitor" },
+  { id: "orderBookDepth", label: "Order Book Depth" },
+  { id: "projectRadar", label: "Project Radar" },
+  { id: "survivability", label: "Survivability Score" },
   { id: "movers", label: "Top Movers" },
 ];
 
@@ -387,6 +395,10 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
       case "riskBreakdown": return <PerAssetRiskBreakdown compact />;
       case "concentrationRisk": return <ConcentrationRisk compact />;
       case "correlationMatrix": return <CorrelationMatrix compact />;
+      case "liquidityWarning": return <LiquidityWarning compact />;
+      case "orderBookDepth": return <OrderBookDepth compact />;
+      case "projectRadar": return <ProjectRadar compact />;
+      case "survivability": return <SurvivabilityScore compact />;
       case "benchmark": return <BenchmarkChart compact />;
       case "breakEven":
         return (
