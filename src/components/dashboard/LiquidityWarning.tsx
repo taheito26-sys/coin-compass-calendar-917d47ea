@@ -45,7 +45,7 @@ export default function LiquidityWarning({ compact }: { compact?: boolean } = {}
         const mv = price * p.qty;
         const volume24h = live?.total_volume ?? 0;
         const marketCap = live?.market_cap ?? 0;
-        const priceChange24h = live?.price_change_percentage_24h ?? 0;
+        const priceChange24h = live?.price_change_percentage_24h_in_currency ?? 0;
         const volumeToMcap = marketCap > 0 ? volume24h / marketCap : 0;
 
         let severity: "ok" | "warn" | "danger" = "ok";
