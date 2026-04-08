@@ -380,7 +380,6 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
         );
 
       case "marketSentiment": return <MarketSentiment />;
-        );
       case "riskBreakdown": return <PerAssetRiskBreakdown compact />;
       case "benchmark": return <BenchmarkChart compact />;
       case "breakEven":
