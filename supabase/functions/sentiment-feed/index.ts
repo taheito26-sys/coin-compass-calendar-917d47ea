@@ -462,15 +462,13 @@ Deno.serve(async (req) => {
 
     // Full fetch from all sources concurrently
     const [
-      redditCrypto, redditBitcoin, redditDefi, redditAltcoin,
-      cryptoPanic,
+      redditCrypto, redditBitcoin,
+      cgNews,
       trending, top100, categoryNews, fearGreed, dominance,
     ] = await Promise.allSettled([
       fetchReddit("CryptoCurrency"),
       fetchReddit("Bitcoin"),
-      fetchReddit("defi"),
-      fetchReddit("altcoin"),
-      fetchCryptoPanic(),
+      fetchCoinGeckoNews(),
       fetchCoinGeckoTrending(),
       fetchCoinGeckoTop100(),
       fetchCategoryNews(),
@@ -478,19 +476,19 @@ Deno.serve(async (req) => {
       fetchMarketDominance(),
     ]);
 
+    // Convert trending coins into news items with coin mentions
+    const trendingData = trending.status === "fulfilled" ? trending.value : [];
+    const trendingNews = trendingToNews(trendingData);
+
     const allNews: NewsItem[] = [
       ...(redditCrypto.status === "fulfilled" ? redditCrypto.value : []),
       ...(redditBitcoin.status === "fulfilled" ? redditBitcoin.value : []),
-      ...(redditDefi.status === "fulfilled" ? redditDefi.value : []),
-      ...(redditAltcoin.status === "fulfilled" ? redditAltcoin.value : []),
-      ...(cryptoPanic.status === "fulfilled" ? cryptoPanic.value : []),
+      ...(cgNews.status === "fulfilled" ? cgNews.value : []),
+      ...trendingNews,
       ...(categoryNews.status === "fulfilled" ? categoryNews.value : []),
     ];
-    console.log(`[sentiment-feed] Total news items: ${allNews.length} (Reddit: ${
-      [redditCrypto, redditBitcoin, redditDefi, redditAltcoin]
-        .filter(r => r.status === "fulfilled")
-        .reduce((s, r) => s + (r as PromiseFulfilledResult<NewsItem[]>).value.length, 0)
-    }, CryptoPanic: ${cryptoPanic.status === "fulfilled" ? cryptoPanic.value.length : 0}, Categories: ${categoryNews.status === "fulfilled" ? categoryNews.value.length : 0})`);
+    const redditCount = [redditCrypto, redditBitcoin].filter(r => r.status === "fulfilled").reduce((s, r) => s + (r as PromiseFulfilledResult<NewsItem[]>).value.length, 0);
+    console.log(`[sentiment-feed] Total news: ${allNews.length} (Reddit: ${redditCount}, Trending: ${trendingNews.length}, CG News: ${cgNews.status === "fulfilled" ? cgNews.value.length : 0}, Categories: ${categoryNews.status === "fulfilled" ? categoryNews.value.length : 0})`);
 
     // Deduplicate
     const seen = new Set<string>();
