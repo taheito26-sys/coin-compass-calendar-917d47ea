@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import ProjectRadar from "@/components/dashboard/ProjectRadar";
 import SurvivabilityScore from "@/components/dashboard/SurvivabilityScore";
+import SentimentTrends from "@/components/dashboard/SentimentTrends";
+import CommunityHealth from "@/components/dashboard/CommunityHealth";
 
 // ── Types ───────────────────────────────────────────────────────────
 interface ListingEvent {
@@ -42,7 +44,7 @@ interface AirdropTask {
   completed?: boolean;
 }
 
-type Tab = "listings" | "airdrops" | "new_assets" | "delistings" | "sentiment" | "risk" | "radar" | "survivability";
+type Tab = "listings" | "airdrops" | "new_assets" | "delistings" | "sentiment" | "risk" | "radar" | "survivability" | "sentimentTrends" | "communityHealth";
 
 // ── Sentiment types ─────────────────────────────────────────────────
 interface SentimentNewsItem {
@@ -565,6 +567,8 @@ export default function OpportunitiesPage() {
     { key: "risk", label: "Risk", icon: "🛡️", count: riskSignals.filter(s => s.risk_level === "HIGH").length },
     { key: "radar", label: "Radar", icon: "📡", count: 0 },
     { key: "survivability", label: "Survivability", icon: "💪", count: 0 },
+    { key: "sentimentTrends", label: "Trends", icon: "📈", count: 0 },
+    { key: "communityHealth", label: "Health", icon: "🏥", count: 0 },
   ];
 
   return (
@@ -606,6 +610,10 @@ export default function OpportunitiesPage() {
             <ProjectRadar />
           ) : tab === "survivability" ? (
             <SurvivabilityScore />
+          ) : tab === "sentimentTrends" ? (
+            <SentimentTrends />
+          ) : tab === "communityHealth" ? (
+            <CommunityHealth />
           ) : tab === "sentiment" ? (
             <SentimentTab
               data={sentimentData}
