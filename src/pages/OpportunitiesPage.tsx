@@ -437,41 +437,46 @@ export default function OpportunitiesPage() {
     }
   };
 
-  // Fetch sentiment data
-  const fetchSentiment = async () => {
-    setSentimentLoading(true);
+  // Fetch sentiment data — reads from DB cache (written by pg_cron)
+  const fetchSentiment = useCallback(async (forceRefresh = false) => {
+    setSentimentLoading(prev => !sentimentData ? true : prev);
     try {
-      // Try cached first
-      const cached = localStorage.getItem("lt_sentiment");
-      if (cached) {
-        const p = JSON.parse(cached);
-        if (p.lastUpdated && Date.now() - p.lastUpdated < 300_000) {
-          setSentimentData(p);
+      if (forceRefresh) {
+        // Trigger a live refresh via edge function (POST)
+        const { data, error } = await supabase.functions.invoke("sentiment-feed", { method: "POST", body: {} });
+        if (!error && data) {
+          setSentimentData(data);
           setSentimentLoading(false);
+          return;
         }
       }
-      const { data, error } = await supabase.functions.invoke("sentiment-feed", { method: "POST", body: {} });
-      if (error) throw error;
-      setSentimentData(data);
-      localStorage.setItem("lt_sentiment", JSON.stringify(data));
+      // Read cached data from DB via edge function (GET = cached mode)
+      const { data, error } = await supabase.functions.invoke("sentiment-feed", { method: "POST", body: { cached: true } });
+      if (!error && data) {
+        setSentimentData(data);
+      } else {
+        // Fallback: trigger live fetch
+        const { data: live } = await supabase.functions.invoke("sentiment-feed", { method: "POST", body: {} });
+        if (live) setSentimentData(live);
+      }
     } catch (err) {
       console.error("Sentiment fetch error:", err);
     } finally {
       setSentimentLoading(false);
     }
-  };
+  }, [sentimentData]);
 
-  // Auto-refresh: fetch on mount, then poll every 60s
+  // Auto-refresh: fetch on mount, then poll every 30s for cached data
   useEffect(() => {
     fetchEvents();
     fetchAirdrops();
-    fetchSentiment();
+    fetchSentiment(true); // initial live fetch
 
     const interval = setInterval(() => {
       fetchEvents();
       fetchAirdrops();
-      fetchSentiment();
-    }, 60_000);
+      fetchSentiment(); // reads cache
+    }, 30_000);
 
     return () => clearInterval(interval);
   }, []);
