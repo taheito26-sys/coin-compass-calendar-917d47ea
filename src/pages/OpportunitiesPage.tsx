@@ -966,11 +966,11 @@ function SentimentTab({
         )}
       </div>
 
-      {/* Top 100 Coin Sentiments */}
-      {(data.coinSentiments || []).length > 0 && (
+      {/* Top Coin Sentiments — only coins with actual mentions */}
+      {(data.coinSentiments || []).filter(c => c.mentions > 0).length > 0 && (
         <div className="panel" style={{ padding: "10px 14px" }}>
           <div style={{ fontSize: 10, fontWeight: 800, color: "var(--muted)", textTransform: "uppercase", marginBottom: 8 }}>
-            📊 Top 100 Coin Sentiment — {data.coinSentiments.filter(c => c.mentions > 0).length} mentioned
+            📊 Coin Sentiment — {data.coinSentiments.filter(c => c.mentions > 0).length} coins with social mentions
           </div>
           <div className="tableWrap">
             <table style={{ width: "100%", fontSize: 11 }}>
@@ -985,7 +985,7 @@ function SentimentTab({
                 </tr>
               </thead>
               <tbody>
-                {data.coinSentiments.slice(0, 50).map((c, i) => (
+                {data.coinSentiments.filter(c => c.mentions > 0).map((c, i) => (
                   <tr key={c.symbol} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                     <td style={{ padding: "5px 0", fontSize: 10, color: "var(--muted)" }}>{c.marketCapRank}</td>
                     <td>
