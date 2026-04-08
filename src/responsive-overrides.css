@@ -144,3 +144,13 @@
     padding: 4px 8px !important;
   }
 }
+
+@media (max-width: 640px) {
+  .sentiment-two-col {
+    grid-template-columns: 1fr !important;
+  }
+
+  .sentiment-stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
