@@ -53,6 +53,7 @@ const ALL_CARDS: CardDef[] = [
   { id: "survivability", label: "Survivability Score" },
   { id: "movers", label: "Top Movers" },
   { id: "sentimentTrends", label: "Sentiment Trends" },
+  { id: "sentimentCorrelation", label: "Sentiment vs Price" },
 ];
 
 interface DonutSlice {
