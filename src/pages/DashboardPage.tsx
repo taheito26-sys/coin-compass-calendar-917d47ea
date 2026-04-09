@@ -20,6 +20,7 @@ import ProjectRadar from "@/components/dashboard/ProjectRadar";
 import SurvivabilityScore from "@/components/dashboard/SurvivabilityScore";
 import SentimentTrends from "@/components/dashboard/SentimentTrends";
 import SentimentPriceCorrelation from "@/components/dashboard/SentimentPriceCorrelation";
+import { NetWorthChart } from "@/components/dashboard/NetWorthChart";
 
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -54,6 +55,7 @@ const ALL_CARDS: CardDef[] = [
   { id: "movers", label: "Top Movers" },
   { id: "sentimentTrends", label: "Sentiment Trends" },
   { id: "sentimentCorrelation", label: "Sentiment vs Price" },
+  { id: "portfolioPerformance", label: "Portfolio Performance", colSpan: 2 },
 ];
 
 interface DonutSlice {
@@ -455,6 +457,15 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
 
       case "sentimentTrends": return <SentimentTrends compact />;
       case "sentimentCorrelation": return <SentimentPriceCorrelation compact />;
+      case "portfolioPerformance":
+        return (
+          <div className="panel">
+            <div className="panel-head"><DragHandle editing={editing} /><h2>Portfolio Performance</h2></div>
+            <div className="panel-body" style={{ padding: "8px 12px" }}>
+              <NetWorthChart />
+            </div>
+          </div>
+        );
       default: return null;
     }
   };
