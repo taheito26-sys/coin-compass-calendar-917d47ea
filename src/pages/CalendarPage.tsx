@@ -75,6 +75,18 @@ export default function CalendarPage() {
   const [showCoinFilter, setShowCoinFilter] = useState(false);
   const priceGetter = usePortfolioPriceGetter();
 
+  const daysInM = new Date(year, month + 1, 0).getDate();
+  const firstDay = new Date(year, month, 1).getDay();
+
+  const allCoins = useMemo(() => {
+    const coins = new Set<string>();
+    state.txs.forEach((tx) => {
+      const sym = resolveAssetSymbol(tx.asset);
+      if (sym) coins.add(sym);
+    });
+    return [...coins].sort();
+  }, [state.txs]);
+
   // Fetch historical prices from DB for the current month
   const [historicalPriceMap, setHistoricalPriceMap] = useState<HistoricalPriceMap>(new Map());
 
