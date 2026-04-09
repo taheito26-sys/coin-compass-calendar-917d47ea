@@ -96,6 +96,24 @@ Deno.serve(async (req) => {
           if (posError) throw posError;
         }
 
+        // Record daily closing prices into price_history
+        const priceHistoryRows = positionEntries
+          .filter(e => e.market_price > 0)
+          .map(e => ({
+            asset_id: e.asset_id,
+            date: today,
+            close_price: e.market_price,
+            source: 'daily-snapshot',
+          }));
+
+        if (priceHistoryRows.length > 0) {
+          const { error: phError } = await supabase
+            .from("price_history")
+            .upsert(priceHistoryRows, { onConflict: 'asset_id,date' });
+          
+          if (phError) console.error("price_history upsert error:", phError.message);
+        }
+
         results.push({ userId, ok: true });
       } catch (err: any) {
         results.push({ userId, ok: false, error: err.message });
