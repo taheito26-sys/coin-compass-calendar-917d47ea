@@ -1,9 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useCrypto } from "@/lib/cryptoContext";
 import { fmtFiat, fmtTotal, fmtQty } from "@/lib/cryptoState";
 import { derivePortfolio, deriveRealizedByTx } from "@/lib/derivePortfolio";
 import { usePortfolioPriceGetter } from "@/hooks/usePortfolioPriceGetter";
 import { resolveAssetSymbol } from "@/lib/assetResolver";
+import { supabase } from "@/integrations/supabase/client";
 
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
@@ -29,22 +30,38 @@ type CalendarDayData = {
   details: CalendarDetail[];
 };
 
+// Historical prices: date -> symbol -> close_price
+type HistoricalPriceMap = Map<string, Map<string, number>>;
+
 function createHistoricalPriceGetter(
+  dateStr: string,
+  historicalPriceMap: HistoricalPriceMap,
   txsUntilEnd: { asset: string; price: number }[],
   getLivePrice: (sym: string) => number | null,
   useLivePrices: boolean,
 ) {
-  const historicalPrices = new Map<string, number>();
+  // Tier 1: DB historical prices for the exact date
+  const dbPrices = historicalPriceMap.get(dateStr);
 
+  // Tier 2: Last known transaction price as fallback
+  const txPrices = new Map<string, number>();
   for (const tx of txsUntilEnd) {
     const px = Number(tx.price || 0);
-    if (px > 0) historicalPrices.set(tx.asset.toUpperCase(), px);
+    if (px > 0) txPrices.set(tx.asset.toUpperCase(), px);
   }
 
   return (sym: string): number | null => {
     if (useLivePrices) return getLivePrice(sym);
-    const historical = historicalPrices.get(sym.toUpperCase());
-    return historical ?? null;
+
+    const key = sym.toUpperCase();
+
+    // Try DB historical price first
+    const dbPrice = dbPrices?.get(key);
+    if (dbPrice != null && dbPrice > 0) return dbPrice;
+
+    // Fallback to transaction-derived price
+    const txPrice = txPrices.get(key);
+    return txPrice ?? null;
   };
 }
 
@@ -69,6 +86,34 @@ export default function CalendarPage() {
     });
     return [...coins].sort();
   }, [state.txs]);
+
+  // Fetch historical prices from DB for the current month
+  const [historicalPriceMap, setHistoricalPriceMap] = useState<HistoricalPriceMap>(new Map());
+
+  useEffect(() => {
+    const startDate = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+    const endDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(daysInM).padStart(2, "0")}`;
+
+    supabase
+      .from("price_history")
+      .select("date, close_price, assets!inner(symbol)")
+      .gte("date", startDate)
+      .lte("date", endDate)
+      .then(({ data }) => {
+        const map: HistoricalPriceMap = new Map();
+        if (data) {
+          for (const row of data as any[]) {
+            const dateStr = row.date;
+            const sym = (row.assets?.symbol ?? "").toUpperCase();
+            const price = Number(row.close_price);
+            if (!sym || !price) continue;
+            if (!map.has(dateStr)) map.set(dateStr, new Map());
+            map.get(dateStr)!.set(sym, price);
+          }
+        }
+        setHistoricalPriceMap(map);
+      });
+  }, [year, month, daysInM]);
 
   const toggleCoin = (coin: string) => {
     setSelectedCoins((prev) =>
@@ -113,7 +158,8 @@ export default function CalendarPage() {
         continue;
       }
 
-      const dayPriceGetter = createHistoricalPriceGetter(txsUntilEnd, priceGetter, isTodayCell);
+      const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      const dayPriceGetter = createHistoricalPriceGetter(dateStr, historicalPriceMap, txsUntilEnd, priceGetter, isTodayCell);
       const portfolio = derivePortfolio(txsUntilEnd, dayPriceGetter);
 
       // Cumulative unrealized P&L = market value - cost basis
@@ -173,7 +219,7 @@ export default function CalendarPage() {
     }
 
     return data;
-  }, [state.txs, year, month, daysInM, selectedCoins, priceGetter]);
+  }, [state.txs, year, month, daysInM, selectedCoins, priceGetter, historicalPriceMap]);
 
   // Month-level KPIs: use last available day's cumulative unrealized
   const lastDayData = useMemo(() => {
