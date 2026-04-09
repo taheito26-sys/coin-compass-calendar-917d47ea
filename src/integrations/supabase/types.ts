@@ -686,6 +686,41 @@ export type Database = {
           },
         ]
       }
+      price_history: {
+        Row: {
+          asset_id: string
+          close_price: number
+          created_at: string
+          date: string
+          id: string
+          source: string
+        }
+        Insert: {
+          asset_id: string
+          close_price: number
+          created_at?: string
+          date: string
+          id?: string
+          source?: string
+        }
+        Update: {
+          asset_id?: string
+          close_price?: number
+          created_at?: string
+          date?: string
+          id?: string
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "price_history_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       risk_signal_aggregate: {
         Row: {
           id: string
