@@ -457,6 +457,15 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
 
       case "sentimentTrends": return <SentimentTrends compact />;
       case "sentimentCorrelation": return <SentimentPriceCorrelation compact />;
+      case "portfolioPerformance":
+        return (
+          <div className="panel">
+            <div className="panel-head"><DragHandle editing={editing} /><h2>Portfolio Performance</h2></div>
+            <div className="panel-body" style={{ padding: "8px 12px" }}>
+              <NetWorthChart />
+            </div>
+          </div>
+        );
       default: return null;
     }
   };
