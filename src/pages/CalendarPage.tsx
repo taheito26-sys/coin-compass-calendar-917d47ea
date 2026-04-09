@@ -158,7 +158,8 @@ export default function CalendarPage() {
         continue;
       }
 
-      const dayPriceGetter = createHistoricalPriceGetter(txsUntilEnd, priceGetter, isTodayCell);
+      const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      const dayPriceGetter = createHistoricalPriceGetter(dateStr, historicalPriceMap, txsUntilEnd, priceGetter, isTodayCell);
       const portfolio = derivePortfolio(txsUntilEnd, dayPriceGetter);
 
       // Cumulative unrealized P&L = market value - cost basis
