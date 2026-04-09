@@ -219,7 +219,7 @@ export default function CalendarPage() {
     }
 
     return data;
-  }, [state.txs, year, month, daysInM, selectedCoins, priceGetter]);
+  }, [state.txs, year, month, daysInM, selectedCoins, priceGetter, historicalPriceMap]);
 
   // Month-level KPIs: use last available day's cumulative unrealized
   const lastDayData = useMemo(() => {
