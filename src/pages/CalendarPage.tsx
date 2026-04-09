@@ -75,17 +75,33 @@ export default function CalendarPage() {
   const [showCoinFilter, setShowCoinFilter] = useState(false);
   const priceGetter = usePortfolioPriceGetter();
 
-  const daysInM = new Date(year, month + 1, 0).getDate();
-  const firstDay = new Date(year, month, 1).getDay();
+  // Fetch historical prices from DB for the current month
+  const [historicalPriceMap, setHistoricalPriceMap] = useState<HistoricalPriceMap>(new Map());
 
-  const allCoins = useMemo(() => {
-    const coins = new Set<string>();
-    state.txs.forEach((tx) => {
-      const sym = resolveAssetSymbol(tx.asset);
-      if (sym) coins.add(sym);
-    });
-    return [...coins].sort();
-  }, [state.txs]);
+  useEffect(() => {
+    const startDate = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+    const endDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(daysInM).padStart(2, "0")}`;
+
+    supabase
+      .from("price_history")
+      .select("date, close_price, assets!inner(symbol)")
+      .gte("date", startDate)
+      .lte("date", endDate)
+      .then(({ data }) => {
+        const map: HistoricalPriceMap = new Map();
+        if (data) {
+          for (const row of data as any[]) {
+            const dateStr = row.date;
+            const sym = (row.assets?.symbol ?? "").toUpperCase();
+            const price = Number(row.close_price);
+            if (!sym || !price) continue;
+            if (!map.has(dateStr)) map.set(dateStr, new Map());
+            map.get(dateStr)!.set(sym, price);
+          }
+        }
+        setHistoricalPriceMap(map);
+      });
+  }, [year, month, daysInM]);
 
   const toggleCoin = (coin: string) => {
     setSelectedCoins((prev) =>
