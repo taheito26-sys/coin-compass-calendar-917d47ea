@@ -1,9 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useCrypto } from "@/lib/cryptoContext";
 import { fmtFiat, fmtTotal, fmtQty } from "@/lib/cryptoState";
 import { derivePortfolio, deriveRealizedByTx } from "@/lib/derivePortfolio";
 import { usePortfolioPriceGetter } from "@/hooks/usePortfolioPriceGetter";
 import { resolveAssetSymbol } from "@/lib/assetResolver";
+import { supabase } from "@/integrations/supabase/client";
 
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
@@ -29,22 +30,38 @@ type CalendarDayData = {
   details: CalendarDetail[];
 };
 
+// Historical prices: date -> symbol -> close_price
+type HistoricalPriceMap = Map<string, Map<string, number>>;
+
 function createHistoricalPriceGetter(
+  dateStr: string,
+  historicalPriceMap: HistoricalPriceMap,
   txsUntilEnd: { asset: string; price: number }[],
   getLivePrice: (sym: string) => number | null,
   useLivePrices: boolean,
 ) {
-  const historicalPrices = new Map<string, number>();
+  // Tier 1: DB historical prices for the exact date
+  const dbPrices = historicalPriceMap.get(dateStr);
 
+  // Tier 2: Last known transaction price as fallback
+  const txPrices = new Map<string, number>();
   for (const tx of txsUntilEnd) {
     const px = Number(tx.price || 0);
-    if (px > 0) historicalPrices.set(tx.asset.toUpperCase(), px);
+    if (px > 0) txPrices.set(tx.asset.toUpperCase(), px);
   }
 
   return (sym: string): number | null => {
     if (useLivePrices) return getLivePrice(sym);
-    const historical = historicalPrices.get(sym.toUpperCase());
-    return historical ?? null;
+
+    const key = sym.toUpperCase();
+
+    // Try DB historical price first
+    const dbPrice = dbPrices?.get(key);
+    if (dbPrice != null && dbPrice > 0) return dbPrice;
+
+    // Fallback to transaction-derived price
+    const txPrice = txPrices.get(key);
+    return txPrice ?? null;
   };
 }
 
