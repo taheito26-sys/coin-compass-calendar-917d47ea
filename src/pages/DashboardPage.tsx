@@ -19,9 +19,6 @@ import OrderBookDepth from "@/components/dashboard/OrderBookDepth";
 import ProjectRadar from "@/components/dashboard/ProjectRadar";
 import SurvivabilityScore from "@/components/dashboard/SurvivabilityScore";
 import SentimentTrends from "@/components/dashboard/SentimentTrends";
-import SentimentPriceCorrelation from "@/components/dashboard/SentimentPriceCorrelation";
-import { NetWorthChart } from "@/components/dashboard/NetWorthChart";
-
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -52,10 +49,7 @@ const ALL_CARDS: CardDef[] = [
   { id: "orderBookDepth", label: "Order Book Depth" },
   { id: "projectRadar", label: "Project Radar" },
   { id: "survivability", label: "Survivability Score" },
-  { id: "movers", label: "Top Movers" },
   { id: "sentimentTrends", label: "Sentiment Trends" },
-  { id: "sentimentCorrelation", label: "Sentiment vs Price" },
-  { id: "portfolioPerformance", label: "Portfolio Performance", colSpan: 2 },
 ];
 
 interface DonutSlice {
@@ -346,6 +340,11 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
               <div className="kpi-sub">Market value</div>
             </div>
             <div className="kpi-card">
+              <div className="kpi-lbl">TOTAL COST</div>
+              <div className="kpi-val">{fmtTotal(totalCost)}</div>
+              <div className="kpi-sub">Cost basis</div>
+            </div>
+            <div className="kpi-card">
               <div className="kpi-head"><span className={`kpi-badge`}>{totalPnl >= 0 ? "▲" : "▼"}</span></div>
               <div className="kpi-lbl">UNREALIZED P&amp;L</div>
               <div className={`kpi-val ${totalPnl >= 0 ? "good" : "bad"}`}>{(totalPnl >= 0 ? "+" : "") + fmtTotal(totalPnl)}</div>
@@ -436,47 +435,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
             </div>
           </div>
         );
-      case "movers":
-        return (
-          <div className="panel">
-            <div className="panel-head"><DragHandle editing={editing} /><h2>Top Movers</h2></div>
-            <div className="panel-body" style={{ padding: 4 }}>
-              {(topGainers.length > 0 || topLosers.length > 0) ? (
-                <table>
-                  <thead><tr><th>Asset</th><th style={{ textAlign: "right" }}>P&amp;L %</th><th style={{ textAlign: "right" }}>P&amp;L</th></tr></thead>
-                  <tbody>
-                    {topGainers.map(g => (
-                      <tr key={g.sym}>
-                        <td className="mono" style={{ fontWeight: 900 }}>{g.sym}</td>
-                        <td className="mono good" style={{ textAlign: "right", fontWeight: 700 }}>▲ {g.pnlPct.toFixed(2)}%</td>
-                        <td className="mono good" style={{ textAlign: "right" }}>+{fmtTotal(g.pnlAbs)}</td>
-                      </tr>
-                    ))}
-                    {topLosers.map(l => (
-                      <tr key={l.sym}>
-                        <td className="mono" style={{ fontWeight: 900 }}>{l.sym}</td>
-                        <td className="mono bad" style={{ textAlign: "right", fontWeight: 700 }}>▼ {Math.abs(l.pnlPct).toFixed(2)}%</td>
-                        <td className="mono bad" style={{ textAlign: "right" }}>{fmtTotal(l.pnlAbs)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : <div className="muted" style={{ padding: 20, textAlign: "center" }}>No movers yet.</div>}
-            </div>
-          </div>
-        );
-
       case "sentimentTrends": return <SentimentTrends compact />;
-      case "sentimentCorrelation": return <SentimentPriceCorrelation compact />;
-      case "portfolioPerformance":
-        return (
-          <div className="panel">
-            <div className="panel-head"><DragHandle editing={editing} /><h2>Portfolio Performance</h2></div>
-            <div className="panel-body" style={{ padding: "8px 12px" }}>
-              <NetWorthChart />
-            </div>
-          </div>
-        );
       default: return null;
     }
   };
