@@ -130,9 +130,9 @@ function HeatmapBlock({ sym, value, pct, color, livePrice }: { sym: string; valu
     <div
       style={{
         background: color, borderRadius: "var(--lt-radius-sm)",
-        padding: "12px 8px", display: "flex", flexDirection: "column",
-        alignItems: "center", justifyContent: "center", gap: 2,
-        minHeight: 80, transition: "transform 0.15s", cursor: "default",
+        padding: "6px 6px", display: "flex", flexDirection: "column",
+        alignItems: "center", justifyContent: "center", gap: 1,
+        minHeight: 54, transition: "transform 0.15s", cursor: "default",
       }}
       onMouseEnter={e => (e.currentTarget.style.transform = "scale(1.04)")}
       onMouseLeave={e => (e.currentTarget.style.transform = "scale(1)")}
