@@ -286,7 +286,11 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
       const isPositive = unreal >= 0;
       const intensity = Math.min(Math.abs(pnlPct) / 50, 1);
       const bg = isPositive ? `rgba(22,163,74,${0.3 + intensity * 0.5})` : `rgba(220,38,38,${0.3 + intensity * 0.5})`;
-      return { sym: r.sym, value: fmtTotal(mv), pct: (pnlPct >= 0 ? "+" : "") + pnlPct.toFixed(1) + "%", color: bg, mv };
+      const priceStr = liveP >= 1000 ? "$" + liveP.toLocaleString(undefined, { maximumFractionDigits: 0 })
+        : liveP >= 1 ? "$" + liveP.toFixed(2)
+        : liveP >= 0.01 ? "$" + liveP.toFixed(4)
+        : "$" + liveP.toFixed(6);
+      return { sym: r.sym, value: fmtTotal(mv), pct: (pnlPct >= 0 ? "+" : "") + pnlPct.toFixed(1) + "%", color: bg, mv, livePrice: priceStr };
     }).filter(x => x.mv > 0).sort((a, b) => b.mv - a.mv).slice(0, 9);
   }, [positions, getPrice]);
 
