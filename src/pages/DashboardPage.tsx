@@ -130,17 +130,17 @@ function HeatmapBlock({ sym, value, pct, color, livePrice }: { sym: string; valu
     <div
       style={{
         background: color, borderRadius: "var(--lt-radius-sm)",
-        padding: "12px 8px", display: "flex", flexDirection: "column",
-        alignItems: "center", justifyContent: "center", gap: 2,
-        minHeight: 80, transition: "transform 0.15s", cursor: "default",
+        padding: "6px 6px", display: "flex", flexDirection: "column",
+        alignItems: "center", justifyContent: "center", gap: 1,
+        minHeight: 54, transition: "transform 0.15s", cursor: "default",
       }}
       onMouseEnter={e => (e.currentTarget.style.transform = "scale(1.04)")}
       onMouseLeave={e => (e.currentTarget.style.transform = "scale(1)")}
     >
-      <div style={{ fontWeight: 900, fontSize: 14, color: "#fff" }}>{sym}</div>
-      <div style={{ fontWeight: 800, fontSize: 16, color: "#fff" }}>{value}</div>
-      {livePrice && <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,.85)" }}>{livePrice}</div>}
-      <div style={{ fontSize: 11, color: "rgba(255,255,255,.65)" }}>{pct}</div>
+      <div style={{ fontWeight: 900, fontSize: 11, color: "#fff" }}>{sym}</div>
+      <div style={{ fontWeight: 800, fontSize: 13, color: "#fff" }}>{value}</div>
+      {livePrice && <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(255,255,255,.85)" }}>{livePrice}</div>}
+      <div style={{ fontSize: 9, color: "rgba(255,255,255,.65)" }}>{pct}</div>
     </div>
   );
 }
