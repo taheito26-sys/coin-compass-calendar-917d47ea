@@ -19,7 +19,6 @@ import OrderBookDepth from "@/components/dashboard/OrderBookDepth";
 import ProjectRadar from "@/components/dashboard/ProjectRadar";
 import SurvivabilityScore from "@/components/dashboard/SurvivabilityScore";
 import SentimentTrends from "@/components/dashboard/SentimentTrends";
-import SentimentTrends from "@/components/dashboard/SentimentTrends";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
