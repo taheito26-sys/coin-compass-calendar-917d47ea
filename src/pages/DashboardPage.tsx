@@ -125,7 +125,7 @@ function DonutLegend({ slices }: { slices: DonutSlice[] }) {
   );
 }
 
-function HeatmapBlock({ sym, value, pct, color }: { sym: string; value: string; pct: string; color: string }) {
+function HeatmapBlock({ sym, value, pct, color, livePrice }: { sym: string; value: string; pct: string; color: string; livePrice?: string }) {
   return (
     <div
       style={{
@@ -139,7 +139,8 @@ function HeatmapBlock({ sym, value, pct, color }: { sym: string; value: string; 
     >
       <div style={{ fontWeight: 900, fontSize: 14, color: "#fff" }}>{sym}</div>
       <div style={{ fontWeight: 800, fontSize: 16, color: "#fff" }}>{value}</div>
-      <div style={{ fontSize: 11, color: "rgba(255,255,255,.75)" }}>{pct}</div>
+      {livePrice && <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,.85)" }}>{livePrice}</div>}
+      <div style={{ fontSize: 11, color: "rgba(255,255,255,.65)" }}>{pct}</div>
     </div>
   );
 }
