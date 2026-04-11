@@ -125,7 +125,7 @@ function DonutLegend({ slices }: { slices: DonutSlice[] }) {
   );
 }
 
-function HeatmapBlock({ sym, value, pct, color }: { sym: string; value: string; pct: string; color: string }) {
+function HeatmapBlock({ sym, value, pct, color, livePrice }: { sym: string; value: string; pct: string; color: string; livePrice?: string }) {
   return (
     <div
       style={{
@@ -139,7 +139,8 @@ function HeatmapBlock({ sym, value, pct, color }: { sym: string; value: string; 
     >
       <div style={{ fontWeight: 900, fontSize: 14, color: "#fff" }}>{sym}</div>
       <div style={{ fontWeight: 800, fontSize: 16, color: "#fff" }}>{value}</div>
-      <div style={{ fontSize: 11, color: "rgba(255,255,255,.75)" }}>{pct}</div>
+      {livePrice && <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,.85)" }}>{livePrice}</div>}
+      <div style={{ fontSize: 11, color: "rgba(255,255,255,.65)" }}>{pct}</div>
     </div>
   );
 }
@@ -285,7 +286,11 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
       const isPositive = unreal >= 0;
       const intensity = Math.min(Math.abs(pnlPct) / 50, 1);
       const bg = isPositive ? `rgba(22,163,74,${0.3 + intensity * 0.5})` : `rgba(220,38,38,${0.3 + intensity * 0.5})`;
-      return { sym: r.sym, value: fmtTotal(mv), pct: (pnlPct >= 0 ? "+" : "") + pnlPct.toFixed(1) + "%", color: bg, mv };
+      const priceStr = liveP >= 1000 ? "$" + liveP.toLocaleString(undefined, { maximumFractionDigits: 0 })
+        : liveP >= 1 ? "$" + liveP.toFixed(2)
+        : liveP >= 0.01 ? "$" + liveP.toFixed(4)
+        : "$" + liveP.toFixed(6);
+      return { sym: r.sym, value: fmtTotal(mv), pct: (pnlPct >= 0 ? "+" : "") + pnlPct.toFixed(1) + "%", color: bg, mv, livePrice: priceStr };
     }).filter(x => x.mv > 0).sort((a, b) => b.mv - a.mv).slice(0, 9);
   }, [positions, getPrice]);
 
@@ -385,7 +390,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
             <div className="panel-body">
               {heatmapItems.length > 0 ? (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 2 }}>
-                  {heatmapItems.map((item, i) => <HeatmapBlock key={i} sym={item.sym} value={item.value} pct={item.pct} color={item.color} />)}
+                  {heatmapItems.map((item, i) => <HeatmapBlock key={i} sym={item.sym} value={item.value} pct={item.pct} color={item.color} livePrice={item.livePrice} />)}
                 </div>
               ) : <div className="muted" style={{ padding: 20, textAlign: "center" }}>No positions to display.</div>}
             </div>
