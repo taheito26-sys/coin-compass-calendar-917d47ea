@@ -661,6 +661,43 @@ export async function clearAllTransactions(): Promise<{ deleted: number }> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
+   const { data: snapshots, error: snapshotsError } = await supabase
+     .from("portfolio_snapshots")
+     .select("id")
+     .eq("user_id", user.id);
+
+   if (snapshotsError) throw new Error(`clearAllTransactions snapshots: ${snapshotsError.message}`);
+
+   const snapshotIds = (snapshots || []).map((snapshot) => snapshot.id);
+
+   if (snapshotIds.length > 0) {
+     const { error: positionSnapshotsError } = await supabase
+       .from("position_snapshots")
+       .delete()
+       .in("portfolio_snapshot_id", snapshotIds);
+
+     if (positionSnapshotsError) throw new Error(`clearAllTransactions position_snapshots: ${positionSnapshotsError.message}`);
+   }
+
+   const [lotsResult, portfolioSnapshotsResult, fingerprintsResult] = await Promise.all([
+     supabase
+       .from("lots")
+       .delete()
+       .eq("user_id", user.id),
+     supabase
+       .from("portfolio_snapshots")
+       .delete()
+       .eq("user_id", user.id),
+     supabase
+       .from("import_row_fingerprints")
+       .delete()
+       .eq("user_id", user.id),
+   ]);
+
+   if (lotsResult.error) throw new Error(`clearAllTransactions lots: ${lotsResult.error.message}`);
+   if (portfolioSnapshotsResult.error) throw new Error(`clearAllTransactions portfolio_snapshots: ${portfolioSnapshotsResult.error.message}`);
+   if (fingerprintsResult.error) throw new Error(`clearAllTransactions import_row_fingerprints: ${fingerprintsResult.error.message}`);
+
   const { data, error } = await supabase
     .from("transactions")
     .delete()
@@ -668,12 +705,6 @@ export async function clearAllTransactions(): Promise<{ deleted: number }> {
     .select("id");
 
   if (error) throw new Error(`clearAllTransactions: ${error.message}`);
-  
-  // Handled by CASCADE if Postgres triggers work, but we ensure here for safety
-  await supabase
-    .from("import_row_fingerprints")
-    .delete()
-    .eq("user_id", user.id);
 
   return { deleted: data?.length ?? 0 };
 }

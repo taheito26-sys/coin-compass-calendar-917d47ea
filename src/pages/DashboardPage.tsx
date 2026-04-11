@@ -188,6 +188,11 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
   const [riskMetrics, setRiskMetrics] = useState<{ maxDrawdown: number; sessionPnl: number; sessionPnlPct: number; peakValue: number } | null>(null);
 
   useEffect(() => {
+    if (txCount === 0) {
+      setRiskMetrics({ maxDrawdown: 0, sessionPnl: 0, sessionPnlPct: 0, peakValue: 0 });
+      return;
+    }
+
     async function loadRisk() {
       try {
         const { fetchRiskMetrics } = await import("@/lib/api");
@@ -195,10 +200,11 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
         setRiskMetrics(data);
       } catch (err) {
         console.error("Failed to load risk metrics:", err);
+        setRiskMetrics({ maxDrawdown: 0, sessionPnl: 0, sessionPnlPct: 0, peakValue: 0 });
       }
     }
     loadRisk();
-  }, [state.syncStatus]);
+  }, [state.syncStatus, txCount]);
 
   const cardOrder = useMemo(() => {
     const raw = state.dashboardLayout || [];
