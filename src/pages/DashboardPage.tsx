@@ -390,7 +390,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
             <div className="panel-body">
               {heatmapItems.length > 0 ? (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 2 }}>
-                  {heatmapItems.map((item, i) => <HeatmapBlock key={i} sym={item.sym} value={item.value} pct={item.pct} color={item.color} />)}
+                  {heatmapItems.map((item, i) => <HeatmapBlock key={i} sym={item.sym} value={item.value} pct={item.pct} color={item.color} livePrice={item.livePrice} />)}
                 </div>
               ) : <div className="muted" style={{ padding: 20, textAlign: "center" }}>No positions to display.</div>}
             </div>
