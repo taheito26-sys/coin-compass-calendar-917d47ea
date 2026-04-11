@@ -137,10 +137,10 @@ function HeatmapBlock({ sym, value, pct, color, livePrice }: { sym: string; valu
       onMouseEnter={e => (e.currentTarget.style.transform = "scale(1.04)")}
       onMouseLeave={e => (e.currentTarget.style.transform = "scale(1)")}
     >
-      <div style={{ fontWeight: 900, fontSize: 14, color: "#fff" }}>{sym}</div>
-      <div style={{ fontWeight: 800, fontSize: 16, color: "#fff" }}>{value}</div>
-      {livePrice && <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,.85)" }}>{livePrice}</div>}
-      <div style={{ fontSize: 11, color: "rgba(255,255,255,.65)" }}>{pct}</div>
+      <div style={{ fontWeight: 900, fontSize: 11, color: "#fff" }}>{sym}</div>
+      <div style={{ fontWeight: 800, fontSize: 13, color: "#fff" }}>{value}</div>
+      {livePrice && <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(255,255,255,.85)" }}>{livePrice}</div>}
+      <div style={{ fontSize: 9, color: "rgba(255,255,255,.65)" }}>{pct}</div>
     </div>
   );
 }
