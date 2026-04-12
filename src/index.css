@@ -1147,7 +1147,7 @@ tbody tr { transition: background var(--lt-tr); }
 .vault-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
 
 /* ── SETTINGS LAYOUT ── */
-.settings-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.settings-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: start; }
 .settings-prefs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
 .settings-preview-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
 .settings-top-split { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
