@@ -226,7 +226,6 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
         user_id: user.id,
         key: "minImportValue",
         value: String(minImportValue),
-        updated_at: new Date().toISOString(),
       }, { onConflict: "user_id,key" });
       if (error) toast(error.message, "bad");
       else toast("Sync threshold saved to cloud ✓", "good");
@@ -541,7 +540,6 @@ function AiKeysSection() {
       user_id: user.id,
       key,
       value: value.trim(),
-      updated_at: new Date().toISOString(),
     }, { onConflict: "user_id,key" });
     if (error) toast(error.message, "bad");
     else {
