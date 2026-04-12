@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { buildPortfolioSnapshot } from "../ai-analysis/portfolioSnapshot.ts";
-import { calculateRiskMetrics } from "../ai-analysis/riskEngine.ts";
+import { buildPortfolioSnapshot } from "../_shared/portfolio-snapshot.ts";
+import { calculateRiskMetrics } from "../_shared/risk-engine.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
