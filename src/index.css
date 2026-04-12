@@ -1147,7 +1147,11 @@ tbody tr { transition: background var(--lt-tr); }
 .vault-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
 
 /* ── SETTINGS LAYOUT ── */
-.settings-page { min-width: 0; overflow-x: hidden; display: flex; flex-direction: column; gap: 10px; }
+.settings-page { min-width: 0; overflow-x: hidden; display: flex; flex-direction: column; gap: 10px; isolation: isolate; }
+.settings-page > .panel,
+.settings-page > .settings-row > .panel,
+.settings-page .panel { height: auto !important; flex-shrink: 0; overflow: visible; position: relative; }
+.settings-page .panel-body { overflow: visible; flex: 0 0 auto; }
 .settings-layout-panel { overflow: hidden; }
 .settings-layout-grid {
   display: grid;
