@@ -840,8 +840,8 @@ export default function PortfolioPage() {
   // ── RENDER ───────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: "80vh", padding: "0 2px" }}>
-      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+    <div style={{ display: "flex", flexDirection: "column", minHeight: 0, padding: "0 2px" }}>
+      <div style={{ display: "flex", flexDirection: "column" }}>
 
           {/* Tab switcher */}
           <div style={{ display: "flex", gap: 2, marginBottom: 10 }}>
@@ -966,14 +966,14 @@ export default function PortfolioPage() {
                 </div>
               ) : (
                 /* Desktop table */
-                <div className="panel" style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+                <div className="panel" style={{ display: "flex", flexDirection: "column" }}>
                   <div className="panel-head">
                     <h2>Assets</h2>
                     <span className="pill">
                       {sorted.length} positions{isLotView && ` · ${sorted.reduce((s, r) => s + r.lots.length, 0)} lots`}
                     </span>
                   </div>
-                  <div className="panel-body" style={{ padding: 0, overflow: "auto", flex: 1 }}>
+                  <div className="panel-body" style={{ padding: 0 }}>
                     <div className="tableWrap">
                       <table>
                         <thead>
