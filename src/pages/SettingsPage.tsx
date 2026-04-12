@@ -506,6 +506,9 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
         </div>
       </div>
 
+      {/* AI API Keys */}
+      <AiKeysSection />
+
       {/* Rebalancing Tool */}
       <div className="panel" style={{ marginTop: 10, minWidth: 0 }}>
         <div className="panel-head"><h2>⚖️ Portfolio Rebalancing</h2></div>
@@ -519,6 +522,189 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
     </div>
   );
 });
+
+// ── AI API Keys Section ───────────────────────────────────────────
+function AiKeysSection() {
+  const { toast } = useCrypto();
+  const [anthropicKey, setAnthropicKey] = useState("");
+  const [geminiKey, setGeminiKey] = useState("");
+  const [hasAnthropic, setHasAnthropic] = useState(false);
+  const [hasGemini, setHasGemini] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    async function load() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase.from("user_preferences")
+        .select("key, value")
+        .eq("user_id", user.id)
+        .in("key", ["anthropic_api_key", "gemini_api_key"]);
+      if (data) {
+        for (const row of data) {
+          if (row.key === "anthropic_api_key" && row.value) setHasAnthropic(true);
+          if (row.key === "gemini_api_key" && row.value) setHasGemini(true);
+        }
+      }
+      setLoaded(true);
+    }
+    load();
+  }, []);
+
+  const saveKey = async (key: string, value: string, label: string) => {
+    if (!value.trim()) { toast(`Enter a valid ${label} key`, "bad"); return; }
+    setSaving(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { toast("Not authenticated", "bad"); setSaving(false); return; }
+    const { error } = await supabase.from("user_preferences").upsert({
+      user_id: user.id,
+      key,
+      value: value.trim(),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id,key" });
+    if (error) toast(error.message, "bad");
+    else {
+      toast(`${label} key saved ✓`, "good");
+      if (key === "anthropic_api_key") { setHasAnthropic(true); setAnthropicKey(""); }
+      if (key === "gemini_api_key") { setHasGemini(true); setGeminiKey(""); }
+    }
+    setSaving(false);
+  };
+
+  const removeKey = async (key: string, label: string) => {
+    if (!confirm(`Remove your ${label} key?`)) return;
+    setSaving(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setSaving(false); return; }
+    const { error } = await supabase.from("user_preferences")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("key", key);
+    if (error) toast(error.message, "bad");
+    else {
+      toast(`${label} key removed`, "warn");
+      if (key === "anthropic_api_key") setHasAnthropic(false);
+      if (key === "gemini_api_key") setHasGemini(false);
+    }
+    setSaving(false);
+  };
+
+  const maskPreview = (has: boolean) => has ? "sk-••••••••••••••••" : "Not configured";
+
+  return (
+    <div className="panel" style={{ marginTop: 10, minWidth: 0 }}>
+      <div className="panel-head">
+        <h2>🤖 AI API Keys</h2>
+        <span className="pill" style={{ fontSize: 9 }}>Server-side only</span>
+      </div>
+      <div className="panel-body">
+        <p className="muted" style={{ fontSize: 11, marginBottom: 14, lineHeight: 1.6 }}>
+          Your API keys are stored securely in the database and used exclusively by server-side Edge Functions.
+          They are <strong>never</strong> exposed to the browser.
+        </p>
+
+        {/* Anthropic / Claude */}
+        <div style={{ borderBottom: "1px solid var(--line)", paddingBottom: 14, marginBottom: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <span style={{ fontSize: 14 }}>🧠</span>
+            <span style={{ fontWeight: 700, fontSize: 13, color: "var(--text)" }}>Anthropic (Claude)</span>
+            <span style={{
+              fontSize: 9, padding: "2px 8px", borderRadius: 6, fontWeight: 700,
+              background: hasAnthropic ? "rgba(22,163,74,0.15)" : "rgba(255,255,255,0.05)",
+              color: hasAnthropic ? "var(--good)" : "var(--muted)",
+            }}>
+              {hasAnthropic ? "CONFIGURED" : "NOT SET"}
+            </span>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input
+              className="inp"
+              type="password"
+              placeholder={maskPreview(hasAnthropic)}
+              value={anthropicKey}
+              onChange={e => setAnthropicKey(e.target.value)}
+              style={{ flex: 1, minWidth: 0, fontFamily: "monospace", fontSize: 12 }}
+            />
+            <button
+              className="btn"
+              onClick={() => saveKey("anthropic_api_key", anthropicKey, "Anthropic")}
+              disabled={saving || !anthropicKey.trim()}
+              style={{ padding: "8px 14px", fontSize: 11 }}
+            >
+              {saving ? "…" : hasAnthropic ? "Update" : "Save"}
+            </button>
+            {hasAnthropic && (
+              <button
+                className="btn secondary"
+                onClick={() => removeKey("anthropic_api_key", "Anthropic")}
+                disabled={saving}
+                style={{ padding: "8px 10px", fontSize: 11, color: "var(--bad)" }}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          <p className="muted" style={{ fontSize: 10, marginTop: 6, lineHeight: 1.5 }}>
+            Get your key from{" "}
+            <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer" style={{ color: "var(--brand)" }}>
+              console.anthropic.com
+            </a>
+          </p>
+        </div>
+
+        {/* Gemini */}
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <span style={{ fontSize: 14 }}>💎</span>
+            <span style={{ fontWeight: 700, fontSize: 13, color: "var(--text)" }}>Google Gemini</span>
+            <span style={{
+              fontSize: 9, padding: "2px 8px", borderRadius: 6, fontWeight: 700,
+              background: hasGemini ? "rgba(22,163,74,0.15)" : "rgba(255,255,255,0.05)",
+              color: hasGemini ? "var(--good)" : "var(--muted)",
+            }}>
+              {hasGemini ? "CONFIGURED" : "NOT SET"}
+            </span>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input
+              className="inp"
+              type="password"
+              placeholder={maskPreview(hasGemini)}
+              value={geminiKey}
+              onChange={e => setGeminiKey(e.target.value)}
+              style={{ flex: 1, minWidth: 0, fontFamily: "monospace", fontSize: 12 }}
+            />
+            <button
+              className="btn"
+              onClick={() => saveKey("gemini_api_key", geminiKey, "Gemini")}
+              disabled={saving || !geminiKey.trim()}
+              style={{ padding: "8px 14px", fontSize: 11 }}
+            >
+              {saving ? "…" : hasGemini ? "Update" : "Save"}
+            </button>
+            {hasGemini && (
+              <button
+                className="btn secondary"
+                onClick={() => removeKey("gemini_api_key", "Gemini")}
+                disabled={saving}
+                style={{ padding: "8px 10px", fontSize: 11, color: "var(--bad)" }}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          <p className="muted" style={{ fontSize: 10, marginTop: 6, lineHeight: 1.5 }}>
+            Get your key from{" "}
+            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style={{ color: "var(--brand)" }}>
+              aistudio.google.com
+            </a>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── Vault Section ─────────────────────────────────────────────────
 const DB_NAME = "cryptotracker_vault";
