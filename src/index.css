@@ -799,7 +799,7 @@ body {
 .panel-actions { display: flex; gap: 6px; align-items: center; }
 
 /* â”€â”€ KPI CARDS â”€â”€ */
-.kpis { display: grid; gap: 4px; grid-template-columns: repeat(5, 1fr); background: transparent; border: none; border-radius: 0; overflow: visible; }
+.kpis { display: grid; gap: 4px; grid-template-columns: repeat(6, 1fr); background: transparent; border: none; border-radius: 0; overflow: visible; }
 .kpis .kpi-card {
   flex: none; background: var(--card-bg); border: 1px solid var(--line); border-radius: 10px; border-right: 1px solid var(--line);
   padding: 8px 10px; box-shadow: var(--lt-shadow2); position: relative; overflow: hidden;
