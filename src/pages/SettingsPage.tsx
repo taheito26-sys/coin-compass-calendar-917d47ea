@@ -300,12 +300,12 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
   };
 
   return (
-    <div style={{ minWidth: 0, overflowX: "hidden", display: "flex", flexDirection: "column", gap: 8 }}>
+    <div className="settings-page">
       {/* Layout Templates */}
-      <div className="panel" style={{ minWidth: 0, height: "auto" }}>
+      <div className="panel settings-layout-panel" style={{ minWidth: 0, height: "auto" }}>
         <div className="panel-head"><h2>Layout Templates</h2></div>
         <div className="panel-body">
-          <div className="lt-grid">
+          <div className="settings-layout-grid">
             {LAYOUTS.map(l => (
               <LayoutCard key={l.id} layout={l} active={state.layout === l.id} currentTheme={state.theme}
                 onClick={() => { setState(p => ({ ...p, layout: l.id })); toast("Layout: " + l.name, "good"); }} />
@@ -362,7 +362,7 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
             <label className="form-label" style={{ whiteSpace: "normal", wordBreak: "break-word", lineHeight: "1.25" }}>
               Minimum Asset Value ({state.base})
             </label>
-            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <div className="settings-inline-row">
               <input 
                 type="range" min="0" max="500" step="10" className="inp" 
                 style={{ flex: 1, height: 6, padding: 0 }}
@@ -386,7 +386,7 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
             <label className="form-label" style={{ whiteSpace: "normal", wordBreak: "break-word", lineHeight: "1.25" }}>
               Minimum API Sync Value (USD)
             </label>
-            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <div className="settings-inline-row">
               <input className="inp" type="number" value={minImportValue}
                 onChange={e => setMinImportValue(parseFloat(e.target.value) || 0)} style={{ flex: 1 }} />
               <button className="btn secondary" onClick={saveMinImport} disabled={loadingPrefs} style={{ padding: "8px 16px", fontSize: 11 }}>
@@ -597,7 +597,7 @@ function AiKeysSection() {
               {hasAnthropic ? "CONFIGURED" : "NOT SET"}
             </span>
           </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div className="settings-inline-row">
             <input
               className="inp"
               type="password"
@@ -635,7 +635,7 @@ function AiKeysSection() {
 
         {/* Gemini */}
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
             <span style={{ fontSize: 14 }}>💎</span>
             <span style={{ fontWeight: 700, fontSize: 13, color: "var(--text)" }}>Google Gemini</span>
             <span style={{
@@ -646,7 +646,7 @@ function AiKeysSection() {
               {hasGemini ? "CONFIGURED" : "NOT SET"}
             </span>
           </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div className="settings-inline-row">
             <input
               className="inp"
               type="password"
