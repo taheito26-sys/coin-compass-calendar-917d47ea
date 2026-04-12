@@ -51,7 +51,6 @@ const ALL_CARDS: CardDef[] = [
   { id: "projectRadar", label: "Project Radar" },
   { id: "survivability", label: "Survivability Score" },
   { id: "sentimentTrends", label: "Sentiment Trends" },
-  { id: "aiAnalysis", label: "AI Analysis", colSpan: 2 },
 ];
 
 interface DonutSlice {
@@ -438,7 +437,6 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
           </div>
         );
       case "sentimentTrends": return <SentimentTrends compact />;
-      case "aiAnalysis": return <AIAnalysisPanel />;
       default: return null;
     }
   };
@@ -499,6 +497,10 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
           {editing ? "✓ Done" : "⚙ Customize"}
         </button>
         {editing && <button className="btn tiny secondary" onClick={resetLayout}>↺ Reset</button>}
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <AIAnalysisPanel />
       </div>
 
       {cardRows.map((row, ri) => {
