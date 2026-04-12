@@ -44,6 +44,78 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_analysis_runs: {
+        Row: {
+          claude_response: Json | null
+          context_hash: string
+          context_json: Json
+          created_at: string
+          error_json: Json | null
+          final_response: Json
+          gemini_response: Json | null
+          id: string
+          provider_latency_ms: Json | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          claude_response?: Json | null
+          context_hash: string
+          context_json?: Json
+          created_at?: string
+          error_json?: Json | null
+          final_response?: Json
+          gemini_response?: Json | null
+          id?: string
+          provider_latency_ms?: Json | null
+          status: string
+          user_id: string
+        }
+        Update: {
+          claude_response?: Json | null
+          context_hash?: string
+          context_json?: Json
+          created_at?: string
+          error_json?: Json | null
+          final_response?: Json
+          gemini_response?: Json | null
+          id?: string
+          provider_latency_ms?: Json | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      ai_user_risk_profiles: {
+        Row: {
+          created_at: string
+          max_single_asset_weight: number
+          rebalance_band_pct: number
+          risk_style: string
+          time_horizon: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          max_single_asset_weight?: number
+          rebalance_band_pct?: number
+          risk_style?: string
+          time_horizon?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          max_single_asset_weight?: number
+          rebalance_band_pct?: number
+          risk_style?: string
+          time_horizon?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       airdrop_projects: {
         Row: {
           chain: string | null
