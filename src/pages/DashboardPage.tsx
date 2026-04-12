@@ -1,5 +1,4 @@
 import { useCrypto } from "@/lib/cryptoContext";
-import { AIAnalysisPanel } from "@/components/ai/AIAnalysisPanel";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { fmtFiat, fmtQty, fmtPx, fmtTotal } from "@/lib/cryptoState";
@@ -497,10 +496,6 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
           {editing ? "✓ Done" : "⚙ Customize"}
         </button>
         {editing && <button className="btn tiny secondary" onClick={resetLayout}>↺ Reset</button>}
-      </div>
-
-      <div style={{ marginBottom: 12 }}>
-        <AIAnalysisPanel />
       </div>
 
       {cardRows.map((row, ri) => {
