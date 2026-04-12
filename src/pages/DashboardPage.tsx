@@ -1,4 +1,5 @@
 import { useCrypto } from "@/lib/cryptoContext";
+import { AIAnalysisPanel } from "@/components/ai/AIAnalysisPanel";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { fmtFiat, fmtQty, fmtPx, fmtTotal } from "@/lib/cryptoState";
@@ -50,6 +51,7 @@ const ALL_CARDS: CardDef[] = [
   { id: "projectRadar", label: "Project Radar" },
   { id: "survivability", label: "Survivability Score" },
   { id: "sentimentTrends", label: "Sentiment Trends" },
+  { id: "aiAnalysis", label: "AI Analysis", colSpan: 2 },
 ];
 
 interface DonutSlice {
@@ -436,6 +438,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
           </div>
         );
       case "sentimentTrends": return <SentimentTrends compact />;
+      case "aiAnalysis": return <AIAnalysisPanel />;
       default: return null;
     }
   };
