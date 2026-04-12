@@ -300,9 +300,9 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
   };
 
   return (
-    <div style={{ minWidth: 0, overflowX: "hidden" }}>
+    <div style={{ minWidth: 0, overflowX: "hidden", display: "flex", flexDirection: "column", gap: 8 }}>
       {/* Layout Templates */}
-      <div className="panel" style={{ minWidth: 0 }}>
+      <div className="panel" style={{ minWidth: 0, height: "auto" }}>
         <div className="panel-head"><h2>Layout Templates</h2></div>
         <div className="panel-body">
           <div className="lt-grid">
@@ -315,7 +315,7 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
       </div>
 
       {/* Theme Colors */}
-      <div className="panel" style={{ marginTop: 10, minWidth: 0 }}>
+      <div className="panel" style={{ minWidth: 0, height: "auto" }}>
         <div className="panel-head"><h2>Theme Colors</h2></div>
         <div className="panel-body">
           <div className="theme-colors">
@@ -328,8 +328,8 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
       </div>
 
       {/* Tracking + Currency */}
-      <div className="settings-row" style={{ marginTop: 10 }}>
-        <div className="panel" style={{ minWidth: 0 }}>
+      <div className="settings-row">
+        <div className="panel" style={{ minWidth: 0, height: "auto" }}>
           <div className="panel-head"><h2>Tracking Method</h2></div>
           <div className="panel-body">
             <div className="seg">
@@ -337,12 +337,12 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
                 <button key={m} className={state.method === m ? "active" : ""} onClick={() => { setState(p => ({ ...p, method: m })); toast("Method: " + m, "good"); }}>{m}</button>
               ))}
             </div>
-            <p className="muted" style={{ marginTop: 8, fontSize: 11, whiteSpace: "normal", wordBreak: "break-word", lineHeight: "1.4" }}>
+            <p className="muted" style={{ marginTop: 6, fontSize: 11, whiteSpace: "normal", wordBreak: "break-word", lineHeight: "1.4" }}>
               FIFO: First-In-First-Out lot matching. DCA: Dollar Cost Average position tracking.
             </p>
           </div>
         </div>
-        <div className="panel" style={{ minWidth: 0 }}>
+        <div className="panel" style={{ minWidth: 0, height: "auto" }}>
           <div className="panel-head"><h2>Base Currency</h2></div>
           <div className="panel-body">
             <div className="seg">
@@ -355,69 +355,53 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
       </div>
 
       {/* Tracking Threshold */}
-      <div className="settings-row" style={{ marginTop: 10 }}>
-        <div className="panel" style={{ minWidth: 0 }}>
-          <div className="panel-head"><h2>🚀 Tracking Threshold</h2></div>
-          <div className="panel-body">
-            <div className="form-field" style={{ minWidth: 0, borderBottom: "1px solid var(--line)", paddingBottom: 12, marginBottom: 12 }}>
-              <label className="form-label" style={{ whiteSpace: "normal", wordBreak: "break-word", lineHeight: "1.25" }}>
-                Minimum Asset Value ({state.base})
-              </label>
-              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                <input 
-                  type="range" 
-                  min="0" 
-                  max="500" 
-                  step="10" 
-                  className="inp" 
-                  style={{ flex: 1, height: 6, padding: 0 }}
-                  value={state.minImportValue} 
-                  onChange={e => setState(p => ({ ...p, minImportValue: parseInt(e.target.value) }))} 
+      <div className="panel" style={{ minWidth: 0, height: "auto" }}>
+        <div className="panel-head"><h2>🚀 Tracking Threshold</h2></div>
+        <div className="panel-body">
+          <div className="form-field" style={{ minWidth: 0, borderBottom: "1px solid var(--line)", paddingBottom: 10, marginBottom: 10 }}>
+            <label className="form-label" style={{ whiteSpace: "normal", wordBreak: "break-word", lineHeight: "1.25" }}>
+              Minimum Asset Value ({state.base})
+            </label>
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <input 
+                type="range" min="0" max="500" step="10" className="inp" 
+                style={{ flex: 1, height: 6, padding: 0 }}
+                value={state.minImportValue} 
+                onChange={e => setState(p => ({ ...p, minImportValue: parseInt(e.target.value) }))} 
+              />
+              <div style={{ position: "relative" }}>
+                <input type="number" className="inp" style={{ width: 90, textAlign: "right", paddingRight: 32 }}
+                  value={state.minImportValue}
+                  onChange={e => setState(p => ({ ...p, minImportValue: parseInt(e.target.value) || 0 }))}
                 />
-                <div style={{ position: "relative" }}>
-                  <input 
-                    type="number" 
-                    className="inp" 
-                    style={{ width: 90, textAlign: "right", paddingRight: 32 }}
-                    value={state.minImportValue}
-                    onChange={e => setState(p => ({ ...p, minImportValue: parseInt(e.target.value) || 0 }))}
-                  />
-                  <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontSize: 10, fontWeight: 800, color: "var(--muted)" }}>{state.base}</span>
-                </div>
+                <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontSize: 10, fontWeight: 800, color: "var(--muted)" }}>{state.base}</span>
               </div>
-              <p className="muted" style={{ marginTop: 8, fontSize: 11, lineBreak: "auto", wordBreak: "break-word", lineHeight: "1.4" }}>
-                Assets with a total value less than this will be hidden from dashboard and summaries.
-              </p>
             </div>
+            <p className="muted" style={{ marginTop: 6, fontSize: 11, wordBreak: "break-word", lineHeight: "1.4" }}>
+              Assets with a total value less than this will be hidden from dashboard and summaries.
+            </p>
+          </div>
 
-            <div className="form-field" style={{ minWidth: 0 }}>
-              <label className="form-label" style={{ whiteSpace: "normal", wordBreak: "break-word", lineHeight: "1.25" }}>
-                Minimum API Sync Value (USD)
-              </label>
-              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                <input 
-                  className="inp" 
-                  type="number"
-                  value={minImportValue}
-                  onChange={e => setMinImportValue(parseFloat(e.target.value) || 0)}
-                  style={{ flex: 1 }}
-                />
-                <button className="btn secondary" onClick={saveMinImport} disabled={loadingPrefs} style={{ padding: "8px 16px", fontSize: 11 }}>
-                  {loadingPrefs ? "Saving..." : "Save to Cloud"}
-                </button>
-              </div>
-              <p className="muted" style={{ marginTop: 8, fontSize: 11, lineBreak: "auto", wordBreak: "break-word", lineHeight: "1.4" }}>
-                Trades (Buy/Sell) below this USD value will be ignored during API sync. <strong>Recommended: $100</strong> to avoid dust clutter.
-              </p>
+          <div className="form-field" style={{ minWidth: 0 }}>
+            <label className="form-label" style={{ whiteSpace: "normal", wordBreak: "break-word", lineHeight: "1.25" }}>
+              Minimum API Sync Value (USD)
+            </label>
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <input className="inp" type="number" value={minImportValue}
+                onChange={e => setMinImportValue(parseFloat(e.target.value) || 0)} style={{ flex: 1 }} />
+              <button className="btn secondary" onClick={saveMinImport} disabled={loadingPrefs} style={{ padding: "8px 16px", fontSize: 11 }}>
+                {loadingPrefs ? "Saving..." : "Save to Cloud"}
+              </button>
             </div>
+            <p className="muted" style={{ marginTop: 6, fontSize: 11, wordBreak: "break-word", lineHeight: "1.4" }}>
+              Trades below this USD value will be ignored during API sync. <strong>Recommended: $100</strong>.
+            </p>
           </div>
         </div>
-        {/* Placeholder panel to keep 2-col layout consistent */}
-        <div style={{ flex: 1, minWidth: 0 }} />
       </div>
 
       {/* Display Preferences */}
-      <div className="panel" style={{ marginTop: 10, minWidth: 0 }}>
+      <div className="panel" style={{ minWidth: 0, height: "auto" }}>
         <div className="panel-head"><h2>Display Preferences</h2></div>
         <div className="panel-body">
           <div className="settings-prefs-grid">
@@ -444,7 +428,7 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
       </div>
 
       {/* Notifications */}
-      <div className="panel" style={{ marginTop: 10, minWidth: 0 }}>
+      <div className="panel" style={{ minWidth: 0, height: "auto" }}>
         <div className="panel-head"><h2>Notifications</h2></div>
         <div className="panel-body">
           {[
@@ -463,7 +447,7 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
       </div>
 
       {/* Data Management */}
-      <div className="panel" style={{ marginTop: 10, minWidth: 0 }}>
+      <div className="panel" style={{ minWidth: 0, height: "auto" }}>
         <div className="panel-head"><h2>Data Management</h2></div>
         <div className="panel-body">
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -482,7 +466,7 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
               inp.click();
             }}>📤 Import Backup</button>
           </div>
-          <div style={{ borderTop: "1px solid var(--line)", paddingTop: 10, marginTop: 10 }}>
+          <div style={{ borderTop: "1px solid var(--line)", paddingTop: 8, marginTop: 8 }}>
             <button className="btn danger" style={{ minWidth: 0, whiteSpace: "normal" }} onClick={() => {
               if (confirm("Clear ALL transactions, lots, and holdings? This cannot be undone.")) {
                 setState(p => ({ ...p, txs: [], lots: [], holdings: [], importedFiles: [], calendarEntries: [] }));
@@ -490,17 +474,13 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
               }
             }}>🗑 Clear All Data</button>
           </div>
-          <div style={{ borderTop: "1px solid var(--line)", paddingTop: 10, marginTop: 10 }}>
-            <button
-              className="btn secondary"
-              style={{ minWidth: 0, whiteSpace: "normal" }}
-              onClick={runPEPEMultiplierRepair}
-              disabled={repairingPEPE}
-            >
+          <div style={{ borderTop: "1px solid var(--line)", paddingTop: 8, marginTop: 8 }}>
+            <button className="btn secondary" style={{ minWidth: 0, whiteSpace: "normal" }}
+              onClick={runPEPEMultiplierRepair} disabled={repairingPEPE}>
               {repairingPEPE ? "Repairing..." : "🛠 Admin: Repair PEPE x1000 Rows"}
             </button>
-            <p className="muted" style={{ marginTop: 8, fontSize: 11, lineBreak: "auto", wordBreak: "break-word", lineHeight: "1.4" }}>
-              One-click in-place repair for previously imported multiplier-corrupted PEPE transactions. No data wipe.
+            <p className="muted" style={{ marginTop: 6, fontSize: 11, wordBreak: "break-word", lineHeight: "1.4" }}>
+              One-click in-place repair for previously imported multiplier-corrupted PEPE transactions.
             </p>
           </div>
         </div>
@@ -510,7 +490,7 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
       <AiKeysSection />
 
       {/* Rebalancing Tool */}
-      <div className="panel" style={{ marginTop: 10, minWidth: 0 }}>
+      <div className="panel" style={{ minWidth: 0, height: "auto" }}>
         <div className="panel-head"><h2>⚖️ Portfolio Rebalancing</h2></div>
         <div className="panel-body">
           <RebalancingTool />
