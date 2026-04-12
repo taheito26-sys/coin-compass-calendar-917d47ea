@@ -56,25 +56,28 @@ export async function buildPortfolioSnapshot(
     console.log("No lots found, falling back to transactions-based derivation");
     const { data: txs, error: txErr } = await supabase
       .from("transactions")
-      .select("asset_id, type, qty, price, fee")
+      .select("asset_id, type, qty, unit_price, fee_amount, timestamp")
       .eq("user_id", userId)
-      .in("type", ["buy", "sell", "transfer_in", "transfer_out"]);
+      .in("type", ["buy", "sell", "transfer_in", "transfer_out"])
+      .order("timestamp", { ascending: true });
 
     if (txErr) console.warn(`Failed to fetch transactions: ${txErr.message}`);
 
     for (const tx of (txs || [])) {
-      const qty = Number(tx.qty);
-      const price = Number(tx.price);
+      const qty = Number(tx.qty || 0);
+      const price = Number(tx.unit_price || 0);
+      const fee = Number(tx.fee_amount || 0);
+      if (qty <= 0) continue;
       const existing = assetAgg.get(tx.asset_id) || { qty: 0, cost: 0 };
 
       if (tx.type === "buy" || tx.type === "transfer_in") {
-        existing.cost += qty * price;
+        existing.cost += (qty * price) + fee;
         existing.qty += qty;
       } else if (tx.type === "sell" || tx.type === "transfer_out") {
-        // Reduce qty; approximate cost reduction proportionally
         const avgCostBefore = existing.qty > 0 ? existing.cost / existing.qty : price;
-        existing.qty -= qty;
-        existing.cost = Math.max(0, existing.qty * avgCostBefore);
+        const qtySold = Math.min(qty, existing.qty);
+        existing.qty -= qtySold;
+        existing.cost = Math.max(0, existing.cost - (qtySold * avgCostBefore));
       }
 
       assetAgg.set(tx.asset_id, existing);
