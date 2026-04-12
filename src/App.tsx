@@ -13,6 +13,7 @@ import LedgerPage from "@/pages/LedgerPage";
 import WhalePage from "@/pages/WhalePage";
 import OpportunitiesPage from "@/pages/OpportunitiesPage";
 import AdminPage from "@/pages/AdminPage";
+import AIPage from "@/pages/AIPage";
 import { useSentimentAlerts } from "@/hooks/useSentimentAlerts";
 
 const PAGE_TITLES: Record<string, [string, string]> = {
@@ -23,6 +24,7 @@ const PAGE_TITLES: Record<string, [string, string]> = {
   markets: ["Markets", "Live Prices, Watchlist"],
   opportunities: ["Opportunities", "Listings, Airdrops, Delistings"],
   whale: ["Whale Tracker", "Live Whale Movements"],
+  ai: ["AI Analysis", "Claude, Gemini, Recommendations"],
   settings: ["Settings", "Theme, Data, Vault, Alerts"],
   admin: ["Admin Panel", "Users, Data Overview"],
 };
@@ -69,6 +71,7 @@ function AppShell({ onLogout, userLabel }: { onLogout: () => Promise<void>; user
           {page === "markets" && <MarketsPage />}
               {page === "opportunities" && <OpportunitiesPage />}
               {page === "whale" && <WhalePage />}
+              {page === "ai" && <AIPage />}
               {page === "settings" && <SettingsPage />}
               {page === "admin" && <AdminPage />}
         </div>

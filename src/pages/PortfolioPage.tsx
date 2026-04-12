@@ -1,5 +1,4 @@
 import { useCrypto } from "@/lib/cryptoContext";
-import { AIAnalysisPanel } from "@/components/ai/AIAnalysisPanel";
 import { fmtFiat, fmtQty, fmtPx, fmtTotal } from "@/lib/cryptoState";
 import { useLivePrices } from "@/hooks/useLivePrices";
 import { useSparklineData } from "@/hooks/useSparklineData";
@@ -890,11 +889,6 @@ export default function PortfolioPage() {
                   <div style={{ fontSize: 8, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase" }}>Total Cost</div>
                   <div className="mono" style={{ fontSize: 14, fontWeight: 900 }}>{fmtTotal(totalCost)}</div>
                 </div>
-              </div>
-
-              {/* AI Analysis Panel */}
-              <div style={{ marginBottom: 12 }}>
-                <AIAnalysisPanel />
               </div>
 
               {/* Single-line toolbar */}
