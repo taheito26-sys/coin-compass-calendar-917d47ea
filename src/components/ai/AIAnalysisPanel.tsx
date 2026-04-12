@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAIAnalysis } from "@/hooks/useAIAnalysis";
+import { useUnifiedPortfolio } from "@/hooks/useUnifiedPortfolio";
 import { AIRecommendationCard } from "./AIRecommendationCard";
 import { ModelComparisonView } from "./ModelComparisonView";
 import type { AIAnalysisRequest } from "@/lib/ai/types";
@@ -13,10 +14,12 @@ import {
   Shield,
   TrendingUp,
   RefreshCw,
+  Info,
 } from "lucide-react";
 
 export function AIAnalysisPanel() {
-  const { data, status, error, analyze, reset } = useAIAnalysis();
+  const { data, status, error, analyze, retry, reset } = useAIAnalysis();
+  const portfolio = useUnifiedPortfolio();
   const [model, setModel] = useState<"claude" | "gemini">("gemini");
   const [riskProfile, setRiskProfile] = useState<"conservative" | "moderate" | "aggressive">("moderate");
   const [comparisonData, setComparisonData] = useState<{
@@ -25,7 +28,11 @@ export function AIAnalysisPanel() {
   } | null>(null);
   const [comparing, setComparing] = useState(false);
 
+  const hasPortfolioData = portfolio.positions.length > 0 && portfolio.totalMV > 0;
+  const isBusy = status === "loading" || comparing;
+
   const runAnalysis = async () => {
+    if (!hasPortfolioData) return;
     const request: AIAnalysisRequest = {
       analysisType: "portfolio",
       model,
@@ -35,6 +42,7 @@ export function AIAnalysisPanel() {
   };
 
   const runComparison = async () => {
+    if (!hasPortfolioData) return;
     setComparing(true);
     try {
       const [claudeResult, geminiResult] = await Promise.allSettled([
@@ -104,7 +112,7 @@ export function AIAnalysisPanel() {
             <Button
               size="sm"
               onClick={runAnalysis}
-              disabled={status === "loading"}
+              disabled={isBusy || !hasPortfolioData}
             >
               {status === "loading" ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-1" />
@@ -118,7 +126,7 @@ export function AIAnalysisPanel() {
               size="sm"
               variant="outline"
               onClick={runComparison}
-              disabled={status === "loading" || comparing}
+              disabled={isBusy || !hasPortfolioData}
             >
               {comparing ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-1" />
@@ -132,20 +140,44 @@ export function AIAnalysisPanel() {
       </CardHeader>
 
       <CardContent className="space-y-4">
+        {!hasPortfolioData && (
+          <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/30 p-4 text-sm">
+            <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+            <div className="space-y-1">
+              <p className="font-medium text-foreground">Analysis requires portfolio holdings.</p>
+              <p className="text-muted-foreground">
+                Add transactions or sync an exchange account, then return here to run Claude or Gemini against your real portfolio.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Status messages */}
-        {status === "idle" && !comparisonData && (
+        {hasPortfolioData && status === "idle" && !comparisonData && (
           <div className="text-center text-muted-foreground py-6 text-sm">
             Click <strong>Analyze Portfolio</strong> to get AI-powered insights based on your real holdings.
           </div>
         )}
 
+        {status === "loading" && (
+          <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+            <span>Running {model === "claude" ? "Claude" : "Gemini"} on your live portfolio data…</span>
+          </div>
+        )}
+
         {status === "error" && (
-          <div className="flex items-center gap-2 text-destructive bg-destructive/10 rounded-lg p-3 text-sm">
+          <div className="flex items-center gap-2 text-destructive bg-destructive/10 rounded-lg p-3 text-sm flex-wrap">
             <AlertTriangle className="h-4 w-4 shrink-0" />
             <span>{error || "Analysis failed. Check your API key configuration in Settings."}</span>
-            <Button size="sm" variant="ghost" className="ml-auto" onClick={reset}>
-              Dismiss
-            </Button>
+            <div className="ml-auto flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={retry} disabled={!hasPortfolioData}>
+                Retry
+              </Button>
+              <Button size="sm" variant="ghost" onClick={reset}>
+                Dismiss
+              </Button>
+            </div>
           </div>
         )}
 
