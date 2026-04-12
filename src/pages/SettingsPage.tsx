@@ -573,7 +573,7 @@ function AiKeysSection() {
   const maskPreview = (has: boolean) => has ? "sk-••••••••••••••••" : "Not configured";
 
   return (
-    <div className="panel" style={{ marginTop: 10, minWidth: 0 }}>
+    <div className="panel" style={{ minWidth: 0, height: "auto" }}>
       <div className="panel-head">
         <h2>🤖 AI API Keys</h2>
         <span className="pill" style={{ fontSize: 9 }}>Server-side only</span>
