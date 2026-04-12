@@ -720,7 +720,7 @@ function VaultSection() {
   const exportSnap = async (id: string) => { const s = await idbGet(id); if (!s?.state) { toast("Not found", "bad"); return; } const blob = new Blob([JSON.stringify(s.state, null, 2)], { type: "application/json" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `snapshot-${new Date(s.ts).toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`; a.click(); URL.revokeObjectURL(a.href); toast("Exported", "good"); };
 
   return (
-    <div className="panel" style={{ marginTop: 10, minWidth: 0 }}>
+    <div className="panel" style={{ minWidth: 0, height: "auto" }}>
       <div className="panel-head"><h2>💾 Vault — Local Snapshots</h2><span className="pill">{snapshots.length} saved</span></div>
       <div className="panel-body">
         <p className="muted" style={{ fontSize: 11, marginBottom: 10, lineHeight: 1.6 }}>Instant local snapshots stored in IndexedDB. Survives page reloads.</p>
