@@ -506,6 +506,9 @@ const SettingsPage = forwardRef<HTMLDivElement, Record<string, never>>(function 
         </div>
       </div>
 
+      {/* AI API Keys */}
+      <AiKeysSection />
+
       {/* Rebalancing Tool */}
       <div className="panel" style={{ marginTop: 10, minWidth: 0 }}>
         <div className="panel-head"><h2>⚖️ Portfolio Rebalancing</h2></div>
