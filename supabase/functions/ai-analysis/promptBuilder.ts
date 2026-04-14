@@ -1,69 +1,93 @@
 import type { PortfolioSnapshot } from "./portfolioSnapshot.ts";
 import type { RiskMetrics } from "./riskEngine.ts";
-import type { MarketSignals } from "./signalEngine.ts";
 
 export function buildPrompt(
   snapshot: PortfolioSnapshot,
   risk: RiskMetrics,
-  signals: MarketSignals,
+  analysisType: string,
   riskProfile: string
 ): string {
   const holdingsSummary = snapshot.holdings
     .filter(h => h.marketValue > 0)
     .map(h => ({
       symbol: h.symbol,
-      weight: Math.round(h.weight * 10000) / 100,
+      qty: h.qty,
+      avgCost: Math.round(h.avgCost * 100) / 100,
+      currentPrice: Math.round(h.currentPrice * 100) / 100,
+      marketValue: Math.round(h.marketValue * 100) / 100,
       pnlPct: Math.round(h.pnlPct * 100) / 100,
+      weight: Math.round(h.weight * 10000) / 100,
     }));
 
-  const systemPrompt = `You are a high-level crypto investment analyst and risk manager.
-Your task is to provide a 360-degree market analysis and portfolio decision in ARABIC.
+  const systemPrompt = `You are a portfolio risk analyst. You analyze crypto portfolios and provide structured recommendations.
 
-INTERNAL ANALYSIS CONTEXT (DO NOT OUTPUT DIRECTLY):
-1. Market Regime: ${signals.marketRegime}
-2. Sentiment: ${signals.sentiment.label} (Score: ${signals.sentiment.score})
-3. Whale Behavior: Acc: ${signals.whaleActivity.accumulation.join(", ")}, Dist: ${signals.whaleActivity.distribution.join(", ")}
-4. Momentum: Pos: ${signals.momentum.positive.join(", ")}, Neg: ${signals.momentum.negative.join(", ")}
-5. Pump Risk: ${signals.pumpRisk.highRiskAssets.join(", ")}
-6. Concentration: Max: ${risk.maxAssetSymbol} at ${(risk.maxAssetWeight * 100).toFixed(1)}%, HHI: ${risk.hhi}
-7. Portfolio Value: $${snapshot.totalValue.toFixed(2)}, Cash (USDT): $${snapshot.cashUsdt.toFixed(2)}
-8. Target Risk Profile: ${riskProfile}
+CRITICAL RULES:
+- Return ONLY valid JSON. No markdown. No prose outside JSON.
+- Do not claim certainty. Use words like "may", "suggests", "consider".
+- Do not invent data not provided.
+- Do not recommend leverage.
+- Do not recommend allocations exceeding risk limits.
+- Base analysis ONLY on the provided data.
+- All recommendations are advisory, not executable instructions.
 
-OUTPUT RULES (NON-NEGOTIABLE):
-- Response MUST be in ARABIC only.
-- Response MUST be a valid JSON object matching the schema below.
-- ALL user-facing text must be SHORT, SHARP, and DECISION-FOCUSED.
-- Total word count should be between 25 and 70 Arabic words.
-- Avoid disclaimers, repeated reasoning, or filler words.
-- Treat USDT as a valid defensive option if the market is too risky.
+RISK PROFILE: ${riskProfile}
+- conservative: max 25% single asset, prefer hold/DCA, avoid aggressive buys
+- moderate: max 35% single asset, balanced approach
+- aggressive: max 45% single asset, higher risk tolerance
+
+ANALYSIS TYPE: ${analysisType}
+
+PORTFOLIO DATA:
+Total Value: $${snapshot.totalValue.toFixed(2)}
+Total Cost Basis: $${snapshot.totalCost.toFixed(2)}
+Cash (USDT): $${snapshot.cashUsdt.toFixed(2)}
+Stablecoin Ratio: ${(snapshot.stablecoinRatio * 100).toFixed(1)}%
+
+HOLDINGS:
+${JSON.stringify(holdingsSummary, null, 2)}
+
+RISK METRICS:
+Overall Risk Level: ${risk.overallRiskLevel}
+Diversification Score: ${risk.diversificationScore}/100
+Max Asset Weight: ${risk.maxAssetSymbol} at ${(risk.maxAssetWeight * 100).toFixed(1)}%
+HHI: ${risk.hhi}
+
+CURRENT WARNINGS:
+${risk.warnings.map(w => `- [${w.severity}] ${w.message}`).join("\n")}
 
 REQUIRED OUTPUT SCHEMA:
 {
-  "marketState": { 
-    "regime": "risk_on" | "neutral" | "risk_off", 
-    "summary_ar": "Short Arabic summary of market regime" 
-  },
-  "risk": { 
-    "primary_ar": "Identify the primary risk (concentration, volatility, etc.) in Arabic" 
-  },
-  "decision": { 
-    "action_ar": "Explicit decision/action recommendation in Arabic (e.g., hold USDT, rotate, trim)" 
-  },
-  "opportunity": { 
-    "replacement_ar": "Identify potential candidates or 'No strong opportunity' in Arabic" 
-  },
-  "compactSummary": { 
-    "text_ar": "A final 1-2 line Arabic summary concluding the analysis" 
-  }
+  "recommendations": [
+    {
+      "action": "buy" | "sell" | "hold",
+      "asset": "SYMBOL",
+      "confidence": 0.0 to 1.0,
+      "priority": "low" | "medium" | "high",
+      "reason": {
+        "market": "market-based reasoning",
+        "portfolio": "portfolio-based reasoning",
+        "risk": "risk-based reasoning"
+      }
+    }
+  ],
+  "rebalancePlan": [
+    {
+      "asset": "SYMBOL",
+      "currentAllocation": number,
+      "targetAllocation": number,
+      "delta": number
+    }
+  ],
+  "warnings": [
+    {
+      "type": "string",
+      "severity": "low" | "medium" | "high",
+      "message": "string"
+    }
+  ]
 }
 
-HOLDINGS DATA:
-${JSON.stringify(holdingsSummary)}
-
-CURRENT RISK WARNINGS FROM ENGINE:
-${risk.warnings.map(w => `- ${w.message}`).join("\n")}
-
-Respond ONLY with the JSON object. Keep it concise.`;
+Analyze the portfolio and return ONLY the JSON object above. Every field is required.`;
 
   return systemPrompt;
 }
