@@ -34,7 +34,7 @@ async function callClaude(prompt: string, options: ModelOptions): Promise<any> {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-3-5-sonnet-20240620",
+        model: "claude-3-5-sonnet-20241022",
         max_tokens: 2048,
         messages: [
           { role: "user", content: prompt },
@@ -75,7 +75,7 @@ async function callGeminiDirect(prompt: string, options: ModelOptions): Promise<
 
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${options.geminiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${options.geminiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
