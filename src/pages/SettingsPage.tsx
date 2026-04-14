@@ -597,8 +597,10 @@ function AiKeysSection() {
           </div>
           <div className="settings-inline-row">
             <input
+              id="anthropic-key-input"
               className="inp"
               type="password"
+              autoComplete="new-password"
               placeholder={maskPreview(hasAnthropic)}
               value={anthropicKey}
               onChange={e => setAnthropicKey(e.target.value)}
@@ -646,8 +648,10 @@ function AiKeysSection() {
           </div>
           <div className="settings-inline-row">
             <input
+              id="gemini-key-input"
               className="inp"
               type="password"
+              autoComplete="new-password"
               placeholder={maskPreview(hasGemini)}
               value={geminiKey}
               onChange={e => setGeminiKey(e.target.value)}
