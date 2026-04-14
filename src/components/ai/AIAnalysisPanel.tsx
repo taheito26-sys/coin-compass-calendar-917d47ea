@@ -6,6 +6,7 @@ import { useAIAnalysis } from "@/hooks/useAIAnalysis";
 import { useUnifiedPortfolio } from "@/hooks/useUnifiedPortfolio";
 import { AIRecommendationCard } from "./AIRecommendationCard";
 import { ModelComparisonView } from "./ModelComparisonView";
+import { AIAnalysisCard } from "@/features/ai-analysis/components/AIAnalysisCard";
 import type { AIAnalysisRequest } from "@/lib/ai/types";
 import {
   Brain,
@@ -16,6 +17,8 @@ import {
   RefreshCw,
   Info,
 } from "lucide-react";
+
+const ARABIC_FALLBACK_TEXT = "الصورة غير واضحة حالياً، الأفضل التريث ومراقبة السيولة قبل أي تدوير.";
 
 export function AIAnalysisPanel() {
   const { data, status, error, analyze, retry, reset } = useAIAnalysis();
@@ -191,90 +194,26 @@ export function AIAnalysisPanel() {
         {/* Single model result */}
         {data && (status === "success" || status === "partial") && !comparisonData && (
           <div className="space-y-4">
-            {/* Portfolio summary */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <SummaryCard
-                label="Portfolio Value"
-                value={`$${data.portfolioSummary.value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
-              />
-              <SummaryCard
-                label="Cash Available"
-                value={`$${data.portfolioSummary.cash.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
-              />
-              <SummaryCard
-                label="Risk Level"
-                value={data.portfolioSummary.riskLevel}
-                badge
-                badgeVariant={data.portfolioSummary.riskLevel === "high" ? "destructive" : data.portfolioSummary.riskLevel === "medium" ? "secondary" : "default"}
-              />
-              <SummaryCard
-                label="Diversification"
-                value={`${data.portfolioSummary.diversificationScore}/100`}
-              />
-            </div>
-
-            {/* Model badge */}
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Badge variant="outline" className="capitalize">{data.model}</Badge>
-              <span>{new Date(data.timestamp).toLocaleString()}</span>
-            </div>
-
-            {/* Warnings */}
-            {data.warnings.length > 0 && (
-              <div className="space-y-1.5">
-                {data.warnings.map((w, i) => (
-                  <div
-                    key={i}
-                    className={`flex items-start gap-2 text-xs rounded-md p-2 ${
-                      w.severity === "high"
-                        ? "bg-destructive/10 text-destructive"
-                        : w.severity === "medium"
-                        ? "bg-amber-500/10 text-amber-600"
-                        : "bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    <Shield className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                    <span>{w.message}</span>
-                  </div>
-                ))}
+            {data.analysis ? (
+              <AIAnalysisCard data={data} />
+            ) : (
+              <div className="text-center py-8 text-muted-foreground bg-muted/20 rounded-lg">
+                <p className="text-sm">بيانات التحليل غير متوفرة بشكل صحيح.</p>
+                <p className="text-[10px] mt-1">Fallback: {ARABIC_FALLBACK_TEXT}</p>
               </div>
             )}
-
-            {/* Recommendations */}
-            {data.recommendations.length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium mb-2">Recommendations</h4>
-                <div className="grid gap-2">
-                  {data.recommendations.map((rec, i) => (
-                    <AIRecommendationCard key={i} recommendation={rec} />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Rebalance plan */}
-            {data.rebalancePlan.length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium mb-2">Suggested Rebalance</h4>
+            
+            {/* Legacy sections (Only if requested or for debugging) */}
+            {process.env.NODE_ENV === 'development' && data.rebalancePlan && data.rebalancePlan.length > 0 && (
+              <div className="opacity-50">
+                <h4 className="text-[10px] uppercase tracking-widest mb-1">Raw Rebalance (Legacy)</h4>
                 <div className="rounded-md border overflow-hidden">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="bg-muted/50">
-                        <th className="text-left p-2 font-medium">Asset</th>
-                        <th className="text-right p-2 font-medium">Current %</th>
-                        <th className="text-right p-2 font-medium">Target %</th>
-                        <th className="text-right p-2 font-medium">Delta</th>
-                      </tr>
-                    </thead>
+                  <table className="w-full text-[10px]">
                     <tbody>
-                      {data.rebalancePlan.map((item, i) => (
-                        <tr key={i} className="border-t border-border">
-                          <td className="p-2 font-medium">{item.asset}</td>
-                          <td className="text-right p-2">{item.currentAllocation.toFixed(1)}%</td>
-                          <td className="text-right p-2">{item.targetAllocation.toFixed(1)}%</td>
-                          <td className={`text-right p-2 ${item.delta > 0 ? "text-green-500" : item.delta < 0 ? "text-red-500" : ""}`}>
-                            {item.delta > 0 ? "+" : ""}{item.delta.toFixed(1)}%
-                          </td>
+                      {data.rebalancePlan.slice(0, 3).map((item, i) => (
+                        <tr key={i} className="border-t">
+                          <td className="p-1">{item.asset}</td>
+                          <td className="text-right p-1">{item.targetAllocation}%</td>
                         </tr>
                       ))}
                     </tbody>
