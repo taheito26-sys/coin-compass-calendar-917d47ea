@@ -33,7 +33,7 @@ function buildGeminiPrompt(input: GeminiCandidateInput): string {
     .filter(a => a.action === 'trim' || a.action === 'replace_candidate_review')
     .map(a => a.symbol);
 
-  return `You are a crypto market analyst evaluating replacement candidates for a portfolio rebalance.
+  return `You are a crypto market analyst evaluating replacement candidates for a portfolio rebalance. Use ENGLISH only.
 
 ## Your Role
 - Synthesize current market regime
@@ -83,7 +83,7 @@ DO NOT recommend candidates in the same narrative cluster as overweight position
 }
 
 If recommending hold_usdt, set candidates to an empty array.
-Respond with ONLY the JSON object. No markdown, no explanation.`;
+Respond with ONLY the JSON object. No markdown, no explanation. All strings must be in ENGLISH.`;
 }
 
 /**

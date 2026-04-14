@@ -31,7 +31,7 @@ export interface ClaudeReviewInput {
  * The prompt forces strict JSON-only output.
  */
 function buildClaudePrompt(input: ClaudeReviewInput): string {
-  return `You are a crypto portfolio risk critic. You review a deterministic rebalance proposal and challenge it.
+  return `You are a crypto portfolio risk critic. You review a deterministic rebalance proposal and challenge it. Use ENGLISH only.
 
 ## Your Role
 - Challenge the proposal for concentration risk, correlation overexposure, weak rationale
@@ -70,7 +70,7 @@ ${input.proposedActions.map(a => `${a.action} ${a.symbol} ${a.fromWeight !== und
   "requiredChanges": ["text"]
 }
 
-Respond with ONLY the JSON object. No markdown, no explanation.`;
+Respond with ONLY the JSON object. No markdown, no explanation. All strings must be in ENGLISH.`;
 }
 
 /**
