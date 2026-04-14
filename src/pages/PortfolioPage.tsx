@@ -18,7 +18,7 @@ import { useRebalanceAnalysis } from "@/features/rebalance/hooks/useRebalanceAna
 // ── View mode ──────────────────────────────────────────────────────────────
 
 type ViewMode = "dca" | "lot";
-type TabMode = "open" | "history";
+type TabMode = "open" | "history" | "rebalance";
 const VIEW_MODE_KEY = "portfolio_view_mode";
 
 function loadViewMode(): ViewMode {
@@ -680,19 +680,9 @@ export default function PortfolioPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: 0, padding: "0 2px" }}>
-      <div className="grid lg:grid-cols-12 gap-4 items-start mb-4">
-        {/* Left Column: AI Rebalance Control */}
-        <div className="lg:col-span-4 h-full">
-          <RebalanceReviewPanel
-            result={rebalanceResult}
-            loading={rebalanceLoading}
-            error={rebalanceError}
-            onRunAnalysis={runRebalanceAnalysis}
-          />
-        </div>
-
-        {/* Right Column: Dashboard Summary */}
-        <div className="lg:col-span-8 space-y-4">
+      <div className="space-y-4">
+        {/* Main Content (Tabs + Stats) */}
+        <div className="space-y-4">
           <div style={{ display: "flex", gap: 2 }}>
             <button
               className={`btn ${tabMode === "open" ? "primary" : "secondary"}`}
@@ -708,10 +698,24 @@ export default function PortfolioPage() {
             >
               History {closedPositions.length > 0 && <span style={{ marginLeft: 4, opacity: 0.7 }}>({closedPositions.length})</span>}
             </button>
+            <button
+              className={`btn ${tabMode === "rebalance" ? "primary" : "secondary"}`}
+              onClick={() => setTabMode("rebalance")}
+              style={{ padding: "7px 16px", fontSize: 12, fontWeight: 700, borderRadius: "8px 8px 0 0" }}
+            >
+              AI Rebalance
+            </button>
           </div>
 
           <div style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "0 8px 8px 8px", padding: 12 }}>
-            {tabMode === "history" ? <HistoryTab /> : (
+            {tabMode === "history" ? <HistoryTab /> : tabMode === "rebalance" ? (
+              <RebalanceReviewPanel
+                result={rebalanceResult}
+                loading={rebalanceLoading}
+                error={rebalanceError}
+                onRunAnalysis={runRebalanceAnalysis}
+              />
+            ) : (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: "var(--lt-radius-sm)", padding: "7px 12px", minWidth: 100 }}>
                   <div style={{ fontSize: 8, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase" }}>Portfolio Value</div>
