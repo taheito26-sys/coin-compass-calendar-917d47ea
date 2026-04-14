@@ -1,3 +1,5 @@
+import { fetchGeminiText } from "../_shared/gemini.ts";
+
 interface ModelOptions {
   anthropicKey: string;
   geminiKey: string;
@@ -70,38 +72,13 @@ async function callGemini(prompt: string, options: ModelOptions): Promise<any> {
 }
 
 async function callGeminiDirect(prompt: string, options: ModelOptions): Promise<any> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), options.timeoutMs);
-
-  try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${options.geminiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 2048 },
-        }),
-        signal: controller.signal,
-      }
-    );
-
-    clearTimeout(timeout);
-
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`Gemini API error ${response.status}: ${errText}`);
-    }
-
-    const data = await response.json();
-    const content = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    return parseJsonResponse(content);
-  } catch (err: any) {
-    clearTimeout(timeout);
-    if (err.name === "AbortError") throw new Error("Gemini request timed out");
-    throw err;
-  }
+  const content = await fetchGeminiText({
+    apiKey: options.geminiKey,
+    prompt,
+    timeoutMs: options.timeoutMs,
+    maxOutputTokens: 2048,
+  });
+  return parseJsonResponse(content);
 }
 
 function parseJsonResponse(text: string): any {

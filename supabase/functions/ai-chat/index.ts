@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { buildPortfolioSnapshot } from "../_shared/portfolio-snapshot.ts";
 import { calculateRiskMetrics } from "../_shared/risk-engine.ts";
+import { fetchGeminiText } from "../_shared/gemini.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,6 +9,110 @@ const corsHeaders = {
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+function streamAsOpenAiSse(text: string) {
+  const encoder = new TextEncoder();
+  const chunks = text.match(/[\s\S]{1,1200}/g) || [text];
+
+  const stream = new ReadableStream({
+    start(controller) {
+      for (const chunk of chunks) {
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({ choices: [{ delta: { content: chunk } }] })}\n\n`
+          )
+        );
+      }
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+    },
+  });
+}
+
+function streamAnthropicAsOpenAiSse(body: ReadableStream<Uint8Array> | null) {
+  if (!body) {
+    return streamAsOpenAiSse("No response body returned from Anthropic.");
+  }
+
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+
+  const stream = new ReadableStream({
+    start(controller) {
+      const reader = body.getReader();
+      let buffer = "";
+
+      const pump = async () => {
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+              break;
+            }
+
+            buffer += decoder.decode(value, { stream: true });
+
+            let eventBoundary = buffer.indexOf("\n\n");
+            while (eventBoundary !== -1) {
+              const eventBlock = buffer.slice(0, eventBoundary).trim();
+              buffer = buffer.slice(eventBoundary + 2);
+
+              const dataLine = eventBlock
+                .split("\n")
+                .find((line) => line.startsWith("data:"));
+
+              if (dataLine) {
+                const jsonText = dataLine.slice(5).trim();
+                if (jsonText && jsonText !== "[DONE]") {
+                  try {
+                    const payload = JSON.parse(jsonText);
+                    const deltaText = payload.delta?.text
+                      || payload.content_block?.text
+                      || payload.choices?.[0]?.delta?.content;
+                    if (deltaText) {
+                      controller.enqueue(
+                        encoder.encode(
+                          `data: ${JSON.stringify({ choices: [{ delta: { content: deltaText } }] })}\n\n`
+                        )
+                      );
+                    }
+                  } catch {
+                    // Ignore malformed streaming payloads and keep reading.
+                  }
+                }
+              }
+
+              eventBoundary = buffer.indexOf("\n\n");
+            }
+          }
+
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          controller.close();
+        } catch (err) {
+          controller.error(err);
+        }
+      };
+
+      pump();
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+    },
+  });
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -41,7 +146,6 @@ Deno.serve(async (req) => {
 
     const body = await req.json();
     const userInstruction = (body.instruction || "").trim();
-    const selectedModel = body.model || "gemini"; // "claude" | "gemini"
 
     if (!userInstruction) {
       return new Response(JSON.stringify({ error: "Instruction is required" }), {
@@ -130,19 +234,15 @@ User instruction: "${userInstruction}"`;
     let professionalPrompt = userInstruction;
     
     if (geminiKey) {
-      const reEngineerResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: reEngineerPrompt }] }],
-          generationConfig: { maxOutputTokens: 2048 },
-        }),
-      });
-      if (reEngineerResponse.ok) {
-        const reEngineered = await reEngineerResponse.json();
-        professionalPrompt = reEngineered.candidates?.[0]?.content?.parts?.[0]?.text || userInstruction;
+      try {
+        professionalPrompt = await fetchGeminiText({
+          apiKey: geminiKey,
+          prompt: reEngineerPrompt,
+          timeoutMs: 45000,
+          maxOutputTokens: 2048,
+        }) || userInstruction;
+      } catch (err) {
+        console.warn("Gemini prompt re-engineering failed:", err);
       }
     } else if (anthropicKey) {
       const reEngineerResponse = await fetch("https://api.anthropic.com/v1/messages", {
@@ -176,27 +276,22 @@ User instruction: "${userInstruction}"`;
       User Prompt: ${professionalPrompt}
       
       ${portfolioContext}`;
-      
-      const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: geminiPrompt }] }],
-          generationConfig: { maxOutputTokens: 2048 },
-        }),
-      });
-
-      if (geminiResponse.ok) {
-        const geminiData = await geminiResponse.json();
-        geminiAnalysis = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      try {
+        geminiAnalysis = await fetchGeminiText({
+          apiKey: geminiKey,
+          prompt: geminiPrompt,
+          timeoutMs: 45000,
+          maxOutputTokens: 2048,
+        }) || "";
+      } catch (err) {
+        console.warn("Gemini broad analysis failed:", err);
+        geminiAnalysis = "Gemini analysis unavailable; proceeding with portfolio context only.";
       }
     }
 
     // 2b. Claude Synthesis Pipeline (Streaming)
-    if (!anthropicKey) {
-        throw new Error("Anthropic API key required for final synthesis.");
+    if (!anthropicKey && !geminiKey) {
+        throw new Error("No AI API keys configured. Set them in Settings > AI Keys.");
     }
 
     const claudeSystemCommand = `You are the lead Portfolio Strategist. You manage a dual-model analysis pipeline.
@@ -219,49 +314,64 @@ ${geminiAnalysis}
 Portfolio Context:
 ${portfolioContext}`;
 
-    const analysisResponse = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": anthropicKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-3-5-sonnet-20241022",
-        max_tokens: 4096,
-        system: claudeSystemCommand,
-        messages: [
-          { role: "user", content: claudeUserPrompt },
-        ],
-        stream: true,
-      }),
-    });
+    if (anthropicKey) {
+      const analysisResponse = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": anthropicKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: "claude-3-5-sonnet-20241022",
+          max_tokens: 4096,
+          system: claudeSystemCommand,
+          messages: [
+            { role: "user", content: claudeUserPrompt },
+          ],
+          stream: true,
+        }),
+      });
 
-    if (!analysisResponse.ok) {
-      const status = analysisResponse.status;
-      if (status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      if (!analysisResponse.ok) {
+        const status = analysisResponse.status;
+        if (status === 429) {
+          return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
+            status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        if (status === 402) {
+          return new Response(JSON.stringify({ error: "AI credits exhausted. Please add funds in Settings > Workspace > Usage." }), {
+            status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const errText = await analysisResponse.text();
+        console.error("Analysis model error:", status, errText);
+        throw new Error("Analysis model failed");
       }
-      if (status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted. Please add funds in Settings > Workspace > Usage." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const errText = await analysisResponse.text();
-      console.error("Analysis model error:", status, errText);
-      throw new Error("Analysis model failed");
+
+      // Stream the response back to the client
+      return streamAnthropicAsOpenAiSse(analysisResponse.body);
     }
 
-    // Stream the response back to the client
-    return new Response(analysisResponse.body, {
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-      },
+    const geminiFinalPrompt = `${claudeSystemCommand}
+
+User Instruction: ${professionalPrompt}
+
+Initial Research Findings (from Gemini Engine):
+${geminiAnalysis}
+
+Portfolio Context:
+${portfolioContext}`;
+
+    const finalText = await fetchGeminiText({
+      apiKey: geminiKey,
+      prompt: geminiFinalPrompt,
+      timeoutMs: 45000,
+      maxOutputTokens: 4096,
     });
+
+    return streamAsOpenAiSse(finalText || "Unable to generate analysis.");
   } catch (err: any) {
     console.error("ai-chat error:", err);
     return new Response(

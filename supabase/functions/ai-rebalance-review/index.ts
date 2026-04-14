@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { fetchGeminiText } from "../_shared/gemini.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -76,14 +77,12 @@ Deno.serve(async (req) => {
       } 
       else if (provider === "gemini") {
         if (!geminiKey) throw new Error("Key not set");
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+        finalResponse = await fetchGeminiText({
+          apiKey: geminiKey,
+          prompt,
+          timeoutMs: 45000,
+          maxOutputTokens: 2048,
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(`Gemini ${res.status}: ${JSON.stringify(data)}`);
-        finalResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
       }
     } catch (aiErr: any) {
       console.error(`AI ${provider} failed:`, aiErr.message);
