@@ -77,6 +77,10 @@ Deno.serve(async (req) => {
     let responseText = "";
     let usedProvider = provider;
 
+    if (!responseText) {
+      console.log(`[ai-rebalance-review] Calling ${provider} for ${role}. Prompt length: ${prompt.length}`);
+    }
+
     if (provider === "claude") {
       if (!anthropicKey) return respond({ error: "Anthropic API key not configured" }, 400);
       
@@ -84,11 +88,11 @@ Deno.serve(async (req) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-api-key": anthropicKey,
+          "x-api-key": anthropicKey.trim(),
           "anthropic-version": "2023-06-01",
         },
         body: JSON.stringify({
-          model: "claude-3-5-sonnet-20240620",
+          model: "claude-3-haiku-20240307",
           max_tokens: 2048,
           messages: [{ role: "user", content: prompt }],
         }),
