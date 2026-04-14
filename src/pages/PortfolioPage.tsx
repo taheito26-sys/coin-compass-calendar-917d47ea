@@ -467,7 +467,9 @@ export default function PortfolioPage() {
 
   const SortTh = ({ col, label }: { col: string; label: string }) => (
     <th onClick={() => toggleSort(col)} style={{ cursor: "pointer", userSelect: "none" }}>
-      {label} {sortCol === col ? (sortDir === "asc" ? "↑" : "↓") : ""}
+      <span style={{ color: "var(--brand)", fontSize: 10, fontWeight: 900, textTransform: "uppercase" }}>
+        {label} {sortCol === col ? (sortDir === "asc" ? "↑" : "↓") : ""}
+      </span>
     </th>
   );
 
@@ -626,7 +628,16 @@ export default function PortfolioPage() {
           <div className="tableWrap">
             <table>
               <thead>
-                <tr><th>Asset</th><th>Qty</th><th>Avg Buy</th><th>Avg Sell</th><th>Cost</th><th>Proceeds</th><th>P&L</th><th>Return</th></tr>
+                <tr style={{ borderBottom: "1px solid var(--line)" }}>
+                  <th style={{ color: "var(--brand)", fontSize: 10, fontWeight: 900, textTransform: "uppercase" }}>Asset</th>
+                  <th style={{ color: "var(--brand)", fontSize: 10, fontWeight: 900, textTransform: "uppercase" }}>Qty</th>
+                  <th style={{ color: "var(--brand)", fontSize: 10, fontWeight: 900, textTransform: "uppercase" }}>Avg Buy</th>
+                  <th style={{ color: "var(--brand)", fontSize: 10, fontWeight: 900, textTransform: "uppercase" }}>Avg Sell</th>
+                  <th style={{ color: "var(--brand)", fontSize: 10, fontWeight: 900, textTransform: "uppercase" }}>Cost</th>
+                  <th style={{ color: "var(--brand)", fontSize: 10, fontWeight: 900, textTransform: "uppercase" }}>Proceeds</th>
+                  <th style={{ color: "var(--brand)", fontSize: 10, fontWeight: 900, textTransform: "uppercase" }}>P&L</th>
+                  <th style={{ color: "var(--brand)", fontSize: 10, fontWeight: 900, textTransform: "uppercase" }}>Return</th>
+                </tr>
               </thead>
               <tbody>
                 {closedPositions.map(cp => {
@@ -653,7 +664,14 @@ export default function PortfolioPage() {
           <div className="tableWrap">
             <table>
               <thead>
-                <tr><th>Date</th><th>Asset</th><th>Qty</th><th>Price</th><th>Proceeds</th><th>Realized P&L</th></tr>
+                <tr style={{ borderBottom: "1px solid var(--line)" }}>
+                  <th style={{ color: "var(--brand)", fontSize: 10, fontWeight: 900, textTransform: "uppercase" }}>Date</th>
+                  <th style={{ color: "var(--brand)", fontSize: 10, fontWeight: 900, textTransform: "uppercase" }}>Asset</th>
+                  <th style={{ color: "var(--brand)", fontSize: 10, fontWeight: 900, textTransform: "uppercase" }}>Qty</th>
+                  <th style={{ color: "var(--brand)", fontSize: 10, fontWeight: 900, textTransform: "uppercase" }}>Price</th>
+                  <th style={{ color: "var(--brand)", fontSize: 10, fontWeight: 900, textTransform: "uppercase" }}>Proceeds</th>
+                  <th style={{ color: "var(--brand)", fontSize: 10, fontWeight: 900, textTransform: "uppercase" }}>Realized P&L</th>
+                </tr>
               </thead>
               <tbody>
                 {sellEvents.map(ev => (
@@ -764,14 +782,15 @@ export default function PortfolioPage() {
               <div className="tableWrap">
                 <table>
                   <thead>
-                    <tr>
+                    <tr style={{ borderBottom: "1px solid var(--line)" }}>
                       {colOrder.filter(k => visibleCols.has(k)).map(key => {
                         const col = ALL_COLUMNS.find(c => c.key === key);
                         if (!col) return null;
-                        if (key === "actions") return <th key={key} style={{ width: 60 }}></th>;
+                        const label = <span style={{ color: "var(--brand)", fontSize: 10, fontWeight: 900, textTransform: "uppercase" }}>{col.label}</span>;
+                        if (key === "actions") return <th key={key} style={{ width: 70 }}></th>;
                         return ["price", "total", "allocation", "avg", "pnl", "qty"].includes(key)
                           ? <SortTh key={key} col={key} label={col.label} />
-                          : <th key={key}>{col.label}</th>;
+                          : <th key={key}>{label}</th>;
                       })}
                     </tr>
                   </thead>
@@ -796,22 +815,41 @@ export default function PortfolioPage() {
                         change24h: <td key="change24h"><ChangePill val={pos.change24h} /></td>,
                         change7d: <td key="change7d"><ChangePill val={pos.change7d} /></td>,
                         price: <td key="price" className="mono">{pos.price !== null ? "$" + fmtPx(pos.price) : "—"}</td>,
-                        total: <td key="total" className="mono" style={{ fontWeight: 700 }}>{fmtFiat(pos.total, base)}</td>,
+                        total: <td key="total" className="mono" style={{ fontWeight: 800 }}>{fmtFiat(pos.total, base)}</td>,
                         allocation: <td key="allocation" className="mono">{alloc.toFixed(1)}%</td>,
                         avg: <td key="avg" className="mono">${fmtPx(pos.avg)}</td>,
                         pnl: (
                           <td key="pnl" style={{ textAlign: "right" }}>
-                            <div style={{ fontWeight: 900, color: pos.pnlAbs >= 0 ? "var(--good)" : "var(--bad)" }}>
+                            <div style={{ fontWeight: 900, fontFamily: "var(--lt-font-mono)", color: pos.pnlAbs >= 0 ? "var(--good)" : "var(--bad)" }}>
                               {(pos.pnlAbs >= 0 ? "+" : "") + "$" + fmtFiat(Math.abs(pos.pnlAbs))}
                             </div>
-                            <div style={{ fontSize: 10, color: pos.pnlPct >= 0 ? "var(--good)" : "var(--bad)", fontWeight: 600 }}>
-                              {pos.pnlPct >= 0 ? "▲" : "▼"} {Math.abs(pos.pnlPct).toFixed(1)}%
-                            </div>
+                          </td>
+                        ),
+                        pnlPct: (
+                          <td key="pnlPct">
+                            <span className={`mono ${pos.pnlPct >= 0 ? "good" : "bad"}`} style={{ fontWeight: 700, fontSize: 11 }}>
+                              {pos.pnlPct >= 0 ? "▲" : "▼"} {Math.abs(pos.pnlPct).toFixed(2)}%
+                            </span>
+                          </td>
+                        ),
+                        breakEven: (
+                          <td key="breakEven" className="mono">
+                            <div style={{ fontWeight: 800 }}>${fmtPx(pos.breakEven)}</div>
                           </td>
                         ),
                         actions: (
                           <td key="actions" style={{ textAlign: "center" }}>
-                            <button className="btn bad" onClick={e => { e.stopPropagation(); setSellPos(pos); }} style={{ padding: "4px 8px", fontSize: 10 }}>Sell</button>
+                            <button
+                              style={{
+                                padding: "6px 14px", fontSize: 11, fontWeight: 800, letterSpacing: "0.02em",
+                                background: "#d97706", color: "#fff", border: "none", borderRadius: 6,
+                                cursor: "pointer", textTransform: "uppercase",
+                                transition: "opacity 0.15s",
+                              }}
+                              onClick={e => { e.stopPropagation(); setSellPos(pos); }}
+                            >
+                              Sell
+                            </button>
                           </td>
                         ),
                       };
