@@ -42,6 +42,24 @@ export interface RebalanceAnalysisResult {
 }
 
 /**
+ * Infer a narrative cluster for a symbol if not provided.
+ */
+function inferNarrativeCluster(symbol: string): string {
+  const s = symbol.toUpperCase();
+  if (s === 'BTC') return 'store_of_value';
+  if (['ETH', 'SOL', 'AVAX', 'DOT', 'ADA', 'MATIC', 'SUI', 'APT', 'NEAR'].includes(s)) return 'smart_contract_platform';
+  if (s === 'TON') return 'consumer_network';
+  if (['INJ', 'UNI', 'AAVE', 'MKR'].includes(s)) return 'defi';
+  if (s === 'LINK') return 'oracle_infrastructure';
+  if (['RENDER', 'RNDR'].includes(s)) return 'depin_ai';
+  if (['FET', 'TAO'].includes(s)) return 'ai';
+  if (['QNT', 'ATOM'].includes(s)) return 'interop';
+  if (['XRP', 'XLM'].includes(s)) return 'payment';
+  if (['USDT', 'USDC', 'DAI'].includes(s)) return 'stablecoin';
+  return 'other';
+}
+
+/**
  * Build signal inputs from the user's live portfolio data.
  */
 export function buildSignalInputs(
@@ -82,7 +100,7 @@ export function buildSignalInputs(
         change1h: p.change1h || 0,
         change24h: p.change24h || 0,
         change7d: p.change7d || 0,
-        narrativeCluster: p.narrativeCluster,
+        narrativeCluster: p.narrativeCluster || inferNarrativeCluster(p.sym),
       };
     });
 }

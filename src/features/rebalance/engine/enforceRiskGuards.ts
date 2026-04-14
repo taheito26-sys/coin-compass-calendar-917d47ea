@@ -220,6 +220,23 @@ function checkConcentrationDisguise(
   return null;
 }
 
+/**
+ * Get adaptive config if candidate count is too low.
+ */
+function getAdaptiveConfig(
+  candidates: GeminiCandidate[],
+  config: RiskGuardConfig
+): RiskGuardConfig {
+  if (candidates.length >= config.minCandidateCount) {
+    return config;
+  }
+  return {
+    ...config,
+    minLiquidityScore: config.relaxedMinLiquidityScore,
+    maxCorrelationToExisting: config.relaxedMaxCorrelationToExisting,
+  };
+}
+
 // ─── Main export ─────────────────────────────────────────────────────────────
 
 /**
@@ -235,36 +252,47 @@ export function enforceRiskGuards(
 ): RiskGuardResult {
   const violations: RiskGuardViolation[] = [];
   let filteredActions = [...actions];
-  let filteredCandidates = [...candidates];
+  const adaptiveConfig = getAdaptiveConfig(candidates, config);
 
-  // 1. HHI increase check
+  // 1. HHI increase check (Plan-level)
   const hhiViolation = checkHHIIncrease(actions, scores, risk.hhi);
   if (hhiViolation) violations.push(hhiViolation);
 
-  // 2. Max single asset check
+  // 2. Max single asset check (Plan-level)
   const singleAssetViolations = checkMaxSingleAsset(actions, config);
   violations.push(...singleAssetViolations);
 
-  // 3. Candidate liquidity check
-  const liqResult = checkCandidateLiquidity(filteredCandidates, config);
-  violations.push(...liqResult.violations);
-  filteredCandidates = liqResult.filtered;
+  // 3. Candidate filtering with ADAPTIVE config
+  let { violations: liqViolations, filtered: liqFiltered } = checkCandidateLiquidity(candidates, adaptiveConfig);
+  let { violations: pumpViolations, filtered: pumpFiltered } = checkCandidatePumpRisk(liqFiltered, adaptiveConfig);
+  let { violations: corrViolations, filtered: filteredCandidates } = checkCandidateCorrelation(pumpFiltered, scores, adaptiveConfig);
 
-  // 4. Candidate pump risk check
-  const pumpResult = checkCandidatePumpRisk(filteredCandidates, config);
-  violations.push(...pumpResult.violations);
-  filteredCandidates = pumpResult.filtered;
+  violations.push(...liqViolations, ...pumpViolations, ...corrViolations);
 
-  // 5. Candidate correlation check
-  const corrResult = checkCandidateCorrelation(filteredCandidates, scores, config);
-  violations.push(...corrResult.violations);
-  filteredCandidates = corrResult.filtered;
-
-  // 6. Concentration disguise check
+  // 4. Concentration disguise check
   const disguiseViolation = checkConcentrationDisguise(actions, filteredCandidates, risk);
   if (disguiseViolation) violations.push(disguiseViolation);
 
-  // If no valid candidates remain after filtering, convert replace_candidate_review to park_usdt
+  // 5. RESCUE PASS: If zero candidates survive, attempt to rescue strong ones using the floor
+  if (filteredCandidates.length === 0 && candidates.length > 0) {
+    const rescued = candidates
+      .filter(c => c.score >= adaptiveConfig.candidateScoreFloor)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, adaptiveConfig.minCandidateCount);
+
+    if (rescued.length > 0) {
+      filteredCandidates = rescued;
+      violations.push({
+        rule: 'candidate_rescue_pass',
+        message: `Rescued ${rescued.length} candidates using score floor ${adaptiveConfig.candidateScoreFloor}`,
+        current: rescued.length,
+        threshold: adaptiveConfig.minCandidateCount,
+        blocked: false
+      });
+    }
+  }
+
+  // 6. Only if still zero candidates, convert replace_candidate_review to park_usdt
   if (filteredCandidates.length === 0) {
     filteredActions = filteredActions.map(a => {
       if (a.action === 'replace_candidate_review') {
@@ -280,8 +308,6 @@ export function enforceRiskGuards(
   }
 
   // Determine if any blocking violation exists
-  const hasBlockingViolation = violations.some(v => v.blocked);
-  // Only block if the violation is on the plan itself, not on candidates
   const planBlocked = hhiViolation?.blocked || singleAssetViolations.some(v => v.blocked);
 
   return {

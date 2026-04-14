@@ -136,18 +136,47 @@ export async function runGeminiCandidates(
 }
 
 /**
+ * Cluster mapping for fallback assets.
+ */
+function clusterOf(symbol: string): string {
+  const s = symbol.toUpperCase();
+  if (s === 'BTC') return 'store_of_value';
+  if (['ETH', 'LINK', 'AAVE', 'ATOM', 'XRP'].includes(s)) return 'smart_contract_platform'; // Simplified for fallback
+  if (s === 'USDC') return 'stablecoin';
+  return 'other';
+}
+
+/**
  * Generate a deterministic fallback when Gemini is unavailable.
- * Defaults to USDT hold since we can't evaluate candidates without market data.
  */
 export function generateGeminiFallback(input: GeminiCandidateInput): GeminiReview {
+  const heldSymbols = new Set(input.scores.map(s => s.symbol.toUpperCase()));
+  const dominantCluster = (input.risk.topClusterName || '').toLowerCase();
+
+  const universe = [
+    { symbol: 'BTC', role: 'Primary store of value and market anchor', score: 0.85, why: ['High liquidity', 'Market leader'], risks: ['High volatility'] },
+    { symbol: 'ETH', role: 'Leading smart contract platform', score: 0.82, why: ['Network effects', 'Institutional adoption'], risks: ['Regulatory uncertainty'] },
+    { symbol: 'LINK', role: 'Essential oracle infrastructure', score: 0.78, why: ['Dominant oracle', 'Integrations'], risks: ['Competition'] },
+    { symbol: 'AAVE', role: 'Top tier DeFi lending protocol', score: 0.75, why: ['Governance maturity', 'High TVL'], risks: ['Smart contract risk'] },
+    { symbol: 'ATOM', role: 'Interoperability backbone', score: 0.72, why: ['Cosmos ecosystem', 'Hub utility'], risks: ['Staking dilution'] },
+    { symbol: 'XRP', role: 'Payment and liquidity bridge', score: 0.70, why: ['Fast settlement', 'Banking partnerships'], risks: ['Legal developments'] },
+    { symbol: 'USDC', role: 'Regulated stablecoin preservation', score: 0.95, why: ['Capital safety', 'High trust'], risks: ['Centralization'] }
+  ];
+
+  // Filter out assets already held or in the dominant cluster
+  const candidates = universe
+    .filter(c => !heldSymbols.has(c.symbol))
+    .filter(c => clusterOf(c.symbol).toLowerCase() !== dominantCluster)
+    .slice(0, 3);
+
   return {
-    verdict: 'hold_usdt',
-    confidence: 0.4,
+    verdict: candidates.length > 0 ? 'replace' : 'hold_usdt',
+    confidence: 0.5,
     marketSummary: {
       regime: input.regime,
       sentiment: 'mixed',
       breadth: 'mixed',
     },
-    candidates: [],
+    candidates: candidates,
   };
 }

@@ -58,6 +58,10 @@ export interface RiskGuardConfig {
   minLiquidityScore: number;       // default 0.30
   maxPumpRiskToBuy: number;        // default 0.70
   maxCorrelationToExisting: number; // default 0.80
+  minCandidateCount: number;
+  relaxedMinLiquidityScore: number;
+  relaxedMaxCorrelationToExisting: number;
+  candidateScoreFloor: number;
 }
 
 export const DEFAULT_RISK_GUARD_CONFIG: RiskGuardConfig = {
@@ -66,6 +70,10 @@ export const DEFAULT_RISK_GUARD_CONFIG: RiskGuardConfig = {
   minLiquidityScore: 0.30,
   maxPumpRiskToBuy: 0.70,
   maxCorrelationToExisting: 0.80,
+  minCandidateCount: 2,
+  relaxedMinLiquidityScore: 0.18,
+  relaxedMaxCorrelationToExisting: 0.92,
+  candidateScoreFloor: 0.45,
 };
 
 // ─── Scoring weights ─────────────────────────────────────────────────────────
