@@ -89,11 +89,15 @@ Deno.serve(async (req) => {
       });
 
       const data = await res.json();
+      responseText = data.content?.[0]?.text || "";
       if (!res.ok) {
         console.error("[ai-rebalance-review] Claude Error:", data);
-        return respond({ error: "Claude API Error", details: data }, res.status || 500);
+        return respond({ 
+          error: "Claude API Error", 
+          upstream_status: res.status, 
+          details: data 
+        }, 400);
       }
-      responseText = data.content?.[0]?.text || "";
     } 
     else if (provider === "gemini") {
       if (!geminiKey) return respond({ error: "Gemini API key not configured" }, 400);
@@ -110,7 +114,11 @@ Deno.serve(async (req) => {
       const data = await res.json();
       if (!res.ok) {
         console.error("[ai-rebalance-review] Gemini Error:", data);
-        return respond({ error: "Gemini API Error", details: data }, res.status || 500);
+        return respond({ 
+          error: "Gemini API Error", 
+          upstream_status: res.status, 
+          details: data 
+        }, 400);
       }
       responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
     } 
