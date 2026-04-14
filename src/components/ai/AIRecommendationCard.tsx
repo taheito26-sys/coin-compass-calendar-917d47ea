@@ -38,7 +38,7 @@ export function AIRecommendationCard({ recommendation }: { recommendation: AIRec
         </div>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-2 text-xs text-muted-foreground">
+      <div className="grid md:grid-cols-3 gap-2 text-xs text-muted-foreground" dir="auto">
         <div>
           <span className="font-medium text-foreground/80">Market: </span>
           {recommendation.reason.market}

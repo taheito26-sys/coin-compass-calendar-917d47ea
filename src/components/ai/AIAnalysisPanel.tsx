@@ -20,7 +20,7 @@ import {
 export function AIAnalysisPanel() {
   const { data, status, error, analyze, retry, reset } = useAIAnalysis();
   const portfolio = useUnifiedPortfolio();
-  const [model, setModel] = useState<"claude" | "gemini">("gemini");
+  const [model, setModel] = useState<"claude" | "gemini">("claude");
   const [riskProfile, setRiskProfile] = useState<"conservative" | "moderate" | "aggressive">("moderate");
   const [comparisonData, setComparisonData] = useState<{
     claude: typeof data;
@@ -234,7 +234,7 @@ export function AIAnalysisPanel() {
                     }`}
                   >
                     <Shield className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                    <span>{w.message}</span>
+                    <span dir="auto">{w.message}</span>
                   </div>
                 ))}
               </div>

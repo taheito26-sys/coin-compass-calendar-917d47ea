@@ -1,10 +1,11 @@
 import type { PortfolioSnapshot } from "./portfolioSnapshot.ts";
 import type { RiskMetrics } from "./riskEngine.ts";
+import type { MarketSignals } from "./signalEngine.ts";
 
 export function buildPrompt(
   snapshot: PortfolioSnapshot,
   risk: RiskMetrics,
-  analysisType: string,
+  signals: MarketSignals,
   riskProfile: string
 ): string {
   const holdingsSummary = snapshot.holdings
@@ -12,50 +13,29 @@ export function buildPrompt(
     .map(h => ({
       symbol: h.symbol,
       qty: h.qty,
-      avgCost: Math.round(h.avgCost * 100) / 100,
-      currentPrice: Math.round(h.currentPrice * 100) / 100,
       marketValue: Math.round(h.marketValue * 100) / 100,
       pnlPct: Math.round(h.pnlPct * 100) / 100,
       weight: Math.round(h.weight * 10000) / 100,
     }));
 
-  const systemPrompt = `You are a portfolio risk analyst. You analyze crypto portfolios and provide structured recommendations.
+  const systemPrompt = `You are a 360-degree crypto market analyst. Your goal is to provide deep, decision-focused portfolio analysis in ARABIC.
 
-CRITICAL RULES:
-- Return ONLY valid JSON. No markdown. No prose outside JSON.
-- Do not claim certainty. Use words like "may", "suggests", "consider".
-- Do not invent data not provided.
-- Do not recommend leverage.
-- Do not recommend allocations exceeding risk limits.
-- Base analysis ONLY on the provided data.
-- All recommendations are advisory, not executable instructions.
+CORE ANALYSIS CONTEXT:
+1. Market Regime: ${signals.marketRegime}
+2. Sentiment: ${signals.sentiment.label} (Score: ${signals.sentiment.score}/100)
+3. Whale Behavior: Accumulated: ${signals.whaleActivity.accumulation.join(", ")}, Distributed: ${signals.whaleActivity.distribution.join(", ")}
+4. Momentum: Positive: ${signals.momentum.positive.join(", ")}, Negative: ${signals.momentum.negative.join(", ")}
+5. Risk Flags: ${signals.pumpRisk.highRiskAssets.join(", ")}
+6. Concentration: Max: ${risk.maxAssetSymbol} (${(risk.maxAssetWeight * 100).toFixed(1)}%), HHI: ${risk.hhi}
 
-RISK PROFILE: ${riskProfile}
-- conservative: max 25% single asset, prefer hold/DCA, avoid aggressive buys
-- moderate: max 35% single asset, balanced approach
-- aggressive: max 45% single asset, higher risk tolerance
+MISSION RULES:
+- ALL USER-FACING CONTENT MUST BE IN ARABIC ONLY.
+- KEEP REASONS EXTREMELY SHORT (1-2 SHORT LINES MAX).
+- FOCUS ONLY ON HIGH-SIGNAL ACTIONS.
+- If staying in USDT is safest, say so explicitly.
+- NO DISCLAIMERS. NO English text.
 
-ANALYSIS TYPE: ${analysisType}
-
-PORTFOLIO DATA:
-Total Value: $${snapshot.totalValue.toFixed(2)}
-Total Cost Basis: $${snapshot.totalCost.toFixed(2)}
-Cash (USDT): $${snapshot.cashUsdt.toFixed(2)}
-Stablecoin Ratio: ${(snapshot.stablecoinRatio * 100).toFixed(1)}%
-
-HOLDINGS:
-${JSON.stringify(holdingsSummary, null, 2)}
-
-RISK METRICS:
-Overall Risk Level: ${risk.overallRiskLevel}
-Diversification Score: ${risk.diversificationScore}/100
-Max Asset Weight: ${risk.maxAssetSymbol} at ${(risk.maxAssetWeight * 100).toFixed(1)}%
-HHI: ${risk.hhi}
-
-CURRENT WARNINGS:
-${risk.warnings.map(w => `- [${w.severity}] ${w.message}`).join("\n")}
-
-REQUIRED OUTPUT SCHEMA:
+OUTPUT SCHEMA:
 {
   "recommendations": [
     {
@@ -64,9 +44,9 @@ REQUIRED OUTPUT SCHEMA:
       "confidence": 0.0 to 1.0,
       "priority": "low" | "medium" | "high",
       "reason": {
-        "market": "market-based reasoning",
-        "portfolio": "portfolio-based reasoning",
-        "risk": "risk-based reasoning"
+        "market": "Short Arabic market reasoning",
+        "portfolio": "Short Arabic portfolio reasoning",
+        "risk": "Short Arabic risk reasoning"
       }
     }
   ],
@@ -82,12 +62,16 @@ REQUIRED OUTPUT SCHEMA:
     {
       "type": "string",
       "severity": "low" | "medium" | "high",
-      "message": "string"
+      "message": "Short Arabic warning message"
     }
   ]
 }
 
-Analyze the portfolio and return ONLY the JSON object above. Every field is required.`;
+PORTFOLIO:
+Value: $${snapshot.totalValue.toFixed(2)}, Stablecoin Ratio: ${(snapshot.stablecoinRatio * 100).toFixed(1)}%
+Holdings: ${JSON.stringify(holdingsSummary)}
+
+Respond with valid JSON only. Every string field must be ARABIC.`;
 
   return systemPrompt;
 }
