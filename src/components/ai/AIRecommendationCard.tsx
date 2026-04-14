@@ -55,10 +55,10 @@ export function AIRecommendationCard({ recommendation }: { recommendation: AIRec
 
       {recommendation.alternatives && recommendation.alternatives.length > 0 && (
         <div className="mt-3 pt-3 border-t border-border/50">
-          <div className="text-[10px] font-bold text-primary mb-2 uppercase tracking-tight">بدائل مقترحة للاستثمار (المقترح)</div>
+          <div className="text-[10px] font-bold text-primary mb-2 uppercase tracking-tight">Proposed Strategic Alternatives</div>
           <div className="grid gap-2">
             {recommendation.alternatives.map((alt, i) => (
-              <div key={i} className="bg-background/50 rounded-md p-2 border border-border/30 flex flex-col gap-1" dir="rtl">
+              <div key={i} className="bg-background/50 rounded-md p-2 border border-border/30 flex flex-col gap-1">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-sm text-foreground">{alt.asset}</span>

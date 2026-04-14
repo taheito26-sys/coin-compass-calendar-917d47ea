@@ -292,8 +292,8 @@ export function enforceRiskGuards(
     }
   }
 
-  // 6. Only if still zero candidates, convert replace_candidate_review to park_usdt
-  if (filteredCandidates.length === 0) {
+  // 6. Only if candidates were provided but still zero survive, convert replace_candidate_review to park_usdt
+  if (candidates.length > 0 && filteredCandidates.length === 0) {
     filteredActions = filteredActions.map(a => {
       if (a.action === 'replace_candidate_review') {
         return {

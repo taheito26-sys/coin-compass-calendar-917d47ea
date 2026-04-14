@@ -149,12 +149,37 @@ Context: The user has a crypto portfolio. Re-engineer this into a professional p
     const reEngineered = await reEngineerResponse.json();
     const professionalPrompt = reEngineered.choices?.[0]?.message?.content || userInstruction;
 
-    // Step 2: Send the professional prompt + portfolio context to the selected model
-    // via streaming through Lovable AI Gateway
-    const modelId = selectedModel === "claude"
-      ? "openai/gpt-5"  // Claude-equivalent via gateway
-      : "google/gemini-2.5-flash";
+    // Step 2: DUAL ENGINE PIPELINE
+    // We call Gemini for initial analysis, then Claude for synthesis/review.
+    
+    // 2a. Gemini Broad Analysis
+    const geminiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${lovableKey}`,
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          {
+            role: "system",
+            content: "You are a crypto research engine. Provide a detailed, data-driven analysis of the portfolio based on the user's prompt. Focus on diversification and market positioning. Use ENGLISH only.",
+          },
+          {
+            role: "user",
+            content: `${professionalPrompt}\n\n---\n\n${portfolioContext}`,
+          },
+        ],
+      }),
+    });
 
+    if (!geminiResponse.ok) throw new Error("Gemini analysis engine failed");
+    const geminiData = await geminiResponse.json();
+    const geminiAnalysis = geminiData.choices?.[0]?.message?.content || "";
+
+    // 2b. Claude Synthesis Pipeline (Streaming)
+    // Claude takes the user prompt + portfolio data + Gemini's analysis to produce the final "Unified" answer.
     const analysisResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -162,24 +187,31 @@ Context: The user has a crypto portfolio. Re-engineer this into a professional p
         Authorization: `Bearer ${lovableKey}`,
       },
       body: JSON.stringify({
-        model: modelId,
+        model: "anthropic/claude-3.5-sonnet", // Correcting the model ID
         messages: [
           {
             role: "system",
-            content: `You are a senior crypto portfolio analyst. You provide thorough, data-driven analysis based on real portfolio holdings.
+            content: `You are the lead Portfolio Strategist. You manage a dual-model analysis pipeline.
+Your job is to take the raw analysis from the Gemini Research Engine and synthesize it with the real portfolio data into a final, high-signal response for the user.
 
 RULES:
-- Base ALL analysis on the provided portfolio data. Do not invent holdings or prices.
-- Be specific: reference actual symbols, weights, and P/L from the data.
-- Use advisory language: "consider", "may want to", "suggests".
-- Never recommend leverage or margin trading.
-- Acknowledge limitations: you don't have real-time market data beyond what's provided.
-- Format your response with clear sections using markdown headers.
-- Be concise but thorough.`,
+- Acknowledge that this is a "Multi-Model Consensus" analysis.
+- Be extremely rigorous about risk: check for concentration, correlation, and pump risk.
+- If Gemini missed a critical risk, highlight it.
+- Format with clear Markdown headers.
+- Maintain a professional, senior analyst tone.
+- Base ALL analysis on the provided data.
+- Output ONLY in ENGLISH. No other languages allowed.`,
           },
           {
             role: "user",
-            content: `${professionalPrompt}\n\n---\n\n${portfolioContext}`,
+            content: `User Instruction: ${professionalPrompt}
+
+Initial Research Findings (from Gemini Engine):
+${geminiAnalysis}
+
+Portfolio Context:
+${portfolioContext}`,
           },
         ],
         stream: true,

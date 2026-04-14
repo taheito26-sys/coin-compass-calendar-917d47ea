@@ -193,23 +193,12 @@ export function AIChatPanel() {
             <Brain className="h-5 w-5 text-primary" />
             AI Portfolio Chat
           </CardTitle>
-          <div className="flex items-center gap-2">
-            <div className="flex rounded-md border border-border overflow-hidden text-xs">
-              {(["claude", "gemini"] as const).map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setModel(m)}
-                  className={`px-3 py-1.5 capitalize transition-colors ${
-                    model === m
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-background text-muted-foreground hover:bg-accent"
-                  }`}
-                >
-                  {m}
-                </button>
-              ))}
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-primary/20 bg-primary/5 text-[10px] font-bold text-primary uppercase tracking-wider">
+                <Sparkles className="h-3 w-3" />
+                Dual Engine Pipeline (Gemini + Claude)
+              </div>
             </div>
-          </div>
         </div>
       </CardHeader>
 
@@ -226,7 +215,7 @@ export function AIChatPanel() {
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">
                   Ask anything about your portfolio. Your instruction will be
-                  professionally re-engineered before being sent to {model === "claude" ? "Claude" : "Gemini"}.
+                  analyzed by our dual-engine pipeline (Gemini + Claude) for maximum precision.
                 </p>
               </div>
               <div className="flex flex-wrap justify-center gap-2 pt-2">
@@ -270,7 +259,7 @@ export function AIChatPanel() {
             <div className="flex justify-start">
               <div className="rounded-lg px-3 py-2 bg-muted/50 text-muted-foreground text-sm flex items-center gap-2">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Analyzing with {model === "claude" ? "Claude" : "Gemini"}…
+                Processing with Dual Engine Pipeline…
               </div>
             </div>
           )}
