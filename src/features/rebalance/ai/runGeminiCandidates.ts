@@ -95,23 +95,35 @@ export async function runGeminiCandidates(
   const prompt = buildGeminiPrompt(input);
 
   try {
-    const { data, error } = await supabase.functions.invoke('ai-rebalance-review', {
-      body: {
+    const { data: { session } } = await supabase.auth.getSession();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session?.access_token}`,
+      'apikey': (import.meta as any).env.VITE_SUPABASE_PUBLISHABLE_KEY,
+    };
+
+    const response = await fetch('https://moebuhqkwvpfcpsxmvuc.supabase.co/functions/v1/ai-rebalance-review', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
         provider: 'gemini',
         role: 'candidate_engine',
         prompt,
         schema: 'gemini_review',
-      },
+      }),
     });
 
-    if (error) {
-      console.error('[runGeminiCandidates] Edge function error:', error);
+    if (!response.ok) {
+      const err = await response.text();
+      console.error('[runGeminiCandidates] Fetch error:', err);
       return {
         valid: false,
         data: null,
-        errors: [`Edge function error: ${error.message}`],
+        errors: [`Edge function error: ${response.status} ${err}`],
       };
     }
+
+    const data = await response.json();
 
     const responseText = data?.response || data?.result || JSON.stringify(data);
     const parsed = extractJSON(typeof responseText === 'string' ? responseText : JSON.stringify(responseText));
