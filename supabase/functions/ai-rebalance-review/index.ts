@@ -62,8 +62,14 @@ Deno.serve(async (req) => {
 
     if (userPrefs) {
       for (const p of userPrefs) {
-        if (p.key === "anthropic_api_key" && p.value) anthropicKey = p.value;
-        if (p.key === "gemini_api_key" && p.value) geminiKey = p.value;
+        // Only override if the user key looks like it belongs to the provider
+        if (p.key === "anthropic_api_key" && p.value?.startsWith("sk-ant-")) {
+          anthropicKey = p.value;
+        }
+        if (p.key === "gemini_api_key" && (p.value?.startsWith("AIza") || !p.value?.startsWith("sk-"))) {
+          // Gemini keys usually start with AIza, or at least NOT with sk- (which is OpenAI/Anthropic)
+          geminiKey = p.value;
+        }
       }
     }
 
