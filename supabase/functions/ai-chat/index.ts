@@ -25,7 +25,7 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const lovableKey = Deno.env.get("LOVABLE_API_KEY") || "";
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
     // Authenticate user
     const userClient = createClient(supabaseUrl, supabaseKey, {
@@ -89,27 +89,32 @@ ${holdingsSummary || "No holdings found."}
 RISK WARNINGS:
 ${risk.warnings.map(w => `- [${w.severity}] ${w.message}`).join("\n") || "None"}`;
 
+    let anthropicKey = Deno.env.get("ANTHROPIC_API_KEY") || "";
+    let geminiKey = Deno.env.get("GEMINI_API_KEY") || "";
+
+    const { data: userPrefs } = await serviceClient
+      .from("user_preferences")
+      .select("key, value")
+      .eq("user_id", user.id)
+      .in("key", ["anthropic_api_key", "gemini_api_key"]);
+
+    if (userPrefs) {
+      for (const p of userPrefs) {
+        if (p.key === "anthropic_api_key" && p.value?.startsWith("sk-ant-")) anthropicKey = p.value;
+        if (p.key === "gemini_api_key" && p.value) geminiKey = p.value;
+      }
+    }
+
     // Step 1: Re-engineer the user instruction into a professional prompt
-    // using Lovable AI Gateway
-    if (!lovableKey) {
-      return new Response(JSON.stringify({ error: "AI Gateway not configured" }), {
+    // using Gemini Direct API
+    if (!geminiKey && !anthropicKey) {
+      return new Response(JSON.stringify({ error: "No AI API keys configured. Set them in Settings > AI Keys." }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const reEngineerResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${lovableKey}`,
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          {
-            role: "system",
-            content: `You are a prompt engineer specializing in crypto portfolio analysis. Your job is to take a casual user instruction and transform it into a precise, professional prompt that will produce high-quality portfolio analysis from an AI model.
+    const reEngineerPrompt = `You are a prompt engineer specializing in crypto portfolio analysis. Your job is to take a casual user instruction and transform it into a precise, professional prompt that will produce high-quality portfolio analysis from an AI model.
 
 RULES:
 - Output ONLY the re-engineered prompt text. No explanations, no meta-commentary.
@@ -118,80 +123,83 @@ RULES:
 - The prompt should ask for structured reasoning: market context, portfolio-specific analysis, and risk considerations.
 - The prompt should instruct the model to be advisory, not prescriptive.
 - Keep the output prompt under 500 words.
-- Preserve the user's original intent — do not change what they're asking.
-- If the user asks something unrelated to crypto/finance, still re-engineer it but note it may be outside the portfolio context.`,
-          },
-          {
-            role: "user",
-            content: `User instruction: "${userInstruction}"
+- Preserve the user's original intent.
 
-Context: The user has a crypto portfolio. Re-engineer this into a professional prompt for a portfolio analysis AI.`,
-          },
-        ],
-      }),
-    });
+User instruction: "${userInstruction}"`;
 
-    if (!reEngineerResponse.ok) {
-      const status = reEngineerResponse.status;
-      if (status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+    let professionalPrompt = userInstruction;
+    
+    if (geminiKey) {
+      const reEngineerResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: reEngineerPrompt }] }],
+          generationConfig: { maxOutputTokens: 2048 },
+        }),
+      });
+      if (reEngineerResponse.ok) {
+        const reEngineered = await reEngineerResponse.json();
+        professionalPrompt = reEngineered.candidates?.[0]?.content?.parts?.[0]?.text || userInstruction;
       }
-      if (status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted. Please add funds in Settings > Workspace > Usage." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+    } else if (anthropicKey) {
+      const reEngineerResponse = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": anthropicKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: "claude-3-haiku-20240307",
+          max_tokens: 1024,
+          messages: [{ role: "user", content: reEngineerPrompt }],
+        }),
+      });
+      if (reEngineerResponse.ok) {
+        const reEngineered = await reEngineerResponse.json();
+        professionalPrompt = reEngineered.content?.[0]?.text || userInstruction;
       }
-      throw new Error("Failed to re-engineer prompt");
     }
 
-    const reEngineered = await reEngineerResponse.json();
-    const professionalPrompt = reEngineered.choices?.[0]?.message?.content || userInstruction;
+
 
     // Step 2: DUAL ENGINE PIPELINE
-    // We call Gemini for initial analysis, then Claude for synthesis/review.
+    let geminiAnalysis = "Gemini analysis skipped (no key).";
     
-    // 2a. Gemini Broad Analysis
-    const geminiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${lovableKey}`,
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          {
-            role: "system",
-            content: "You are a crypto research engine. Provide a detailed, data-driven analysis of the portfolio based on the user's prompt. Focus on diversification and market positioning. Use ENGLISH only.",
-          },
-          {
-            role: "user",
-            content: `${professionalPrompt}\n\n---\n\n${portfolioContext}`,
-          },
-        ],
-      }),
-    });
+    // 2a. Gemini Broad Analysis (If available)
+    if (geminiKey) {
+      const geminiPrompt = `You are a crypto research engine. Provide a detailed, data-driven analysis of the portfolio based on the user's prompt. Focus on diversification and market positioning. Use ENGLISH only.
+      
+      User Prompt: ${professionalPrompt}
+      
+      ${portfolioContext}`;
+      
+      const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: geminiPrompt }] }],
+          generationConfig: { maxOutputTokens: 2048 },
+        }),
+      });
 
-    if (!geminiResponse.ok) throw new Error("Gemini analysis engine failed");
-    const geminiData = await geminiResponse.json();
-    const geminiAnalysis = geminiData.choices?.[0]?.message?.content || "";
+      if (geminiResponse.ok) {
+        const geminiData = await geminiResponse.json();
+        geminiAnalysis = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      }
+    }
 
     // 2b. Claude Synthesis Pipeline (Streaming)
-    // Claude takes the user prompt + portfolio data + Gemini's analysis to produce the final "Unified" answer.
-    const analysisResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${lovableKey}`,
-      },
-      body: JSON.stringify({
-        model: "anthropic/claude-3.5-sonnet", // Correcting the model ID
-        messages: [
-          {
-            role: "system",
-            content: `You are the lead Portfolio Strategist. You manage a dual-model analysis pipeline.
+    if (!anthropicKey) {
+        throw new Error("Anthropic API key required for final synthesis.");
+    }
+
+    const claudeSystemCommand = `You are the lead Portfolio Strategist. You manage a dual-model analysis pipeline.
 Your job is to take the raw analysis from the Gemini Research Engine and synthesize it with the real portfolio data into a final, high-signal response for the user.
 
 RULES:
@@ -201,18 +209,29 @@ RULES:
 - Format with clear Markdown headers.
 - Maintain a professional, senior analyst tone.
 - Base ALL analysis on the provided data.
-- Output ONLY in ENGLISH. No other languages allowed.`,
-          },
-          {
-            role: "user",
-            content: `User Instruction: ${professionalPrompt}
+- Output ONLY in ENGLISH. No other languages allowed.`;
+
+    const claudeUserPrompt = `User Instruction: ${professionalPrompt}
 
 Initial Research Findings (from Gemini Engine):
 ${geminiAnalysis}
 
 Portfolio Context:
-${portfolioContext}`,
-          },
+${portfolioContext}`;
+
+    const analysisResponse = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": anthropicKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-3-5-sonnet-20240620",
+        max_tokens: 4096,
+        system: claudeSystemCommand,
+        messages: [
+          { role: "user", content: claudeUserPrompt },
         ],
         stream: true,
       }),

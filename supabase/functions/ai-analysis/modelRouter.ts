@@ -1,7 +1,6 @@
 interface ModelOptions {
   anthropicKey: string;
   geminiKey: string;
-  lovableKey: string;
   timeoutMs: number;
 }
 
@@ -64,51 +63,10 @@ async function callClaude(prompt: string, options: ModelOptions): Promise<any> {
 }
 
 async function callGemini(prompt: string, options: ModelOptions): Promise<any> {
-  // Use Lovable AI Gateway (preferred) or direct Gemini key
-  if (options.lovableKey) {
-    return callGeminiViaGateway(prompt, options);
+  if (!options.geminiKey) {
+    throw new Error("No Gemini API key configured. Set it in Settings > AI Keys.");
   }
-  if (options.geminiKey) {
-    return callGeminiDirect(prompt, options);
-  }
-  throw new Error("No Gemini API key configured. Set it in Settings > AI Keys or enable Lovable AI.");
-}
-
-async function callGeminiViaGateway(prompt: string, options: ModelOptions): Promise<any> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), options.timeoutMs);
-
-  try {
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${options.lovableKey}`,
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "user", content: prompt },
-        ],
-      }),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeout);
-
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`Gemini gateway error ${response.status}: ${errText}`);
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || "";
-    return parseJsonResponse(content);
-  } catch (err: any) {
-    clearTimeout(timeout);
-    if (err.name === "AbortError") throw new Error("Gemini request timed out");
-    throw err;
-  }
+  return callGeminiDirect(prompt, options);
 }
 
 async function callGeminiDirect(prompt: string, options: ModelOptions): Promise<any> {

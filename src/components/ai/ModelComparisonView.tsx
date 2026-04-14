@@ -7,13 +7,14 @@ import { X, AlertTriangle } from "lucide-react";
 interface ModelComparisonViewProps {
   claude: AIAnalysisResponse | null;
   gemini: AIAnalysisResponse | null;
+  errors?: { claude?: string, gemini?: string };
   onClose: () => void;
 }
 
-export function ModelComparisonView({ claude, gemini, onClose }: ModelComparisonViewProps) {
+export function ModelComparisonView({ claude, gemini, errors, onClose }: ModelComparisonViewProps) {
   const models = [
-    { label: "Claude", data: claude },
-    { label: "Gemini", data: gemini },
+    { label: "Claude", data: claude, error: errors?.claude },
+    { label: "Gemini", data: gemini, error: errors?.gemini },
   ];
 
   // Detect disagreements
@@ -65,7 +66,7 @@ export function ModelComparisonView({ claude, gemini, onClose }: ModelComparison
       )}
 
       <div className="grid md:grid-cols-2 gap-4">
-        {models.map(({ label, data }) => (
+        {models.map(({ label, data, error }) => (
           <div key={label} className="border rounded-lg p-3 space-y-3">
             <div className="flex items-center justify-between">
               <Badge variant="outline">{label}</Badge>
@@ -76,7 +77,7 @@ export function ModelComparisonView({ claude, gemini, onClose }: ModelComparison
 
             {!data ? (
               <div className="text-xs text-muted-foreground py-4 text-center">
-                {label} analysis unavailable — provider timeout or error
+                {error ? error : `${label} analysis unavailable — provider timeout or error`}
               </div>
             ) : (
               <>

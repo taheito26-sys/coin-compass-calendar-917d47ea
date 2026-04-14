@@ -25,6 +25,7 @@ export function AIAnalysisPanel() {
   const [comparisonData, setComparisonData] = useState<{
     claude: typeof data;
     gemini: typeof data;
+    errors: { claude?: string, gemini?: string };
   } | null>(null);
   const [comparing, setComparing] = useState(false);
 
@@ -59,6 +60,10 @@ export function AIAnalysisPanel() {
       setComparisonData({
         claude: claudeResult.status === "fulfilled" ? claudeResult.value : null,
         gemini: geminiResult.status === "fulfilled" ? geminiResult.value : null,
+        errors: {
+          claude: claudeResult.status === "rejected" ? String(claudeResult.reason) : undefined,
+          gemini: geminiResult.status === "rejected" ? String(geminiResult.reason) : undefined,
+        }
       });
     } catch {
       // handled via individual results
@@ -290,6 +295,7 @@ export function AIAnalysisPanel() {
           <ModelComparisonView
             claude={comparisonData.claude}
             gemini={comparisonData.gemini}
+            errors={comparisonData.errors}
             onClose={() => setComparisonData(null)}
           />
         )}

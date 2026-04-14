@@ -43,7 +43,7 @@ OUTPUT SCHEMA:
     {
       "action": "buy" | "sell" | "hold",
       "asset": "SYMBOL",
-      "confidence": 0.0 to 1.0,
+      "confidence": 0.85,
       "priority": "low" | "medium" | "high",
       "reason": {
         "market": "Short English market reasoning",
@@ -53,7 +53,7 @@ OUTPUT SCHEMA:
       "alternatives": [
         {
           "asset": "SYMBOL",
-          "weightPct": number,
+          "weightPct": 25,
           "riskWeight": "low" | "medium" | "high",
           "reason_en": "English explanation of why this coin is a good replacement"
         }
@@ -63,9 +63,9 @@ OUTPUT SCHEMA:
   "rebalancePlan": [
     {
       "asset": "SYMBOL",
-      "currentAllocation": number,
-      "targetAllocation": number,
-      "delta": number
+      "currentAllocation": 15.5,
+      "targetAllocation": 20.0,
+      "delta": 4.5
     }
   ],
   "warnings": [

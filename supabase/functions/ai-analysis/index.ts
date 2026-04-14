@@ -56,7 +56,6 @@ Deno.serve(async (req) => {
     // 3. Get API keys
     let anthropicKey = Deno.env.get("ANTHROPIC_API_KEY") || "";
     let geminiKey = Deno.env.get("GEMINI_API_KEY") || "";
-    const lovableKey = Deno.env.get("LOVABLE_API_KEY") || "";
 
     const { data: userPrefs } = await serviceClient
       .from("user_preferences")
@@ -80,8 +79,7 @@ Deno.serve(async (req) => {
       modelResponse = await routeModel(model, prompt, {
         anthropicKey,
         geminiKey,
-        lovableKey,
-        timeoutMs: 15000,
+        timeoutMs: 45000,
       });
     } catch (modelErr: any) {
       console.warn(`Primary model ${model} failed: ${modelErr.message}. Trying fallback.`);
@@ -90,8 +88,7 @@ Deno.serve(async (req) => {
         modelResponse = await routeModel(fallbackModel, prompt, {
           anthropicKey,
           geminiKey,
-          lovableKey,
-          timeoutMs: 15000,
+          timeoutMs: 45000,
         });
         usedModel = fallbackModel;
       } catch (fallbackErr: any) {
