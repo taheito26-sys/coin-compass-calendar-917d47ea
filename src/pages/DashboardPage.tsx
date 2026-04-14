@@ -19,6 +19,8 @@ import OrderBookDepth from "@/components/dashboard/OrderBookDepth";
 import ProjectRadar from "@/components/dashboard/ProjectRadar";
 import SurvivabilityScore from "@/components/dashboard/SurvivabilityScore";
 import SentimentTrends from "@/components/dashboard/SentimentTrends";
+import { useRebalanceAnalysis } from "@/features/rebalance/hooks/useRebalanceAnalysis";
+import type { MarketRegime } from "@/features/rebalance/types/rebalance";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -50,6 +52,7 @@ const ALL_CARDS: CardDef[] = [
   { id: "projectRadar", label: "Project Radar" },
   { id: "survivability", label: "Survivability Score" },
   { id: "sentimentTrends", label: "Sentiment Trends" },
+  { id: "rebalanceSummary", label: "Rebalance Status" },
 ];
 
 interface DonutSlice {
@@ -167,6 +170,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
   const { state, setState } = useCrypto();
   const portfolio = useUnifiedPortfolio();
   const { getPrice } = useLivePrices();
+  const { result: rebalanceResult, loading: rebalanceLoading, runAnalysis: runRebalance } = useRebalanceAnalysis();
 
   const base = state.base || "USD";
 
@@ -436,6 +440,91 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
           </div>
         );
       case "sentimentTrends": return <SentimentTrends compact />;
+
+      case "rebalanceSummary":
+        return (
+          <div className="panel" id="dashboard-rebalance-summary">
+            <div className="panel-head">
+              <DragHandle editing={editing} onDragStart={() => handleDragStart('rebalanceSummary')} onDragEnd={handleDragEnd} />
+              <h2>Rebalance Status</h2>
+            </div>
+            <div className="panel-body" style={{ padding: '12px 14px' }}>
+              {rebalanceResult ? (
+                <>
+                  {/* Regime badge */}
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+                    <span style={{
+                      padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 800,
+                      color: rebalanceResult.regime.regime === 'risk_on' ? '#22c55e' : rebalanceResult.regime.regime === 'risk_off' ? '#ef4444' : '#eab308',
+                      background: rebalanceResult.regime.regime === 'risk_on' ? 'rgba(22,163,74,0.12)' : rebalanceResult.regime.regime === 'risk_off' ? 'rgba(239,68,68,0.12)' : 'rgba(234,179,8,0.12)',
+                    }}>
+                      {rebalanceResult.regime.regime === 'risk_on' ? '🟢' : rebalanceResult.regime.regime === 'risk_off' ? '🔴' : '🟡'} {rebalanceResult.regime.regime.replace('_', ' ').toUpperCase()}
+                    </span>
+                    <span style={{
+                      padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700,
+                      color: rebalanceResult.portfolioRisk.concentrationRisk === 'low' ? '#22c55e' : rebalanceResult.portfolioRisk.concentrationRisk === 'critical' ? '#ef4444' : '#eab308',
+                      background: rebalanceResult.portfolioRisk.concentrationRisk === 'low' ? 'rgba(22,163,74,0.08)' : 'rgba(239,68,68,0.08)',
+                    }}>
+                      Concentration: {rebalanceResult.portfolioRisk.concentrationRisk.toUpperCase()}
+                    </span>
+                  </div>
+
+                  {/* Quick stats */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 8, fontSize: 11 }}>
+                    <div><span className="muted">HHI</span> <span className="mono" style={{ fontWeight: 700 }}>{(rebalanceResult.portfolioRisk.hhi * 10000).toFixed(0)}</span></div>
+                    <div><span className="muted">Top holding</span> <span className="mono" style={{ fontWeight: 700 }}>{rebalanceResult.portfolioRisk.topHoldingSymbol} {(rebalanceResult.portfolioRisk.topHoldingWeight * 100).toFixed(1)}%</span></div>
+                  </div>
+
+                  {/* USDT parking alert */}
+                  {rebalanceResult.consensus.useParkUsdt && (
+                    <div style={{
+                      padding: '6px 10px', borderRadius: 6,
+                      background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.2)',
+                      fontSize: 10, color: '#eab308', fontWeight: 600, marginBottom: 8,
+                    }}>
+                      🏦 USDT parking recommended for freed capital
+                    </div>
+                  )}
+
+                  {/* Actions count */}
+                  {(() => {
+                    const trims = rebalanceResult.consensus.finalActions.filter(a => a.action === 'trim').length;
+                    return trims > 0 ? (
+                      <div style={{ fontSize: 11, marginBottom: 6 }}>
+                        <strong style={{ color: '#ef4444' }}>{trims} trim{trims > 1 ? 's' : ''}</strong> proposed
+                        {rebalanceResult.consensus.vetoed && <span style={{ color: '#ef4444', fontWeight: 700 }}> — VETOED</span>}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 11, color: '#22c55e', fontWeight: 600 }}>✓ No rebalance needed</div>
+                    );
+                  })()}
+
+                  <button
+                    className="btn tiny secondary"
+                    onClick={() => onNav?.('assets')}
+                    style={{ fontSize: 10, padding: '4px 10px', marginTop: 4 }}
+                  >
+                    View Full Review →
+                  </button>
+                </>
+              ) : (
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10 }}>
+                    Run a rebalance analysis to see concentration risk, market regime, and AI-assisted recommendations.
+                  </div>
+                  <button
+                    className="btn tiny primary"
+                    onClick={() => runRebalance({ skipAI: true })}
+                    disabled={rebalanceLoading}
+                    style={{ padding: '6px 14px', fontSize: 11, fontWeight: 700 }}
+                  >
+                    {rebalanceLoading ? '⏳ Analyzing…' : '⚡ Quick Analysis'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        );
       default: return null;
     }
   };

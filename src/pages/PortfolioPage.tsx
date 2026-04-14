@@ -12,6 +12,8 @@ import { useState, useMemo, useEffect } from "react";
 import type { DerivedLot, ClosedPosition } from "@/lib/derivePortfolio";
 import { deriveRealizedByTx } from "@/lib/derivePortfolio";
 import { normalizeSymbol } from "@/lib/symbolAliases";
+import RebalanceReviewPanel from "@/features/rebalance/components/RebalanceReviewPanel";
+import { useRebalanceAnalysis } from "@/features/rebalance/hooks/useRebalanceAnalysis";
 
 // ── View mode ──────────────────────────────────────────────────────────────
 
@@ -333,6 +335,12 @@ export default function PortfolioPage() {
   const portfolio = useUnifiedPortfolio();
   const { getPrice } = useLivePrices();
   const isMobile = useIsMobile();
+  const {
+    result: rebalanceResult,
+    loading: rebalanceLoading,
+    error: rebalanceError,
+    runAnalysis: runRebalanceAnalysis,
+  } = useRebalanceAnalysis();
 
   const base = state.base || "USD";
 
@@ -841,6 +849,13 @@ export default function PortfolioPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: 0, padding: "0 2px" }}>
+      {/* AI-Assisted Rebalance Review */}
+      <RebalanceReviewPanel
+        result={rebalanceResult}
+        loading={rebalanceLoading}
+        error={rebalanceError}
+        onRunAnalysis={runRebalanceAnalysis}
+      />
       <div style={{ display: "flex", flexDirection: "column" }}>
 
           {/* Tab switcher */}
