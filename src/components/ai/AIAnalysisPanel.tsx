@@ -195,21 +195,21 @@ export function AIAnalysisPanel() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <SummaryCard
                 label="Portfolio Value"
-                value={`$${data.portfolioSummary.value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
+                value={`$${(data.portfolioSummary?.value ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
               />
               <SummaryCard
                 label="Cash Available"
-                value={`$${data.portfolioSummary.cash.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
+                value={`$${(data.portfolioSummary?.cash ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
               />
               <SummaryCard
                 label="Risk Level"
-                value={data.portfolioSummary.riskLevel}
+                value={data.portfolioSummary?.riskLevel ?? "N/A"}
                 badge
-                badgeVariant={data.portfolioSummary.riskLevel === "high" ? "destructive" : data.portfolioSummary.riskLevel === "medium" ? "secondary" : "default"}
+                badgeVariant={data.portfolioSummary?.riskLevel === "high" ? "destructive" : data.portfolioSummary?.riskLevel === "medium" ? "secondary" : "default"}
               />
               <SummaryCard
                 label="Diversification"
-                value={`${data.portfolioSummary.diversificationScore}/100`}
+                value={`${data.portfolioSummary?.diversificationScore ?? 0}/100`}
               />
             </div>
 

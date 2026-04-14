@@ -116,6 +116,16 @@ Deno.serve(async (req) => {
       ...modelResponse,
       model: usedModel,
       timestamp: new Date().toISOString(),
+      portfolioSummary: {
+        value: snapshot.totalValue,
+        cash: snapshot.cashUsdt,
+        riskLevel: risk.overallRiskLevel,
+        diversificationScore: risk.diversificationScore,
+      },
+      warnings: [
+        ...(modelResponse.warnings || []),
+        ...risk.warnings.map(w => ({ ...w, type: 'risk_engine' })),
+      ]
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

@@ -19,9 +19,9 @@ export function ModelComparisonView({ claude, gemini, onClose }: ModelComparison
   // Detect disagreements
   const disagreements: string[] = [];
   if (claude && gemini) {
-    if (claude.portfolioSummary.riskLevel !== gemini.portfolioSummary.riskLevel) {
+    if (claude.portfolioSummary?.riskLevel !== gemini.portfolioSummary?.riskLevel) {
       disagreements.push(
-        `Risk level: Claude says "${claude.portfolioSummary.riskLevel}", Gemini says "${gemini.portfolioSummary.riskLevel}"`
+        `Risk level: Claude says "${claude.portfolioSummary?.riskLevel ?? 'N/A'}", Gemini says "${gemini.portfolioSummary?.riskLevel ?? 'N/A'}"`
       );
     }
 
@@ -83,11 +83,11 @@ export function ModelComparisonView({ claude, gemini, onClose }: ModelComparison
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div>
                     <span className="text-muted-foreground">Risk: </span>
-                    <span className="font-medium capitalize">{data.portfolioSummary.riskLevel}</span>
+                    <span className="font-medium capitalize">{data.portfolioSummary?.riskLevel ?? "N/A"}</span>
                   </div>
                   <div>
                     <span className="text-muted-foreground">Diversification: </span>
-                    <span className="font-medium">{data.portfolioSummary.diversificationScore}/100</span>
+                    <span className="font-medium">{data.portfolioSummary?.diversificationScore ?? 0}/100</span>
                   </div>
                 </div>
 
