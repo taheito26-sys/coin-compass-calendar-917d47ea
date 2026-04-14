@@ -11,9 +11,17 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-customer-key",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Max-Age": "86400",
 };
+
+function createResponse(data: any, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
 
 // ─── AI providers ────────────────────────────────────────────────────────────
 
@@ -29,14 +37,15 @@ async function callClaude(
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-3-5-sonnet-20240620",
       max_tokens: 2048,
       messages: [{ role: "user", content: prompt }],
     }),
   });
 
   if (!response.ok) {
-    throw new Error(`Claude API error: ${response.status} ${response.statusText}`);
+    const err = await response.text();
+    throw new Error(`Claude API error: ${response.status} ${err}`);
   }
 
   const data = await response.json();
@@ -48,7 +57,7 @@ async function callGemini(
   apiKey: string,
 ): Promise<string> {
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.8-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -63,7 +72,8 @@ async function callGemini(
   );
 
   if (!response.ok) {
-    throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
+    const err = await response.text();
+    throw new Error(`Gemini API error: ${response.status} ${err}`);
   }
 
   const data = await response.json();
@@ -99,10 +109,7 @@ Deno.serve(async (req) => {
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return createResponse({ error: "Unauthorized: Missing header" }, 401);
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -115,20 +122,19 @@ Deno.serve(async (req) => {
     });
     const { data: { user }, error: userError } = await userClient.auth.getUser();
     if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return createResponse({ error: "Unauthorized: Invalid user" }, 401);
     }
 
-    const body = await req.json();
-    const { provider, role, prompt, schema } = body;
+    let body;
+    try {
+      body = await req.json();
+    } catch {
+      return createResponse({ error: "Invalid JSON body" }, 400);
+    }
 
+    const { provider, role, prompt, schema } = body;
     if (!provider || !prompt) {
-      return new Response(
-        JSON.stringify({ error: "Missing provider or prompt" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return createResponse({ error: "Missing provider or prompt" }, 400);
     }
 
     // Get API keys
@@ -136,7 +142,7 @@ Deno.serve(async (req) => {
     let anthropicKey = Deno.env.get("ANTHROPIC_API_KEY") || "";
     let geminiKey = Deno.env.get("GEMINI_API_KEY") || "";
 
-    // Check user-configured keys
+    // Check user-configured keys in DB
     const { data: userPrefs } = await serviceClient
       .from("user_preferences")
       .select("key, value")
@@ -159,7 +165,7 @@ Deno.serve(async (req) => {
       } else if (provider === "gemini" && geminiKey) {
         responseText = await callGemini(prompt, geminiKey);
       } else {
-        // Try the other provider as fallback
+        // Fallback or No Key Error
         if (provider === "claude" && geminiKey) {
           responseText = await callGemini(prompt, geminiKey);
           usedProvider = "gemini";
@@ -167,50 +173,36 @@ Deno.serve(async (req) => {
           responseText = await callClaude(prompt, anthropicKey);
           usedProvider = "claude";
         } else {
-          return new Response(
-            JSON.stringify({
-              error: "No API key configured for any AI provider",
-              response: null,
-              provider: "none",
-            }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-          );
+          return createResponse({
+            error: "No API key configured for any AI provider",
+            response: null,
+            provider: "none",
+          });
         }
       }
     } catch (aiErr: unknown) {
       console.error(`[ai-rebalance-review] ${provider} failed:`, aiErr);
-      return new Response(
-        JSON.stringify({
-          error: `AI call failed: ${aiErr instanceof Error ? aiErr.message : String(aiErr)}`,
-          response: null,
-          provider: usedProvider,
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return createResponse({
+        error: `AI call failed: ${aiErr instanceof Error ? aiErr.message : String(aiErr)}`,
+        response: null,
+        provider: usedProvider,
+      });
     }
 
     // Extract JSON from response
     const parsed = extractJSON(responseText);
 
-    return new Response(
-      JSON.stringify({
-        response: parsed || responseText,
-        provider: usedProvider,
-        role,
-        schema,
-        raw_length: responseText.length,
-        json_extracted: parsed !== null,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return createResponse({
+      response: parsed || responseText,
+      provider: usedProvider,
+      role,
+      schema,
+      raw_length: responseText.length,
+      json_extracted: parsed !== null,
+    });
+
   } catch (err) {
-    console.error("[ai-rebalance-review] Error:", err);
-    return new Response(
-      JSON.stringify({ success: false, error: String(err) }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
+    console.error("[ai-rebalance-review] Fatal Error:", err);
+    return createResponse({ success: false, error: String(err) }, 500);
   }
 });
