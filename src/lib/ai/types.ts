@@ -10,6 +10,12 @@ export interface AIRecommendation {
     portfolio: string;
     risk: string;
   };
+  alternatives?: {
+    asset: string;
+    weightPct: number;
+    riskWeight: "low" | "medium" | "high";
+    reason_ar: string;
+  }[];
 }
 
 export interface AIRebalanceItem {

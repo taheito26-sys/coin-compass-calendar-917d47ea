@@ -52,6 +52,36 @@ export function AIRecommendationCard({ recommendation }: { recommendation: AIRec
           {recommendation.reason.risk}
         </div>
       </div>
+
+      {recommendation.alternatives && recommendation.alternatives.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-border/50">
+          <div className="text-[10px] font-bold text-primary mb-2 uppercase tracking-tight">بدائل مقترحة للاستثمار (المقترح)</div>
+          <div className="grid gap-2">
+            {recommendation.alternatives.map((alt, i) => (
+              <div key={i} className="bg-background/50 rounded-md p-2 border border-border/30 flex flex-col gap-1" dir="rtl">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-sm text-foreground">{alt.asset}</span>
+                    <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-mono">
+                      {alt.weightPct}%
+                    </span>
+                  </div>
+                  <Badge variant="outline" className={`text-[9px] uppercase ${
+                    alt.riskWeight === "high" ? "text-red-500 border-red-500/20" : 
+                    alt.riskWeight === "medium" ? "text-amber-500 border-amber-500/20" : 
+                    "text-green-500 border-green-500/20"
+                  }`}>
+                    {alt.riskWeight} risk
+                  </Badge>
+                </div>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  {alt.reason_ar}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

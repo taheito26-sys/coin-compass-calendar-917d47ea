@@ -32,6 +32,8 @@ MISSION RULES:
 - ALL USER-FACING CONTENT MUST BE IN ARABIC ONLY.
 - KEEP REASONS EXTREMELY SHORT (1-2 SHORT LINES MAX).
 - FOCUS ONLY ON HIGH-SIGNAL ACTIONS.
+- If trimming or selling a coin, you MUST propose at least 2 alternative assets (or USDT) to re-invest the proceeds into.
+- For each alternative, provide the weight percentage of the proceeds, its risk weight, and the reasoning in Arabic.
 - If staying in USDT is safest, say so explicitly.
 - NO DISCLAIMERS. NO English text.
 
@@ -47,7 +49,15 @@ OUTPUT SCHEMA:
         "market": "Short Arabic market reasoning",
         "portfolio": "Short Arabic portfolio reasoning",
         "risk": "Short Arabic risk reasoning"
-      }
+      },
+      "alternatives": [
+        {
+          "asset": "SYMBOL",
+          "weightPct": number,
+          "riskWeight": "low" | "medium" | "high",
+          "reason_ar": "Arabic explanation of why this coin is a good replacement"
+        }
+      ]
     }
   ],
   "rebalancePlan": [
