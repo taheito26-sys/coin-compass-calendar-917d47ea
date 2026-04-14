@@ -5,6 +5,7 @@ interface FetchGeminiTextOptions {
   prompt: string;
   timeoutMs?: number;
   maxOutputTokens?: number;
+  responseMimeType?: "text/plain" | "application/json";
 }
 
 export async function fetchGeminiText({
@@ -12,6 +13,7 @@ export async function fetchGeminiText({
   prompt,
   timeoutMs = 45000,
   maxOutputTokens = 2048,
+  responseMimeType = "text/plain",
 }: FetchGeminiTextOptions): Promise<string> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -26,7 +28,10 @@ export async function fetchGeminiText({
         },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens },
+          generationConfig: {
+            maxOutputTokens,
+            responseMimeType,
+          },
         }),
         signal: controller.signal,
       }

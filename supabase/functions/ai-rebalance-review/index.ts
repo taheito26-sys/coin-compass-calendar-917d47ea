@@ -1,6 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { fetchGeminiText } from "../_shared/gemini.ts";
 
+const ANTHROPIC_MODEL = "claude-sonnet-4-20250514";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-customer-key",
@@ -66,7 +68,7 @@ Deno.serve(async (req) => {
             "anthropic-version": "2023-06-01",
           },
           body: JSON.stringify({
-            model: "claude-3-haiku-20240307",
+            model: ANTHROPIC_MODEL,
             max_tokens: 2048,
             messages: [{ role: "user", content: prompt }],
           }),

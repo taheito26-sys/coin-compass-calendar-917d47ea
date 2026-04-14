@@ -6,6 +6,8 @@ interface ModelOptions {
   timeoutMs: number;
 }
 
+const ANTHROPIC_MODEL = "claude-sonnet-4-20250514";
+
 export async function routeModel(
   model: string,
   prompt: string,
@@ -36,7 +38,7 @@ async function callClaude(prompt: string, options: ModelOptions): Promise<any> {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-3-5-sonnet-20241022",
+        model: ANTHROPIC_MODEL,
         max_tokens: 2048,
         messages: [
           { role: "user", content: prompt },
@@ -77,6 +79,7 @@ async function callGeminiDirect(prompt: string, options: ModelOptions): Promise<
     prompt,
     timeoutMs: options.timeoutMs,
     maxOutputTokens: 2048,
+    responseMimeType: "application/json",
   });
   return parseJsonResponse(content);
 }

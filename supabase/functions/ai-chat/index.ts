@@ -3,6 +3,8 @@ import { buildPortfolioSnapshot } from "../_shared/portfolio-snapshot.ts";
 import { calculateRiskMetrics } from "../_shared/risk-engine.ts";
 import { fetchGeminiText } from "../_shared/gemini.ts";
 
+const ANTHROPIC_MODEL = "claude-sonnet-4-20250514";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -323,7 +325,7 @@ ${portfolioContext}`;
           "anthropic-version": "2023-06-01",
         },
         body: JSON.stringify({
-          model: "claude-3-5-sonnet-20241022",
+          model: ANTHROPIC_MODEL,
           max_tokens: 4096,
           system: claudeSystemCommand,
           messages: [
