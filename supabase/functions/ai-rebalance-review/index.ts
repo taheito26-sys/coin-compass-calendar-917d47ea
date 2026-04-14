@@ -10,7 +10,7 @@ const corsHeaders = {
 Deno.serve(async (req) => {
   // 1. Mandatory Preflight
   if (req.method === "OPTIONS") {
-    return new Response("ok", { status: 204, headers: corsHeaders });
+    return new Response(null, { status: 204, headers: corsHeaders });
   }
 
   // 2. Wrap everything in header-guaranteed creator

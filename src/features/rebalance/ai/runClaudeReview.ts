@@ -82,36 +82,23 @@ export async function runClaudeReview(
   const prompt = buildClaudePrompt(input);
 
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session?.access_token}`,
-      'apikey': (import.meta as any).env.VITE_SUPABASE_PUBLISHABLE_KEY,
-    };
-
-    // Use raw fetch to bypass any Supabase client library CORS quirks
-    const response = await fetch('https://moebuhqkwvpfcpsxmvuc.supabase.co/functions/v1/ai-rebalance-review', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
+    const { data, error } = await supabase.functions.invoke('ai-rebalance-review', {
+      body: {
         provider: 'claude',
         role: 'risk_critic',
         prompt,
         schema: 'claude_review',
-      }),
+      },
     });
 
-    if (!response.ok) {
-      const err = await response.text();
-      console.error('[runClaudeReview] Fetch error:', err);
+    if (error) {
+      console.error('[runClaudeReview] Edge function error:', error);
       return {
         valid: false,
         data: null,
-        errors: [`Edge function error: ${response.status} ${err}`],
+        errors: [`Edge function error: ${error.message}`],
       };
     }
-
-    const data = await response.json();
 
     // Extract and validate JSON from response
     const responseText = data?.response || data?.result || JSON.stringify(data);
