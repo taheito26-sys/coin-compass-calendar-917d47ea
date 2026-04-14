@@ -14,7 +14,7 @@ export interface AIRecommendation {
     asset: string;
     weightPct: number;
     riskWeight: "low" | "medium" | "high";
-    reason_ar: string;
+    reason_en: string;
   }[];
 }
 

@@ -55,7 +55,7 @@ OUTPUT SCHEMA:
           "asset": "SYMBOL",
           "weightPct": number,
           "riskWeight": "low" | "medium" | "high",
-          "reason_ar": "English explanation of why this coin is a good replacement"
+          "reason_en": "English explanation of why this coin is a good replacement"
         }
       ]
     }

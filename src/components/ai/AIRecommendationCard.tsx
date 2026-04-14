@@ -75,7 +75,7 @@ export function AIRecommendationCard({ recommendation }: { recommendation: AIRec
                   </Badge>
                 </div>
                 <p className="text-[11px] leading-relaxed text-muted-foreground">
-                  {alt.reason_ar}
+                  {alt.reason_en}
                 </p>
               </div>
             ))}
