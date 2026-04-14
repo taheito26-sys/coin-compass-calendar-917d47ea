@@ -13,8 +13,11 @@ const BINANCE_REST = "https://api.binance.com/api/v3";
 const COINGECKO_API = "https://api.coingecko.com/api/v3";
 const HIST_TTL_MS = 60 * 60 * 1000;
 const SEARCH_TTL_MS = 30 * 60 * 1000;
+const SPOT_TTL_MS = 45 * 1000;
 
 const _cache: Record<string, { data: any; ts: number }> = {};
+const _spotCache = new Map<string, { data: Record<string, SpotPrice>; ts: number }>();
+const _spotInflight = new Map<string, Promise<Record<string, SpotPrice>>>();
 
 // ─── Symbol Maps ───────────────────────────────────────────
 
@@ -140,6 +143,22 @@ import { resolveCoin } from "./marketData";
 export async function getSpotPrices(
   assets: { sym: string; coingeckoId?: string | null }[]
 ): Promise<Record<string, SpotPrice>> {
+  const cacheKey = [...assets]
+    .map((a) => `${a.sym.toUpperCase()}:${a.coingeckoId || ""}`)
+    .sort()
+    .join("|");
+
+  const cached = _spotCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < SPOT_TTL_MS) {
+    return cached.data;
+  }
+
+  const inflight = _spotInflight.get(cacheKey);
+  if (inflight) {
+    return inflight;
+  }
+
+  const request = (async () => {
   const result: Record<string, SpotPrice> = {};
   const now = Date.now();
 
@@ -176,7 +195,7 @@ export async function getSpotPrices(
     try {
       const symbolsParam = JSON.stringify(binancePairs);
       const r = await fetch(`${BINANCE_REST}/ticker/24hr?symbols=${encodeURIComponent(symbolsParam)}`, {
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(4500),
       });
       if (r.ok) {
         const items: any[] = await r.json();
@@ -198,47 +217,34 @@ export async function getSpotPrices(
     }
   }
 
-  // CoinGecko fallback for missing items or those not on Binance
+  // Prefer the indexed market cache instead of hitting CoinGecko directly from the browser.
   const missing = nonStable.filter(a => !result[a.sym.toUpperCase()]);
   if (missing.length > 0) {
-    try {
-      const mapped = missing.map(a => {
-        const key = a.sym.toUpperCase();
-        return a.coingeckoId || KNOWN_IDS[key] || resolveCoin(key)?.id;
-      }).filter(Boolean);
+    for (const a of missing) {
+      const key = a.sym.toUpperCase();
+      const resolved = resolveCoin(key);
+      if (!resolved || resolved.current_price == null) continue;
 
-      if (mapped.length > 0) {
-        const ids = mapped.join(",");
-        const r = await fetch(
-          `${COINGECKO_API}/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`,
-          { signal: AbortSignal.timeout(10000) }
-        );
-        if (r.ok) {
-          const data: Record<string, { usd?: number; usd_24h_change?: number }> = await r.json();
-          for (const a of missing) {
-            const key = a.sym.toUpperCase();
-            const cgId = a.coingeckoId || KNOWN_IDS[key] || resolveCoin(key)?.id;
-            if (!cgId) continue;
-
-            const cg = data[cgId];
-            if (cg?.usd != null) {
-              result[key] = {
-                price: cg.usd,
-                change24h: cg.usd_24h_change ?? 0,
-                ts: now,
-                stale: false,
-                source: "coingecko",
-              };
-            }
-          }
-        }
-      }
-    } catch (e) {
-      console.warn("[priceProvider] CoinGecko fallback failed:", e);
+      result[key] = {
+        price: resolved.current_price,
+        change24h: resolved.price_change_percentage_24h_in_currency ?? 0,
+        ts: now,
+        stale: false,
+        source: "coingecko",
+      };
     }
   }
 
+  _spotCache.set(cacheKey, { data: result, ts: Date.now() });
   return result;
+  })();
+
+  _spotInflight.set(cacheKey, request);
+  try {
+    return await request;
+  } finally {
+    _spotInflight.delete(cacheKey);
+  }
 }
 
 // ─── WebSocket Singleton ───────────────────────────────────
