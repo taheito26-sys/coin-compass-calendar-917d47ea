@@ -98,16 +98,20 @@
 }
 
 @media (max-width: 960px) {
-  body .app, body[data-layout] .app {
+
+  body .app,
+  body[data-layout] .app {
     display: block !important;
   }
 
-  body .mainWrap, body[data-layout] .mainWrap {
+  body .mainWrap,
+  body[data-layout] .mainWrap {
     height: calc(100dvh - 65px) !important;
     width: 100% !important;
   }
 
-  body .sidebar, body[data-layout] .sidebar {
+  body .sidebar,
+  body[data-layout] .sidebar {
     position: fixed !important;
     bottom: 0 !important;
     left: 0 !important;
@@ -124,11 +128,13 @@
     transform: none !important;
   }
 
-  body .sidebar .brand, body[data-layout] .sidebar .brand {
+  body .sidebar .brand,
+  body[data-layout] .sidebar .brand {
     display: none !important;
   }
 
-  body .sidebar .nav, body[data-layout] .sidebar .nav {
+  body .sidebar .nav,
+  body[data-layout] .sidebar .nav {
     flex-direction: row !important;
     align-items: center !important;
     overflow-x: auto !important;
@@ -138,11 +144,13 @@
   }
 
   /* Hide scrollbar for bottom nav */
-  body .sidebar .nav::-webkit-scrollbar, body[data-layout] .sidebar .nav::-webkit-scrollbar {
+  body .sidebar .nav::-webkit-scrollbar,
+  body[data-layout] .sidebar .nav::-webkit-scrollbar {
     display: none !important;
   }
 
-  body .sidebar .navBtn, body[data-layout] .sidebar .navBtn {
+  body .sidebar .navBtn,
+  body[data-layout] .sidebar .navBtn {
     flex-direction: column !important;
     align-items: center !important;
     justify-content: center !important;
@@ -150,38 +158,45 @@
     min-width: 64px !important;
     height: 100% !important;
     border-radius: 8px !important;
-    margin-top: 0 !important; /* Override inline style on logout */
+    margin-top: 0 !important;
+    /* Override inline style on logout */
   }
 
-  body .sidebar .navBtn::before, body[data-layout] .sidebar .navBtn::before {
+  body .sidebar .navBtn::before,
+  body[data-layout] .sidebar .navBtn::before {
     display: none !important;
   }
 
-  body .sidebar .navBtn > div, body[data-layout] .sidebar .navBtn > div {
+  body .sidebar .navBtn>div,
+  body[data-layout] .sidebar .navBtn>div {
     text-align: center !important;
     margin-top: 2px !important;
     display: block !important;
   }
-  
-  body .sidebar .navBtn > div > small, body[data-layout] .sidebar .navBtn > div > small {
+
+  body .sidebar .navBtn>div>small,
+  body[data-layout] .sidebar .navBtn>div>small {
     display: none !important;
   }
 
-  body .sidebar .navBtn > div > div, body[data-layout] .sidebar .navBtn > div > div {
+  body .sidebar .navBtn>div>div,
+  body[data-layout] .sidebar .navBtn>div>div {
     font-size: 10px !important;
     justify-content: center !important;
     white-space: nowrap !important;
     display: flex !important;
   }
 
-  body .sidebar .navBtn svg, body[data-layout] .sidebar .navBtn svg {
+  body .sidebar .navBtn svg,
+  body[data-layout] .sidebar .navBtn svg {
     margin-bottom: 2px !important;
     width: 20px !important;
     height: 20px !important;
     display: block !important;
   }
 
-  body .sidebar .sideFooter, body[data-layout] .sidebar .sideFooter {
+  body .sidebar .sideFooter,
+  body[data-layout] .sidebar .sideFooter {
     display: none !important;
   }
 
@@ -195,7 +210,8 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  body .scroll, body[data-layout] .scroll {
+  body .scroll,
+  body[data-layout] .scroll {
     height: 100% !important;
     padding-bottom: 24px !important;
     overflow-y: auto !important;
