@@ -20,6 +20,13 @@ export interface MarketCoin {
   price_change_percentage_7d_in_currency?: number | null;
 }
 
+/** Known CoinGecko id overrides for symbols where the live `symbol`/`name` fields
+ *  no longer match our canonical ticker (e.g. exchange/listing rebrands). */
+const SYMBOL_ID_OVERRIDES: Record<string, string> = {
+  TON: "the-open-network",
+  TONCOIN: "the-open-network",
+};
+
 let _cache: MarketCoin[] = [];
 let _ts = 0;
 let _fetching = false;
@@ -55,6 +62,13 @@ export function resolveCoin(query: string): MarketCoin | null {
   if (normalized !== q) {
     const fuzzy = _cache.find(c => c.symbol.toUpperCase() === normalized);
     if (fuzzy) return fuzzy;
+  }
+
+  // 5. Known id override (handles rebrands where symbol/name no longer match)
+  const overrideId = SYMBOL_ID_OVERRIDES[q];
+  if (overrideId) {
+    const byOverride = _cache.find(c => c.id.toLowerCase() === overrideId);
+    if (byOverride) return byOverride;
   }
 
   return null;
