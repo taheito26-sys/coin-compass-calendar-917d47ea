@@ -84,7 +84,24 @@ export interface FetchStats {
 }
 
 export interface FetchResult {
-  trades: any[]; 
+  trades: any[];
   stats: FetchStats;
+}
+
+export interface PositionInfo {
+  exchange: ExchangeId;
+  instId: string;
+  instType: string;
+  side: "long" | "short";
+  qty: number;
+  entryPrice: number;
+  markPrice: number;
+  unrealizedPnl: number;
+  unrealizedPnlPercent: number;
+  leverage: number;
+  liquidationPrice: number;
+  margin: number;
+  marginMode: string;
+  currency: string;
 }
 

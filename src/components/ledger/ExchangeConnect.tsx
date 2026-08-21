@@ -96,6 +96,19 @@ interface SyncOptions {
   coins: string[];
 }
 
+interface Position {
+  instId: string;
+  side: "long" | "short";
+  qty: number;
+  entryPrice: number;
+  markPrice: number;
+  unrealizedPnl: number;
+  unrealizedPnlPercent: number;
+  leverage: number;
+  liquidationPrice: number;
+  marginMode: string;
+}
+
 const AUTO_SYNC_KEY = "exchange_auto_sync";
 const AUTO_SYNC_INTERVAL_KEY = "exchange_auto_sync_interval";
 
@@ -144,6 +157,11 @@ export default function ExchangeConnect() {
   const [syncingAll, setSyncingAll] = useState(false);
   const [syncAllProgress, setSyncAllProgress] = useState<{ current: number; total: number; exchange: string } | null>(null);
   const [syncAllResults, setSyncAllResults] = useState<{ exchange: string; synced: number; skipped: number; error?: string }[]>([]);
+
+  // Live open positions (margin/futures), currently OKX-only
+  const [positionsData, setPositionsData] = useState<Record<string, { ok: boolean; positions?: Position[]; error?: string }>>({});
+  const [loadingPositions, setLoadingPositions] = useState<string | null>(null);
+  const [showPositions, setShowPositions] = useState<string | null>(null);
 
   const loadConnections = useCallback(async () => {
     try {
@@ -254,6 +272,25 @@ export default function ExchangeConnect() {
     } finally {
       if (!silent) setSyncing(null);
     }
+  };
+
+  const fetchPositions = async (exId: string) => {
+    setLoadingPositions(exId);
+    try {
+      const res = await apiFetch(`/positions/${exId}`, { method: "POST" });
+      const data = await res.json() as any;
+      if (data.ok) {
+        setPositionsData(prev => ({ ...prev, [exId]: { ok: true, positions: data.positions || [] } }));
+        setShowPositions(exId);
+      } else {
+        setPositionsData(prev => ({ ...prev, [exId]: { ok: false, error: data.error || "Failed to fetch positions" } }));
+        toast(data.error || "Failed to fetch positions", "bad");
+      }
+    } catch (err: any) {
+      setPositionsData(prev => ({ ...prev, [exId]: { ok: false, error: err?.message || "Network error" } }));
+      toast(err?.message || "Failed to fetch positions", "bad");
+    }
+    setLoadingPositions(null);
   };
 
   // Sync All
@@ -566,6 +603,12 @@ export default function ExchangeConnect() {
                     style={{ fontSize: 10, padding: "4px 10px" }}>
                     ⚙️
                   </button>
+                  {ex.id === "okx" && (
+                    <button className="btn secondary" onClick={() => fetchPositions(ex.id)} disabled={loadingPositions === ex.id}
+                      style={{ fontSize: 10, padding: "4px 8px" }}>
+                      {loadingPositions === ex.id ? "…" : "📊 Positions"}
+                    </button>
+                  )}
                   <button className="btn secondary" onClick={() => testConnection(ex.id)} disabled={isTesting}
                     style={{ fontSize: 10, padding: "4px 8px", flex: 1 }}>
                     {isTesting ? "…" : "Test"}
@@ -772,6 +815,71 @@ export default function ExchangeConnect() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Open Positions Modal */}
+      {showPositions && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
+          display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
+          padding: 20,
+        }}>
+          <div className="panel" style={{ width: "100%", maxWidth: 720, maxHeight: "90vh", overflowY: "auto" }}>
+            <div className="panel-head">
+              <h2>📊 Open Positions: {EXCHANGES.find(e => e.id === showPositions)?.name}</h2>
+              <button className="btn secondary" onClick={() => setShowPositions(null)}>✕</button>
+            </div>
+            <div className="panel-body">
+              {(() => {
+                const result = positionsData[showPositions];
+                if (!result) {
+                  return <div style={{ fontSize: 12, color: "var(--muted)" }}>Loading…</div>;
+                }
+                if (!result.ok) {
+                  return <div style={{ fontSize: 12, color: "var(--bad)" }}>⚠ {result.error}</div>;
+                }
+                const positions = result.positions || [];
+                if (positions.length === 0) {
+                  return (
+                    <div style={{ fontSize: 12, color: "var(--muted)", textAlign: "center", padding: 20 }}>
+                      No open positions.
+                    </div>
+                  );
+                }
+                return (
+                  <div className="tableWrap" style={{ maxHeight: 420, overflowY: "auto" }}>
+                    <table style={{ fontSize: 11 }}>
+                      <thead>
+                        <tr>
+                          <th>INSTRUMENT</th><th>SIDE</th><th>SIZE</th><th>ENTRY</th><th>MARK</th>
+                          <th>UNREALIZED PNL</th><th>LEVERAGE</th><th>LIQ. PRICE</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {positions.map((p, idx) => (
+                          <tr key={idx}>
+                            <td><strong>{p.instId}</strong></td>
+                            <td style={{ color: p.side === "long" ? "var(--good)" : "var(--bad)", fontWeight: 700 }}>
+                              {p.side.toUpperCase()}
+                            </td>
+                            <td>{fmtQty(p.qty)}</td>
+                            <td>${fmtPx(p.entryPrice)}</td>
+                            <td>${fmtPx(p.markPrice)}</td>
+                            <td style={{ color: p.unrealizedPnl >= 0 ? "var(--good)" : "var(--bad)", fontWeight: 700 }}>
+                              {p.unrealizedPnl >= 0 ? "+" : ""}${p.unrealizedPnl.toFixed(2)} ({p.unrealizedPnlPercent >= 0 ? "+" : ""}{p.unrealizedPnlPercent.toFixed(2)}%)
+                            </td>
+                            <td>{p.leverage ? `${p.leverage}x` : "—"}</td>
+                            <td>{p.liquidationPrice ? `$${fmtPx(p.liquidationPrice)}` : "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>

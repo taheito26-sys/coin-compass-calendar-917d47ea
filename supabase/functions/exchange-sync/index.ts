@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { compactTrades, type NormalizedTrade } from "../_shared/compaction.ts";
 import { recalculateLots } from "../_shared/accounting.ts";
 
-import { AppError, UpstreamError, type SyncStage, type ExchangeId, type FetchStats, type FetchResult, type ExchangeRequestParams, type ExchangeResponse } from "../_shared/types.ts";
+import { AppError, UpstreamError, type SyncStage, type ExchangeId, type FetchStats, type FetchResult, type ExchangeRequestParams, type ExchangeResponse, type PositionInfo } from "../_shared/types.ts";
 import { normalizeTradeEconomics, parseInstrumentSymbol } from "../_shared/instrument-normalization.ts";
 
 
@@ -536,6 +536,53 @@ Deno.serve(async (req) => {
           .eq("id", conn.id);
 
         return toErrorResponse(err, exchangeId, "sync");
+      }
+    }
+
+    // POST /exchange-sync/positions/:exchange
+    if (req.method === "POST" && action === "positions") {
+      if (exchangeId !== "okx") {
+        return json(
+          {
+            ok: false,
+            error: "Live open-position fetching is currently only supported for OKX",
+            exchange: exchangeId,
+            stage: "fetch",
+          },
+          400
+        );
+      }
+
+      const { data: conn, error: connError } = await supabase
+        .from("exchange_connections")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("exchange", exchangeId)
+        .maybeSingle();
+
+      if (connError) {
+        throw new AppError({
+          message: "Failed to load connection",
+          status: 500,
+          stage: "fetch",
+          exchange: exchangeId,
+          hint: toSafeSnippet(connError.message),
+        });
+      }
+
+      if (!conn) {
+        return json(
+          { ok: false, error: "Connection not found", exchange: exchangeId, stage: "fetch" },
+          404
+        );
+      }
+
+      try {
+        requireCredentials(exchangeId, conn.api_key, conn.api_secret, conn.passphrase, "fetch");
+        const positions = await fetchOkxPositions(user.id, conn.api_key, conn.api_secret, conn.passphrase);
+        return json({ ok: true, positions });
+      } catch (err) {
+        return toErrorResponse(err, exchangeId, "fetch");
       }
     }
 
@@ -1327,6 +1374,90 @@ async function fetchOkxTrades(
   });
 
   return { trades, stats };
+}
+
+// Live open positions (margin/futures/perpetual swap), unlike fetchOkxTrades
+// which only reads settled SPOT fills for cost-basis reconstruction.
+async function fetchOkxPositions(
+  userId: string,
+  apiKey: string,
+  apiSecret: string,
+  passphrase: string | null
+): Promise<PositionInfo[]> {
+  const endpoint = "/api/v5/account/positions";
+  const ts = new Date().toISOString();
+  const sig = await hmacSignBase64(apiSecret, `${ts}GET${endpoint}`);
+
+  const res = await exchangeRequest({
+    exchange: "okx",
+    method: "GET",
+    url: `https://www.okx.com${endpoint}`,
+    headers: {
+      "OK-ACCESS-KEY": apiKey,
+      "OK-ACCESS-SIGN": sig,
+      "OK-ACCESS-TIMESTAMP": ts,
+      "OK-ACCESS-PASSPHRASE": passphrase || "",
+    },
+    stage: "fetch",
+    endpoint,
+    logContext: { user: userPrefix(userId) },
+  });
+
+  const code = String(res.data?.code ?? "");
+  const msg = toSafeSnippet(res.data?.msg);
+  safeLog("log", "okx_positions_result", {
+    endpoint,
+    httpStatus: res.status,
+    code,
+    msg,
+  });
+
+  if (code !== "0") {
+    throw new UpstreamError({
+      message: `OKX upstream error, code=${code}, msg=${msg || "unknown"}`,
+      exchange: "okx",
+      stage: "fetch",
+      code,
+      endpoint,
+      upstreamStatus: res.status,
+      rawResponseTruncated: toSafeSnippet(res.text),
+      hint: "Verify OKX key, passphrase, and timestamp settings.",
+    });
+  }
+
+  const list = Array.isArray(res.data?.data) ? res.data.data : [];
+
+  return list
+    .map((raw: any): PositionInfo | null => {
+      const qty = Number(raw?.pos);
+      if (!Number.isFinite(qty) || qty === 0) return null;
+
+      const avgPx = Number(raw?.avgPx);
+      const markPx = Number(raw?.markPx);
+      const upl = Number(raw?.upl);
+      const uplRatio = Number(raw?.uplRatio);
+      const lever = Number(raw?.lever);
+      const liqPx = Number(raw?.liqPx);
+      const margin = Number(raw?.margin ?? raw?.imr);
+
+      return {
+        exchange: "okx",
+        instId: String(raw?.instId || ""),
+        instType: String(raw?.instType || ""),
+        side: qty > 0 ? "long" : "short",
+        qty: Math.abs(qty),
+        entryPrice: Number.isFinite(avgPx) ? avgPx : 0,
+        markPrice: Number.isFinite(markPx) ? markPx : 0,
+        unrealizedPnl: Number.isFinite(upl) ? upl : 0,
+        unrealizedPnlPercent: Number.isFinite(uplRatio) ? uplRatio * 100 : 0,
+        leverage: Number.isFinite(lever) ? lever : 0,
+        liquidationPrice: Number.isFinite(liqPx) ? liqPx : 0,
+        margin: Number.isFinite(margin) ? margin : 0,
+        marginMode: String(raw?.mgnMode || ""),
+        currency: String(raw?.ccy || ""),
+      };
+    })
+    .filter((p): p is PositionInfo => p !== null);
 }
 
 // Partial failures are tolerated for insertion-level validation issues.
