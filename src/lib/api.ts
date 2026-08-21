@@ -740,10 +740,19 @@ export async function apiFetch(path: string, options: RequestInit = {}): Promise
 
   if (error) {
     console.error("[apiFetch] Function error:", error);
+    const context = (error as any).context;
+    let body: any = null;
+    if (context && typeof context.json === "function") {
+      try {
+        body = await context.clone().json();
+      } catch {
+        body = null;
+      }
+    }
     return {
       ok: false,
-      status: (error as any).status || 500,
-      json: async () => ({ error: error.message || "Function call failed" }),
+      status: context?.status || (error as any).status || 500,
+      json: async () => body || { error: error.message || "Function call failed" },
     } as Response;
   }
 
