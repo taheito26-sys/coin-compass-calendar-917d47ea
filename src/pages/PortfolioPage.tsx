@@ -809,7 +809,11 @@ export default function PortfolioPage() {
                             <span className="mono" style={{ fontWeight: 900 }}>{pos.sym}</span>
                           </td>
                         ),
-                        sparkline: <td key="sparkline"><Sparkline data={sparkData.get(pos.coinId) ?? []} positive={pos.change7d >= 0} /></td>,
+                        sparkline: (
+                          <td key="sparkline" onClick={() => setDrilldownSym(pos.sym)} style={{ cursor: "pointer" }}>
+                            <Sparkline data={sparkData.get(pos.coinId) ?? []} positive={pos.change7d >= 0} />
+                          </td>
+                        ),
                         amount: <td key="amount" className="mono">{fmtQty(pos.qty)}</td>,
                         change1h: <td key="change1h"><ChangePill val={pos.change1h} /></td>,
                         change24h: <td key="change24h"><ChangePill val={pos.change24h} /></td>,
