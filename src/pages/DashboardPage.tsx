@@ -397,9 +397,15 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
         return (
           <div className="panel">
             <div className="panel-head"><DragHandle editing={editing} /><h2>Heatmap</h2></div>
-            <div className="panel-body">
+            <div className="panel-body" style={{ height: "100%" }}>
               {heatmapItems.length > 0 ? (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(64px, 1fr))", gap: 1 }}>
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: `repeat(${Math.max(1, Math.ceil(Math.sqrt(heatmapItems.length)))}, 1fr)`,
+                  gridAutoRows: "1fr",
+                  gap: 2,
+                  height: "100%",
+                }}>
                   {heatmapItems.map((item, i) => <HeatmapBlock key={i} sym={item.sym} value={item.value} pct={item.pct} pnl={item.pnl} color={item.color} livePrice={item.livePrice} />)}
                 </div>
               ) : <div className="muted" style={{ padding: 20, textAlign: "center" }}>No positions to display.</div>}
