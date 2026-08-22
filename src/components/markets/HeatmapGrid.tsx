@@ -29,6 +29,15 @@ function formatPrice(p: number): string {
   return "$" + p.toFixed(6);
 }
 
+function formatPnl(p: number): string {
+  const sign = p >= 0 ? "+" : "-";
+  const abs = Math.abs(p);
+  if (abs >= 1000) return sign + "$" + abs.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  if (abs >= 1) return sign + "$" + abs.toFixed(2);
+  if (abs >= 0.01) return sign + "$" + abs.toFixed(4);
+  return sign + "$" + abs.toFixed(6);
+}
+
 function formatVol(n: number): string {
   if (n >= 1e9) return (n / 1e9).toFixed(1) + "B";
   if (n >= 1e6) return (n / 1e6).toFixed(0) + "M";
@@ -71,7 +80,8 @@ export default function HeatmapGrid({ coins, timeRange, watchSymbols = [] }: Pro
       const change = getChange(coin, timeRange);
       const size = getTileSize(i + 1, coins.length);
       const isWatched = watchSymbols.includes(coin.symbol.toUpperCase());
-      return { ...coin, change, size, isWatched };
+      const pnlUsd = coin.current_price * (change / (100 + change));
+      return { ...coin, change, size, isWatched, pnlUsd };
     });
   }, [coins, timeRange, watchSymbols]);
 
@@ -119,6 +129,10 @@ export default function HeatmapGrid({ coins, timeRange, watchSymbols = [] }: Pro
               <div className="heatmap-v2-change" style={{ color: getChangeColor(coin.change) }}>
                 {coin.change >= 0 ? "+" : ""}{coin.change.toFixed(2)}%
               </div>
+
+              {coin.size !== "sm" && (
+                <div className="heatmap-v2-pnl">{formatPnl(coin.pnlUsd)}</div>
+              )}
 
               {(coin.size === "xl" || coin.size === "lg" || isHovered) && (
                 <div className="heatmap-v2-details">
