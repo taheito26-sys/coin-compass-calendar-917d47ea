@@ -122,22 +122,23 @@ function DonutLegend({ slices }: { slices: DonutSlice[] }) {
   );
 }
 
-function HeatmapBlock({ sym, value, pct, color, livePrice }: { sym: string; value: string; pct: string; color: string; livePrice?: string }) {
+function HeatmapBlock({ sym, value, pct, pnl, color, livePrice }: { sym: string; value: string; pct: string; pnl: string; color: string; livePrice?: string }) {
   return (
     <div
       style={{
         background: color, borderRadius: "var(--lt-radius-sm)",
-        padding: "6px 6px", display: "flex", flexDirection: "column",
+        padding: "4px 4px", display: "flex", flexDirection: "column",
         alignItems: "center", justifyContent: "center", gap: 1,
-        minHeight: 54, transition: "transform 0.15s", cursor: "default",
+        minHeight: 40, transition: "transform 0.15s", cursor: "default",
       }}
       onMouseEnter={e => (e.currentTarget.style.transform = "scale(1.04)")}
       onMouseLeave={e => (e.currentTarget.style.transform = "scale(1)")}
     >
-      <div style={{ fontWeight: 900, fontSize: 11, color: "#fff" }}>{sym}</div>
-      <div style={{ fontWeight: 800, fontSize: 13, color: "#fff" }}>{value}</div>
-      {livePrice && <div style={{ fontSize: 9, fontWeight: 600, color: "rgba(255,255,255,.85)" }}>{livePrice}</div>}
-      <div style={{ fontSize: 9, color: "rgba(255,255,255,.65)" }}>{pct}</div>
+      <div style={{ fontWeight: 900, fontSize: 9, color: "#fff" }}>{sym}</div>
+      <div style={{ fontWeight: 800, fontSize: 11, color: "#fff" }}>{value}</div>
+      {livePrice && <div style={{ fontSize: 8, fontWeight: 600, color: "rgba(255,255,255,.85)" }}>{livePrice}</div>}
+      <div style={{ fontSize: 8, color: "rgba(255,255,255,.9)", fontWeight: 700 }}>{pnl}</div>
+      <div style={{ fontSize: 8, color: "rgba(255,255,255,.65)" }}>{pct}</div>
     </div>
   );
 }
@@ -294,8 +295,8 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
         : liveP >= 1 ? "$" + liveP.toFixed(2)
         : liveP >= 0.01 ? "$" + liveP.toFixed(4)
         : "$" + liveP.toFixed(6);
-      return { sym: r.sym, value: fmtTotal(mv), pct: (pnlPct >= 0 ? "+" : "") + pnlPct.toFixed(1) + "%", color: bg, mv, livePrice: priceStr };
-    }).filter(x => x.mv > 0).sort((a, b) => b.mv - a.mv).slice(0, 9);
+      return { sym: r.sym, value: fmtTotal(mv), pct: (pnlPct >= 0 ? "+" : "") + pnlPct.toFixed(1) + "%", pnl: (unreal >= 0 ? "+" : "-") + fmtTotal(Math.abs(unreal)), color: bg, mv, livePrice: priceStr };
+    }).filter(x => x.mv > 0).sort((a, b) => b.mv - a.mv);
   }, [positions, getPrice]);
 
   const watchlistData = useMemo(() => {
@@ -398,8 +399,8 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
             <div className="panel-head"><DragHandle editing={editing} /><h2>Heatmap</h2></div>
             <div className="panel-body">
               {heatmapItems.length > 0 ? (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 2 }}>
-                  {heatmapItems.map((item, i) => <HeatmapBlock key={i} sym={item.sym} value={item.value} pct={item.pct} color={item.color} livePrice={item.livePrice} />)}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(64px, 1fr))", gap: 1 }}>
+                  {heatmapItems.map((item, i) => <HeatmapBlock key={i} sym={item.sym} value={item.value} pct={item.pct} pnl={item.pnl} color={item.color} livePrice={item.livePrice} />)}
                 </div>
               ) : <div className="muted" style={{ padding: 20, textAlign: "center" }}>No positions to display.</div>}
             </div>
