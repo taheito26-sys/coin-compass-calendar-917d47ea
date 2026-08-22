@@ -14,6 +14,13 @@ import AdminPage from "@/pages/AdminPage";
 import AIPage from "@/pages/AIPage";
 import { useSentimentAlerts } from "@/hooks/useSentimentAlerts";
 import InstallPrompt from "@/components/InstallPrompt";
+import InstallGateScreen from "@/components/InstallGateScreen";
+import {
+  detectDeviceKind,
+  evaluateInstallGate,
+  isMobileInstallEnforced,
+  isStandaloneDisplay,
+} from "@/lib/installGate";
 
 const PAGE_TITLES: Record<string, [string, string]> = {
   dashboard: ["Dashboard", "KPIs, Allocation, Heatmap"],
@@ -101,6 +108,13 @@ function MissingConfigScreen() {
 }
 
 function AuthGate() {
+  const [verifiedInstall, setVerifiedInstall] = useState(false);
+  useEffect(() => {
+    const onInstalled = () => setVerifiedInstall(true);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => window.removeEventListener("appinstalled", onInstalled);
+  }, []);
+
   const isConfigured = !!import.meta.env.VITE_SUPABASE_URL;
   if (!isConfigured) return <MissingConfigScreen />;
 
@@ -108,6 +122,15 @@ function AuthGate() {
   console.log("[AuthGate] Render", auth);
   if (!auth?.isLoaded) return <LoadingScreen />;
   if (!auth?.isSignedIn) return <AuthScreen />;
+
+  const gate = evaluateInstallGate({
+    deviceKind: detectDeviceKind(navigator.userAgent),
+    isStandalone: isStandaloneDisplay(),
+    verifiedInstall,
+    enforceMobile: isMobileInstallEnforced(),
+  });
+  if (gate.blocked) return <InstallGateScreen stage={gate.stage} />;
+
   return <AppShell onLogout={auth.signOut} userLabel={auth.userEmail || "Signed in"} />;
 }
 
