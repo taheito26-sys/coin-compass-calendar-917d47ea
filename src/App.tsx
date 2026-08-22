@@ -13,6 +13,7 @@ import OpportunitiesPage from "@/pages/OpportunitiesPage";
 import AdminPage from "@/pages/AdminPage";
 import AIPage from "@/pages/AIPage";
 import { useSentimentAlerts } from "@/hooks/useSentimentAlerts";
+import InstallPrompt from "@/components/InstallPrompt";
 
 const PAGE_TITLES: Record<string, [string, string]> = {
   dashboard: ["Dashboard", "KPIs, Allocation, Heatmap"],
@@ -71,6 +72,7 @@ function AppShell({ onLogout, userLabel }: { onLogout: () => Promise<void>; user
         </div>
       </div>
       {toastMsg ? <div className={`toast show ${toastMsg.type}`}>{toastMsg.msg}</div> : null}
+      <InstallPrompt />
     </div>
   );
 }
