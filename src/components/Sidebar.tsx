@@ -6,9 +6,7 @@ const pages = [
   { id: "assets", label: "Portfolio", sub: "Holdings · Lots", icon: "M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" },
   { id: "markets", label: "Markets", sub: "Prices · News", icon: "M22 12h-4l-3 9L9 3l-3 9H2" },
   { id: "ledger", label: "Ledger", sub: "Transactions · Import", icon: "M4 4h16v16H4zM4 9h16M9 4v16" },
-  { id: "calendar", label: "Calendar", sub: "Daily P&L", icon: "M3 4h18v18H3zM16 2v4M8 2v4M3 10h18" },
   { id: "opportunities", label: "Opportunities", sub: "Listings · Airdrops", icon: "M13 2L3 14h9l-1 8 10-12h-9l1-8z" },
-  { id: "whale", label: "Whale Tracker", sub: "Live Movements", icon: "M2 12c2-4 6-7 10-7s8 3 10 7c-2 4-6 7-10 7s-8-3-10-7Z" },
   { id: "ai", label: "AI Analysis", sub: "Claude · Gemini", icon: "M12 2a4 4 0 0 0-4 4v1H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2V6a4 4 0 0 0-4-4Zm0 2a2 2 0 0 1 2 2v1h-4V6a2 2 0 0 1 2-2Zm-1 9v2h2v-2h2v-2h-2V9h-2v2H9v2h2Z" },
   { id: "settings", label: "Settings", sub: "Theme", icon: "M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM19.4 15a7.9 7.9 0 0 0 .1-1l2-1.5-2-3.5-2.4 1a8 8 0 0 0-1.7-1L13 3h-4l-.9 2.9a8 8 0 0 0-1.7 1l-2.4-1-2 3.5L4 13a8 8 0 0 0 .1 1l-2 1.5 2 3.5 2.4-1a8 8 0 0 0 1.7 1L9 21h4l.9-2.9a8 8 0 0 0 1.7-1l2.4 1 2-3.5-2-1.6Z" },
 ];

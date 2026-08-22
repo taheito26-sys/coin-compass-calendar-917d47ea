@@ -244,7 +244,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
     let order: string[] = [];
     switch (preset) {
       case "trader": 
-        order = ["kpis", "news", "whale", "correlation", "risk-advanced", "movers", "marketSentiment", "heatmap", "positions"];
+        order = ["kpis", "news", "correlation", "risk-advanced", "movers", "marketSentiment", "heatmap", "positions"];
         break;
       case "taxes":
         order = ["kpis", "breakEven", "positions"];

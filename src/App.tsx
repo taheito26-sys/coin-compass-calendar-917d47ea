@@ -6,11 +6,9 @@ import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import DashboardPage from "@/pages/DashboardPage";
 import PortfolioPage from "@/pages/PortfolioPage";
-import CalendarPage from "@/pages/CalendarPage";
 import MarketsPage from "@/pages/MarketsPage";
 import SettingsPage from "@/pages/SettingsPage";
 import LedgerPage from "@/pages/LedgerPage";
-import WhalePage from "@/pages/WhalePage";
 import OpportunitiesPage from "@/pages/OpportunitiesPage";
 import AdminPage from "@/pages/AdminPage";
 import AIPage from "@/pages/AIPage";
@@ -20,10 +18,8 @@ const PAGE_TITLES: Record<string, [string, string]> = {
   dashboard: ["Dashboard", "KPIs, Allocation, Heatmap"],
   assets: ["Portfolio", "Holdings, Lots, Alerts"],
   ledger: ["Ledger", "Transactions, Import, Connect"],
-  calendar: ["Calendar", "Daily P&L, Per Coin"],
   markets: ["Markets", "Live Prices, Watchlist"],
   opportunities: ["Opportunities", "Listings, Airdrops, Delistings"],
-  whale: ["Whale Tracker", "Live Whale Movements"],
   ai: ["AI Analysis", "Claude, Gemini, Recommendations"],
   settings: ["Settings", "Theme, Data, Vault, Alerts"],
   admin: ["Admin Panel", "Users, Data Overview"],
@@ -67,10 +63,8 @@ function AppShell({ onLogout, userLabel }: { onLogout: () => Promise<void>; user
           {page === "dashboard" && <DashboardPage onNav={setPage} />}
           {page === "assets" && <PortfolioPage />}
           {page === "ledger" && <LedgerPage />}
-          {page === "calendar" && <CalendarPage />}
           {page === "markets" && <MarketsPage />}
               {page === "opportunities" && <OpportunitiesPage />}
-              {page === "whale" && <WhalePage />}
               {page === "ai" && <AIPage />}
               {page === "settings" && <SettingsPage />}
               {page === "admin" && <AdminPage />}

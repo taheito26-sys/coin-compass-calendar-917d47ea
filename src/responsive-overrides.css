@@ -63,26 +63,11 @@
   gap: 8px;
 }
 
-/* Whale page */
-.whale-page-root,
+/* Opportunities page */
 .opps-page-root {
   width: 100%;
 }
 
-.whale-stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 8px;
-  margin-bottom: 14px;
-}
-
-.whale-feed-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 10px;
-}
-
-/* Opportunities page */
 .opps-tabs {
   display: flex;
   gap: 2px;
@@ -229,14 +214,6 @@
 
   .tableWrap table {
     min-width: 100%;
-  }
-
-  .whale-feed-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .whale-stats-grid {
-    grid-template-columns: repeat(2, 1fr);
   }
 
   .opps-tabs {

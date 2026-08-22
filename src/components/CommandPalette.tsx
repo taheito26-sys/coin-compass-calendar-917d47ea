@@ -24,7 +24,6 @@ const PAGES: CmdItem[] = [
   { type: "page", id: "merchant", label: "Merchant", sub: "Deals · Collaboration · Approvals", icon: "🤝" },
   { type: "page", id: "markets", label: "Markets", sub: "Live Prices · Watchlist", icon: "🌐" },
   { type: "page", id: "ledger", label: "Ledger", sub: "Journal · Import · Manual Entry", icon: "📒" },
-  { type: "page", id: "calendar", label: "Calendar", sub: "Daily P&L · Per Coin", icon: "📅" },
   { type: "page", id: "settings", label: "Settings", sub: "Layout · Themes · Vault", icon: "⚙️" },
 ];
 

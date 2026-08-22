@@ -13,7 +13,6 @@ interface SearchResult {
 const PAGES = [
   { id: "dashboard", label: "Dashboard", sub: "KPIs · Allocation · Heatmap" },
   { id: "assets", label: "Assets", sub: "Positions · P&L · Lots" },
-  { id: "calendar", label: "Calendar", sub: "Daily P&L · Per Coin" },
   { id: "ledger", label: "Ledger", sub: "Journal · Import · Manual Entry" },
   { id: "markets", label: "Markets", sub: "Live Prices · Bubbles" },
   { id: "settings", label: "Settings", sub: "Layout · Themes · Data" },

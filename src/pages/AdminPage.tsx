@@ -13,9 +13,8 @@ import type { ApiTransaction } from "@/lib/api";
 import DashboardPage from "@/pages/DashboardPage";
 import PortfolioPage from "@/pages/PortfolioPage";
 import LedgerPage from "@/pages/LedgerPage";
-import CalendarPage from "@/pages/CalendarPage";
 
-type AdminTab = "dashboard" | "portfolio" | "ledger" | "calendar";
+type AdminTab = "dashboard" | "portfolio" | "ledger";
 
 function mapTransactions(
   transactions: ApiTransaction[],
@@ -150,7 +149,6 @@ export default function AdminPage() {
     { id: "dashboard", label: "Dashboard", icon: "📊" },
     { id: "portfolio", label: "Portfolio", icon: "💼" },
     { id: "ledger", label: "Ledger", icon: "📒" },
-    { id: "calendar", label: "Calendar", icon: "📅" },
   ];
 
   return (
@@ -199,7 +197,7 @@ export default function AdminPage() {
             <div style={{ fontSize: 48, marginBottom: 12, opacity: 0.5 }}>👤</div>
             <div style={{ fontSize: 14 }}>Select a user above to view their data</div>
             <div style={{ fontSize: 11, color: "#444", marginTop: 4 }}>
-              You will see their exact Dashboard, Portfolio, Ledger & Calendar
+              You will see their exact Dashboard, Portfolio & Ledger
             </div>
           </div>
         </div>
@@ -236,7 +234,6 @@ export default function AdminPage() {
               {tab === "dashboard" && <DashboardPage />}
               {tab === "portfolio" && <PortfolioPage />}
               {tab === "ledger" && <LedgerPage />}
-              {tab === "calendar" && <CalendarPage />}
             </ImpersonatedProvider>
           </div>
         </>
