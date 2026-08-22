@@ -122,6 +122,15 @@ function DonutLegend({ slices }: { slices: DonutSlice[] }) {
   );
 }
 
+function heatmapColumns(n: number): number {
+  if (n <= 1) return 1;
+  const start = Math.ceil(Math.sqrt(n));
+  for (let c = start; c <= start + 2; c++) {
+    if (n % c === 0) return c;
+  }
+  return start;
+}
+
 function HeatmapBlock({ sym, value, pct, pnl, color, livePrice }: { sym: string; value: string; pct: string; pnl: string; color: string; livePrice?: string }) {
   return (
     <div
@@ -401,7 +410,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
               {heatmapItems.length > 0 ? (
                 <div style={{
                   display: "grid",
-                  gridTemplateColumns: `repeat(${Math.max(1, Math.ceil(Math.sqrt(heatmapItems.length)))}, 1fr)`,
+                  gridTemplateColumns: `repeat(${heatmapColumns(heatmapItems.length)}, 1fr)`,
                   gridAutoRows: "1fr",
                   gap: 2,
                   height: "100%",
