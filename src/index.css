@@ -819,6 +819,16 @@ body {
 .kpi-lbl { font-size: calc(8px * var(--ui-scale,1)); font-weight: 900; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); margin-bottom: 5px; }
 .kpi-val { font-size: calc(20px * var(--ui-scale,1)); font-weight: 800; letter-spacing: -.3px; line-height: 1.15; font-family: var(--app-font, var(--lt-font)); }
 .kpi-sub { font-size: calc(10px * var(--ui-scale,1)); color: var(--muted); margin-top: 4px; }
+
+@media(max-width:900px) {
+  .kpis { gap: 6px; }
+  .kpi-card { padding: 8px 10px; }
+  .kpi-card::before { display: none; }
+  .kpi-head { margin-bottom: 4px; }
+  .kpi-lbl { margin-bottom: 3px; }
+  .kpi-val { font-size: calc(16px * var(--ui-scale,1)); }
+  .kpi-sub { margin-top: 2px; }
+}
 .kpi-badge { font-size: calc(9px * var(--ui-scale,1)); font-weight: 700; padding: 2px 7px; border-radius: 999px; border: 1px solid; white-space: nowrap; transition: all var(--lt-tr); }
 
 /* â”€â”€ TABLES â”€â”€ */
@@ -1188,6 +1198,7 @@ table { table-layout: auto; }
 }
 @media(max-width:560px){
   .kpis{grid-template-columns:1fr 1fr;}
+  .kpis .kpi-card:nth-child(5){grid-column:1 / -1;}
   .kpis-3{grid-template-columns:1fr;}
   .kpis-5{grid-template-columns:1fr 1fr;}
   .cal-stats{grid-template-columns:1fr;}
