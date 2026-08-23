@@ -38,8 +38,8 @@ interface CardDef {
 
 const ALL_CARDS: CardDef[] = [
   { id: "kpis", label: "KPI Summary", colSpan: 2 },
-  { id: "allocation", label: "Coin Allocation" },
   { id: "heatmap", label: "Heatmap" },
+  { id: "allocation", label: "Coin Allocation" },
   { id: "marketSentiment", label: "Market Sentiment" },
   { id: "riskBreakdown", label: "Per-Asset Risk" },
   { id: "benchmark", label: "Portfolio vs Benchmarks" },
@@ -202,8 +202,15 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
     
     // Append any newly added features that aren't in the saved layout
     const missing = ALL_CARDS.filter(c => !current.includes(c.id)).map(c => c.id);
-    
-    return [...current, ...missing];
+
+    const order = [...current, ...missing];
+
+    // Heatmap always follows KPIs, even in a layout saved before this order
+    // change or from manual drag reordering.
+    const withoutHeatmap = order.filter(id => id !== "heatmap");
+    const kpisIndex = withoutHeatmap.indexOf("kpis");
+    withoutHeatmap.splice(kpisIndex + 1, 0, "heatmap");
+    return withoutHeatmap;
   }, [state.dashboardLayout]);
 
   const [editing, setEditing] = useState(false);
