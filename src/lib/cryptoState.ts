@@ -1,7 +1,9 @@
 // Crypto state management
-// localStorage stores ONLY UI preferences. Business data comes from backend.
+// localStorage stores UI preferences plus a local cache of business data as a
+// safety net; the backend remains the source of truth and is re-fetched on sign-in.
 
 const SK = "crypto_tracker_v1";
+const BUSINESS_SK = "crypto_tracker_business_v1";
 const MIGRATION_KEY = "crypto_tracker_migrated";
 
 export interface CryptoTx {
@@ -129,17 +131,22 @@ const UI_KEYS = new Set([
 ]);
 
 /**
- * Load state: UI prefs from localStorage + empty business data.
- * Business data (txs, importedFiles) will be hydrated from backend.
+ * Load state: UI prefs from localStorage, plus a locally cached copy of
+ * business data (txs, lots, holdings, calendarEntries, importedFiles) so the
+ * app shows the user's data instantly on load — and keeps showing it even if
+ * the backend hydration fetch is slow, offline, or errors out. The backend
+ * remains the source of truth: cryptoContext re-fetches on sign-in and
+ * overwrites this cache with the canonical result once that succeeds.
  */
 export function loadState(): CryptoState {
   const base = defaultState();
+  let next = base;
   try {
     const raw = localStorage.getItem(SK);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === "object") {
-        return {
+        next = {
           ...base,
           base: VALID_BASES.has(String(parsed.base || "").toUpperCase()) ? String(parsed.base).toUpperCase() : base.base,
           method: VALID_METHODS.has(String(parsed.method || "").toUpperCase()) ? String(parsed.method).toUpperCase() : base.method,
@@ -155,24 +162,36 @@ export function loadState(): CryptoState {
           autoSyncEnabled: typeof parsed.autoSyncEnabled === "boolean" ? parsed.autoSyncEnabled : base.autoSyncEnabled,
           autoSyncInterval: typeof parsed.autoSyncInterval === "number" ? parsed.autoSyncInterval : base.autoSyncInterval,
           minImportValue: typeof parsed.minImportValue === "number" ? parsed.minImportValue : base.minImportValue,
-          // Business data starts empty — hydrated from backend
-          txs: [],
-          lots: [],
-          holdings: [],
-          calendarEntries: [],
-          importedFiles: [],
-          prices: {},
-          pricesTs: 0,
         };
       }
     }
   } catch {}
-  return base;
+
+  try {
+    const rawBiz = localStorage.getItem(BUSINESS_SK);
+    if (rawBiz) {
+      const biz = JSON.parse(rawBiz);
+      if (biz && typeof biz === "object") {
+        next = {
+          ...next,
+          txs: Array.isArray(biz.txs) ? biz.txs : next.txs,
+          lots: Array.isArray(biz.lots) ? biz.lots : next.lots,
+          holdings: Array.isArray(biz.holdings) ? biz.holdings : next.holdings,
+          calendarEntries: Array.isArray(biz.calendarEntries) ? biz.calendarEntries : next.calendarEntries,
+          importedFiles: Array.isArray(biz.importedFiles) ? biz.importedFiles : next.importedFiles,
+        };
+      }
+    }
+  } catch {}
+
+  return next;
 }
 
 /**
- * Save ONLY UI preferences to localStorage.
- * Business data (txs, lots, holdings, importedFiles) is NOT persisted locally.
+ * Save UI preferences to localStorage, and cache business data
+ * (txs, lots, holdings, calendarEntries, importedFiles) separately so a
+ * refresh — or a flaky/slow backend fetch — never wipes what's on screen.
+ * The backend is still authoritative; this cache is a local safety net.
  */
 export function saveState(s: CryptoState) {
   try {
@@ -182,6 +201,24 @@ export function saveState(s: CryptoState) {
     }
     localStorage.setItem(SK, JSON.stringify(uiOnly));
   } catch {}
+
+  try {
+    localStorage.setItem(BUSINESS_SK, JSON.stringify({
+      txs: s.txs,
+      lots: s.lots,
+      holdings: s.holdings,
+      calendarEntries: s.calendarEntries,
+      importedFiles: s.importedFiles,
+    }));
+  } catch {
+    // Quota exceeded or storage unavailable — the backend is still the
+    // source of truth, so this is a soft failure.
+  }
+}
+
+/** Clear the locally cached business data (called on sign-out). */
+export function clearBusinessCache() {
+  try { localStorage.removeItem(BUSINESS_SK); } catch {}
 }
 
 /**

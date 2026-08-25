@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, forwardRef } from "react";
 import { useAuth } from "@/lib/supabaseAuth";
-import { CryptoState, loadState, saveState, defaultState, refreshPrices } from "./cryptoState";
+import { CryptoState, loadState, saveState, defaultState, refreshPrices, clearBusinessCache } from "./cryptoState";
 import {
   fetchImportedFiles,
   fetchTransactions,
@@ -172,6 +172,7 @@ export const CryptoProvider = forwardRef<HTMLDivElement, { children: React.React
     if (!isSignedIn || !userId) {
       if (lastHydratedUserRef.current !== null) {
         lastHydratedUserRef.current = null;
+        clearBusinessCache();
         setStateRaw((prev) => ({
           ...prev,
           txs: [],
