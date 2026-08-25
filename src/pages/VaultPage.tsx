@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useCrypto } from "@/lib/cryptoContext";
+import { batchCreateTransactions, createImportedFile, type CreateTransactionInput } from "@/lib/api";
+import { getAssetCatalog, resolveAssetId, resolveAssetSymbol } from "@/lib/assetResolver";
 
 interface Snapshot {
   id: string;
@@ -78,10 +80,11 @@ function fmtSize(bytes: number) {
 }
 
 export default function VaultPage() {
-  const { state, setState, toast } = useCrypto();
+  const { state, setState, toast, rehydrateFromBackend } = useCrypto();
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [desc, setDesc] = useState("");
   const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const loadSnaps = useCallback(async () => {
@@ -137,12 +140,84 @@ export default function VaultPage() {
   };
 
   const importJSON = async (file: File) => {
+    setImporting(true);
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      setState(() => data);
-      toast("✓ Restored from file", "good");
-    } catch { toast("Invalid backup file", "bad"); }
+
+      // Business data (transactions, imported files) lives in the backend, not
+      // localStorage — writing it only into local React state means it's gone
+      // the moment the app re-hydrates from the backend on the next load/refresh.
+      // So push it to the backend here, the same way the CSV importer does.
+      const assets = await getAssetCatalog(true);
+      const txInputs: CreateTransactionInput[] = [];
+      let unresolved = 0;
+
+      for (const tx of data.txs || []) {
+        const symbol = resolveAssetSymbol(tx.asset || "");
+        const { assetId } = symbol ? resolveAssetId(symbol, assets) : { assetId: null };
+        const ts = Number(tx.ts);
+        if (!symbol || !assetId || !Number.isFinite(ts) || ts <= 0) { unresolved++; continue; }
+
+        txInputs.push({
+          asset_id: assetId,
+          timestamp: new Date(ts).toISOString(),
+          type: tx.type || "buy",
+          qty: Math.abs(Number(tx.qty) || 0),
+          unit_price: Number(tx.price) || 0,
+          fee_amount: Number(tx.fee) || 0,
+          fee_currency: tx.feeAsset || "USD",
+          note: tx.note || "Imported from backup",
+          venue: tx.venue || undefined,
+          source: "import",
+          external_id: `import:${tx.id || `${ts}:${symbol}:${tx.type}:${tx.qty}:${tx.price}`}`,
+        });
+      }
+
+      let created = 0, duplicates = 0, failed = unresolved;
+      for (let i = 0; i < txInputs.length; i += 500) {
+        const batchResult = await batchCreateTransactions(txInputs.slice(i, i + 500));
+        created += batchResult.created;
+        duplicates += batchResult.skippedDuplicates;
+        failed += batchResult.errors;
+      }
+
+      for (const f of data.importedFiles || []) {
+        try {
+          await createImportedFile({
+            file_name: f.name, file_hash: f.hash,
+            exchange: f.exchange, export_type: f.exportType, row_count: f.rowCount,
+          });
+        } catch { /* file record already exists or non-fatal */ }
+      }
+
+      // UI-only preferences are fine to restore straight into state — they get
+      // persisted to localStorage (and synced to the backend) by setState/context.
+      setState((prev) => ({
+        ...prev,
+        base: data.base ?? prev.base,
+        method: data.method ?? prev.method,
+        watch: data.watch ?? prev.watch,
+        layout: data.layout ?? prev.layout,
+        theme: data.theme ?? prev.theme,
+        dashboardLayout: data.dashboardLayout ?? prev.dashboardLayout,
+        autoSyncEnabled: data.autoSyncEnabled ?? prev.autoSyncEnabled,
+        autoSyncInterval: data.autoSyncInterval ?? prev.autoSyncInterval,
+        minImportValue: data.minImportValue ?? prev.minImportValue,
+      }));
+
+      await rehydrateFromBackend();
+
+      if (failed > 0) {
+        toast(`✓ Imported ${created} transactions (${duplicates} duplicates, ${failed} failed)`, "warn");
+      } else {
+        toast(`✓ Imported ${created} transactions${duplicates ? `, ${duplicates} duplicates skipped` : ""}`, "good");
+      }
+    } catch (e: any) {
+      toast(e?.message || "Invalid backup file", "bad");
+    } finally {
+      setImporting(false);
+    }
   };
 
   const clearAll = () => {
@@ -201,9 +276,9 @@ export default function VaultPage() {
             <p className="muted" style={{ fontSize: 11, marginBottom: 10 }}>Export your data for offline backup or transfer between devices.</p>
             <div className="vault-actions-grid">
               <button className="btn secondary" onClick={exportJSON}>📄 Export JSON</button>
-              <label className="btn secondary" style={{ cursor: "pointer" }}>
-                📂 Import JSON
-                <input ref={fileRef} type="file" accept=".json" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) importJSON(f); }} />
+              <label className="btn secondary" style={{ cursor: importing ? "default" : "pointer", opacity: importing ? 0.6 : 1 }}>
+                {importing ? "⏳ Importing…" : "📂 Import JSON"}
+                <input ref={fileRef} type="file" accept=".json" disabled={importing} style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) importJSON(f); e.target.value = ""; }} />
               </label>
             </div>
             <div style={{ borderTop: "1px solid var(--line)", paddingTop: 10, marginTop: 10 }}>
