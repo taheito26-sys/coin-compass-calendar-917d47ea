@@ -124,6 +124,8 @@
     flex-direction: row !important;
     align-items: center !important;
     overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior-x: contain !important;
     padding: 0 4px !important;
     gap: 4px !important;
     width: 100% !important;
@@ -137,11 +139,12 @@
 
   body .sidebar .navBtn,
   body[data-layout] .sidebar .navBtn {
+    flex: 1 1 0 !important;
     flex-direction: column !important;
     align-items: center !important;
     justify-content: center !important;
-    padding: 6px 4px !important;
-    min-width: 64px !important;
+    padding: 6px 2px !important;
+    min-width: 0 !important;
     height: 100% !important;
     border-radius: 8px !important;
     margin-top: 0 !important;
@@ -158,6 +161,8 @@
     text-align: center !important;
     margin-top: 2px !important;
     display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
   }
 
   body .sidebar .navBtn>div>small,
@@ -167,10 +172,12 @@
 
   body .sidebar .navBtn>div>div,
   body[data-layout] .sidebar .navBtn>div>div {
-    font-size: 10px !important;
+    font-size: 9px !important;
     justify-content: center !important;
     white-space: nowrap !important;
-    display: flex !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    display: block !important;
   }
 
   body .sidebar .navBtn svg,
