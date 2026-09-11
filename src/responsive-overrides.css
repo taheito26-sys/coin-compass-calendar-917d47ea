@@ -216,6 +216,51 @@
   .opps-airdrop-grid {
     grid-template-columns: 1fr;
   }
+
+  /* Stacked-card tables: no horizontal scrolling needed on mobile */
+  .cardTableWrap {
+    overflow: visible !important;
+  }
+
+  .cardTable {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .cardTable thead {
+    display: none;
+  }
+
+  .cardTable tbody tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 10px;
+    padding: 10px !important;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .cardTable tbody tr td {
+    display: flex !important;
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 2px;
+    padding: 0 !important;
+    border-bottom: none !important;
+    white-space: normal !important;
+  }
+
+  .cardTable tbody tr td::before {
+    content: attr(data-label);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: .4px;
+    text-transform: uppercase;
+    color: var(--brand);
+  }
+
+  .cardTable tbody tr td:first-child {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 640px) {
