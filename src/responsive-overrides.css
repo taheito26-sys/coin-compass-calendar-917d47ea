@@ -139,12 +139,12 @@
 
   body .sidebar .navBtn,
   body[data-layout] .sidebar .navBtn {
-    flex: 1 1 0 !important;
+    flex: 1 1 56px !important;
     flex-direction: column !important;
     align-items: center !important;
     justify-content: center !important;
     padding: 6px 2px !important;
-    min-width: 0 !important;
+    min-width: 56px !important;
     height: 100% !important;
     border-radius: 8px !important;
     margin-top: 0 !important;
