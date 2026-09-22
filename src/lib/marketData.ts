@@ -31,12 +31,27 @@ let _cache: MarketCoin[] = [];
 let _ts = 0;
 let _fetching = false;
 let _listeners = new Set<() => void>();
+let _pollTimer: ReturnType<typeof setInterval> | null = null;
 
 const STALE_MS = 300_000; // 5 minutes
+const POLL_MS = 45_000; // keep market list live without manual refresh
 
 export function getMarketCache() { return _cache; }
-export function addMarketListener(cb: () => void) { _listeners.add(cb); }
-export function removeMarketListener(cb: () => void) { _listeners.delete(cb); }
+
+export function addMarketListener(cb: () => void) {
+  _listeners.add(cb);
+  if (!_pollTimer) {
+    _pollTimer = setInterval(() => { void refreshMarketData(); }, POLL_MS);
+  }
+}
+
+export function removeMarketListener(cb: () => void) {
+  _listeners.delete(cb);
+  if (_listeners.size === 0 && _pollTimer) {
+    clearInterval(_pollTimer);
+    _pollTimer = null;
+  }
+}
 
 function notify() { _listeners.forEach(cb => cb()); }
 
