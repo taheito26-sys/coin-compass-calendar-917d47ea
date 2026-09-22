@@ -60,8 +60,8 @@ export function useLivePrices() {
       coingeckoId: null, // Let provider handle discovery
     }));
 
-    const load = () => {
-      getSpotPrices(assets).then(prices => {
+    const load = (force = false) => {
+      getSpotPrices(assets, force).then(prices => {
         if (!cancelled) {
           setSpotPrices(prices);
           bootstrapDoneRef.current = true;
@@ -69,7 +69,7 @@ export function useLivePrices() {
         }
       });
     };
-    loadSpotRef.current = load;
+    loadSpotRef.current = () => load(true);
 
     load();
     const interval = setInterval(load, 45_000);

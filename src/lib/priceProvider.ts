@@ -141,7 +141,8 @@ export interface SpotPrice {
 import { resolveCoin } from "./marketData";
 
 export async function getSpotPrices(
-  assets: { sym: string; coingeckoId?: string | null }[]
+  assets: { sym: string; coingeckoId?: string | null }[],
+  force = false
 ): Promise<Record<string, SpotPrice>> {
   const cacheKey = [...assets]
     .map((a) => `${a.sym.toUpperCase()}:${a.coingeckoId || ""}`)
@@ -149,7 +150,7 @@ export async function getSpotPrices(
     .join("|");
 
   const cached = _spotCache.get(cacheKey);
-  if (cached && Date.now() - cached.ts < SPOT_TTL_MS) {
+  if (!force && cached && Date.now() - cached.ts < SPOT_TTL_MS) {
     return cached.data;
   }
 
