@@ -30,6 +30,25 @@ const COIN_COLORS = [
   "#6366f1", "#84cc16", "#0ea5e9", "#d946ef", "#fb923c",
 ];
 
+function LastUpdatedLabel({ ts }: { ts: number }) {
+  const [, forceTick] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => forceTick(t => t + 1), 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  if (!ts) return <span style={{ fontSize: 11, color: "var(--muted2)" }}>Updating…</span>;
+
+  const secs = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  const label = secs < 5 ? "just now"
+    : secs < 60 ? `${secs}s ago`
+    : secs < 3600 ? `${Math.round(secs / 60)}m ago`
+    : `${Math.round(secs / 3600)}h ago`;
+
+  return <span style={{ fontSize: 11, color: "var(--muted2)" }}>Updated {label}</span>;
+}
+
 interface CardDef {
   id: string;
   label: string;
@@ -179,7 +198,8 @@ function DragHandle({ editing, onDragStart, onDragEnd }: {
 export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }) {
   const { state, setState } = useCrypto();
   const portfolio = useUnifiedPortfolio();
-  const { getPrice } = useLivePrices();
+  const { getPrice, lastUpdated, refresh: refreshPrices } = useLivePrices();
+  const [refreshing, setRefreshing] = useState(false);
   const { result: rebalanceResult, loading: rebalanceLoading, runAnalysis: runRebalance } = useRebalanceAnalysis();
 
   const base = state.base || "USD";
@@ -548,8 +568,24 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6, padding: "8px 12px", background: "var(--panel)", borderRadius: 12, border: "1px solid var(--line)" }}>
         <span className="pill">{base}</span>
         <div style={{ flex: 1 }} />
-        <button 
-          className="btn tiny secondary" 
+        <LastUpdatedLabel ts={lastUpdated} />
+        <button
+          className="btn tiny secondary"
+          disabled={refreshing}
+          onClick={async () => {
+            setRefreshing(true);
+            try {
+              refreshPrices();
+              toast.success("Prices refreshed");
+            } finally {
+              setTimeout(() => setRefreshing(false), 600);
+            }
+          }}
+        >
+          {refreshing ? "⏳" : "↻"} Refresh
+        </button>
+        <button
+          className="btn tiny secondary"
           onClick={async () => {
             const toastId = toast.loading("Generating portfolio snapshot...");
             try {

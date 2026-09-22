@@ -5,7 +5,7 @@ import {
   getWsPrices,
   type SpotPrice,
 } from "@/lib/priceProvider";
-import { refreshMarketData, getMarketCache, resolveCoin, addMarketListener, removeMarketListener, MarketCoin } from "@/lib/marketData";
+import { refreshMarketData, getMarketCache, getMarketTs, resolveCoin, addMarketListener, removeMarketListener, MarketCoin } from "@/lib/marketData";
 import { useCrypto } from "@/lib/cryptoContext";
 import { normalizeSymbol } from "@/lib/symbolAliases";
 
@@ -19,7 +19,9 @@ export function useLivePrices() {
 
   const [spotPrices, setSpotPrices] = useState<Record<string, SpotPrice>>({});
   const [wsRevision, setWsRevision] = useState(0);
+  const [lastUpdated, setLastUpdated] = useState<number>(getMarketTs() || 0);
   const bootstrapDoneRef = useRef(false);
+  const loadSpotRef = useRef<() => void>(() => {});
 
   const assetSymbols = useMemo(() => {
     const set = new Set<string>();
@@ -38,6 +40,7 @@ export function useLivePrices() {
       const cache = getMarketCache();
       setMarketCoins(cache);
       setMarketLoading(false);
+      setLastUpdated(Date.now());
     };
     addMarketListener(update);
     refreshMarketData();
@@ -62,9 +65,11 @@ export function useLivePrices() {
         if (!cancelled) {
           setSpotPrices(prices);
           bootstrapDoneRef.current = true;
+          setLastUpdated(Date.now());
         }
       });
     };
+    loadSpotRef.current = load;
 
     load();
     const interval = setInterval(load, 45_000);
@@ -85,9 +90,15 @@ export function useLivePrices() {
     if (assetSymbols.length === 0) return;
     const unsub = subscribeLivePrices(assetSymbols, () => {
       setWsRevision(r => r + 1);
+      setLastUpdated(Date.now());
     });
     return unsub;
   }, [assetSymbols.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const refresh = useCallback(() => {
+    void refreshMarketData(true);
+    loadSpotRef.current();
+  }, []);
 
   const mergedPrices = useMemo(() => {
     const ws = getWsPrices();
@@ -139,5 +150,7 @@ export function useLivePrices() {
     getPrice,
     priceMap: null, // deprecated in favor of getPrice/resolveCoin
     spotPrices: mergedPrices,
+    lastUpdated,
+    refresh,
   };
 }

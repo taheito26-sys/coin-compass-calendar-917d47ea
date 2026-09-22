@@ -37,6 +37,7 @@ const STALE_MS = 300_000; // 5 minutes
 const POLL_MS = 45_000; // keep market list live without manual refresh
 
 export function getMarketCache() { return _cache; }
+export function getMarketTs() { return _ts; }
 
 export function addMarketListener(cb: () => void) {
   _listeners.add(cb);
