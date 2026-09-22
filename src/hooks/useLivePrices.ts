@@ -69,7 +69,16 @@ export function useLivePrices() {
     load();
     const interval = setInterval(load, 45_000);
 
-    return () => { cancelled = true; clearInterval(interval); };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [assetSymbols.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {

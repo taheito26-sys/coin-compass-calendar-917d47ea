@@ -53,6 +53,17 @@ export function removeMarketListener(cb: () => void) {
   }
 }
 
+// Mobile browsers throttle/suspend timers while the tab/app is backgrounded.
+// Pull fresh data the instant the app comes back to the foreground instead
+// of waiting for the next poll tick.
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && _listeners.size > 0) {
+      void refreshMarketData(true);
+    }
+  });
+}
+
 function notify() { _listeners.forEach(cb => cb()); }
 
 /** Dynamic symbol resolution: searches by symbol, then name, then id */
