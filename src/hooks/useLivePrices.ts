@@ -57,14 +57,19 @@ export function useLivePrices() {
       coingeckoId: null, // Let provider handle discovery
     }));
 
-    getSpotPrices(assets).then(prices => {
-      if (!cancelled) {
-        setSpotPrices(prices);
-        bootstrapDoneRef.current = true;
-      }
-    });
+    const load = () => {
+      getSpotPrices(assets).then(prices => {
+        if (!cancelled) {
+          setSpotPrices(prices);
+          bootstrapDoneRef.current = true;
+        }
+      });
+    };
 
-    return () => { cancelled = true; };
+    load();
+    const interval = setInterval(load, 45_000);
+
+    return () => { cancelled = true; clearInterval(interval); };
   }, [assetSymbols.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
