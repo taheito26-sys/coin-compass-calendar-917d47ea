@@ -350,6 +350,18 @@ export function getWsPrices(): Record<string, SpotPrice> {
   return { ..._wsPrices };
 }
 
+// Mobile browsers suspend/close WebSocket connections while the app is
+// backgrounded. Force a reconnect the moment it's foregrounded again instead
+// of waiting on the close-event's reconnect backoff.
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible" || _wsSymbols.length === 0) return;
+    if (!_ws || _ws.readyState === WebSocket.CLOSED || _ws.readyState === WebSocket.CLOSING) {
+      _startWS(_wsSymbols);
+    }
+  });
+}
+
 // ─── CoinGecko History (for charts/calendar) ───────────────
 
 export async function getDailyHistory(
