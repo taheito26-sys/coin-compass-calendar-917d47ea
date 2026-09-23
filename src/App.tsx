@@ -68,7 +68,7 @@ function AppShell({ onLogout, userLabel }: { onLogout: () => Promise<void>; user
       <div className="mainWrap">
         <Topbar title={title} sub={sub} onNav={setPage} />
         <div className="scroll">
-          {page === "dashboard" && <DashboardPage onNav={setPage} />}
+          {page === "dashboard" && <DashboardPage />}
           {page === "assets" && <PortfolioPage />}
           {page === "ledger" && <LedgerPage />}
           {page === "markets" && <MarketsPage />}
