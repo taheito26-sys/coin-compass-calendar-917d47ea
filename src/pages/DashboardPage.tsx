@@ -245,14 +245,11 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
   };
 
   const handleDragEnd = () => { setDraggedId(null); setDragOverId(null); };
-  const applyPreset = (preset: "default" | "trader" | "taxes" | "hodler") => {
+  const applyPreset = (preset: "default" | "trader" | "hodler") => {
     let order: string[] = [];
     switch (preset) {
-      case "trader": 
+      case "trader":
         order = ["kpis", "news", "correlation", "risk-advanced", "movers", "marketSentiment", "heatmap", "positions"];
-        break;
-      case "taxes":
-        order = ["kpis", "breakEven", "positions"];
         break;
       case "hodler":
         order = ["kpis", "networth", "allocation", "rebalancer"];
@@ -577,7 +574,6 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
             <span style={{ fontSize: 8, color: "var(--muted2)", alignSelf: "center", marginRight: 4, textTransform: "uppercase", fontWeight: 800 }}>Presets:</span>
             <button className="btn tiny secondary" style={{ fontSize: 9, padding: "2px 6px" }} onClick={() => applyPreset("hodler")}>HODLer</button>
             <button className="btn tiny secondary" style={{ fontSize: 9, padding: "2px 6px" }} onClick={() => applyPreset("trader")}>Trader</button>
-            <button className="btn tiny secondary" style={{ fontSize: 9, padding: "2px 6px" }} onClick={() => applyPreset("taxes")}>Taxes</button>
           </div>
         )}
         <button className={`btn tiny ${editing ? "" : "secondary"}`} onClick={() => setEditing(!editing)}
