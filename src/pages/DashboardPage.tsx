@@ -19,6 +19,7 @@ import OrderBookDepth from "@/components/dashboard/OrderBookDepth";
 import ProjectRadar from "@/components/dashboard/ProjectRadar";
 import SurvivabilityScore from "@/components/dashboard/SurvivabilityScore";
 import SentimentTrends from "@/components/dashboard/SentimentTrends";
+import TodaysMovement from "@/components/dashboard/TodaysMovement";
 import { useRebalanceAnalysis } from "@/features/rebalance/hooks/useRebalanceAnalysis";
 import type { MarketRegime } from "@/features/rebalance/types/rebalance";
 
@@ -58,6 +59,7 @@ interface CardDef {
 const ALL_CARDS: CardDef[] = [
   { id: "kpis", label: "KPI Summary", colSpan: 2 },
   { id: "heatmap", label: "Heatmap" },
+  { id: "todaysMovement", label: "Today's Movement", colSpan: 2 },
   { id: "allocation", label: "Coin Allocation" },
   { id: "marketSentiment", label: "Market Sentiment" },
   { id: "riskBreakdown", label: "Per-Asset Risk" },
@@ -413,6 +415,16 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
                   {heatmapItems.map((item, i) => <HeatmapBlock key={i} sym={item.sym} value={item.value} pct={item.pct} pnl={item.pnl} color={item.color} livePrice={item.livePrice} />)}
                 </div>
               ) : <div className="muted" style={{ padding: 20, textAlign: "center" }}>No positions to display.</div>}
+            </div>
+          </div>
+        );
+
+      case "todaysMovement":
+        return (
+          <div className="panel">
+            <div className="panel-head"><DragHandle editing={editing} /><h2>Today's Movement</h2></div>
+            <div className="panel-body" style={{ height: "100%", overflowY: "auto" }}>
+              <TodaysMovement symbols={positions.map(p => p.sym)} />
             </div>
           </div>
         );
