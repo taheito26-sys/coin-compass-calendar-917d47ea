@@ -7,17 +7,10 @@ import { useUnifiedPortfolio } from "@/hooks/useUnifiedPortfolio";
 import { useMemo, useState, useEffect } from "react";
 import MarketSentiment from "@/components/dashboard/MarketSentiment";
 import PerAssetRiskBreakdown from "@/components/dashboard/PerAssetRiskBreakdown";
-import BenchmarkChart from "@/components/dashboard/BenchmarkChart";
-
-import { BreakEvenWidget } from "@/components/dashboard/BreakEvenWidget";
-
-import { BenchmarkComparison } from "@/components/dashboard/BenchmarkComparison";
 import ConcentrationRisk from "@/components/dashboard/ConcentrationRisk";
-import CorrelationMatrix from "@/components/dashboard/CorrelationMatrix";
 import LiquidityWarning from "@/components/dashboard/LiquidityWarning";
 import OrderBookDepth from "@/components/dashboard/OrderBookDepth";
 import ProjectRadar from "@/components/dashboard/ProjectRadar";
-import SurvivabilityScore from "@/components/dashboard/SurvivabilityScore";
 import SentimentTrends from "@/components/dashboard/SentimentTrends";
 import TodaysMovement from "@/components/dashboard/TodaysMovement";
 import { useRebalanceAnalysis } from "@/features/rebalance/hooks/useRebalanceAnalysis";
@@ -63,15 +56,10 @@ const ALL_CARDS: CardDef[] = [
   { id: "allocation", label: "Coin Allocation" },
   { id: "marketSentiment", label: "Market Sentiment" },
   { id: "riskBreakdown", label: "Per-Asset Risk" },
-  { id: "benchmark", label: "Portfolio vs Benchmarks" },
-  { id: "benchmark-v2", label: "Market Alpha Analysis", colSpan: 1 },
-  { id: "breakEven", label: "Break-Even Targets" },
   { id: "concentrationRisk", label: "Concentration Risk" },
-  { id: "correlationMatrix", label: "Correlation Risk" },
   { id: "liquidityWarning", label: "Liquidity Monitor" },
   { id: "orderBookDepth", label: "Order Book Depth" },
   { id: "projectRadar", label: "Project Radar" },
-  { id: "survivability", label: "Survivability Score" },
   { id: "sentimentTrends", label: "Sentiment Trends" },
   { id: "rebalanceSummary", label: "Rebalance Status" },
 ];
@@ -432,36 +420,9 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
       case "marketSentiment": return <MarketSentiment />;
       case "riskBreakdown": return <PerAssetRiskBreakdown compact />;
       case "concentrationRisk": return <ConcentrationRisk compact />;
-      case "correlationMatrix": return <CorrelationMatrix compact />;
       case "liquidityWarning": return <LiquidityWarning compact />;
       case "orderBookDepth": return <OrderBookDepth compact />;
       case "projectRadar": return <ProjectRadar compact />;
-      case "survivability": return <SurvivabilityScore compact />;
-      case "benchmark": return <BenchmarkChart compact />;
-      case "breakEven":
-        return (
-          <div className="panel" key="breakEven" onDragOver={(e) => handleDragOver(e, "breakEven")} onDrop={() => handleDrop("breakEven")}>
-            <div className="panel-head">
-              <DragHandle editing={editing} onDragStart={() => handleDragStart("breakEven")} onDragEnd={handleDragEnd} />
-              <h2>Break-Even Targets</h2>
-            </div>
-            <div className="panel-body">
-              <BreakEvenWidget />
-            </div>
-          </div>
-        );
-      case "benchmark-v2":
-        return (
-          <div className="panel" key="benchmark-v2" onDragOver={(e) => handleDragOver(e, "benchmark-v2")} onDrop={() => handleDrop("benchmark-v2")}>
-            <div className="panel-head">
-              <DragHandle editing={editing} onDragStart={() => handleDragStart("benchmark-v2")} onDragEnd={handleDragEnd} />
-              <h2>Market Alpha Analysis</h2>
-            </div>
-            <div className="panel-body">
-              <BenchmarkComparison />
-            </div>
-          </div>
-        );
       case "sentimentTrends": return <SentimentTrends compact />;
 
       case "rebalanceSummary":
