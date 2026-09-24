@@ -46,10 +46,9 @@ interface CardDef {
 
 const ALL_CARDS: CardDef[] = [
   { id: "kpis", label: "KPI Summary", colSpan: 2 },
-  { id: "heatmap", label: "Heatmap" },
   { id: "todaysMovement", label: "Today's Movement" },
+  { id: "heatmapSentiment", label: "Heatmap & Market Sentiment" },
   { id: "allocation", label: "Coin Allocation" },
-  { id: "marketSentiment", label: "Market Sentiment" },
   { id: "liquidityWarning", label: "Liquidity Monitor" },
   { id: "orderBookDepth", label: "Order Book Depth" },
   { id: "sentimentTrends", label: "Sentiment Trends" },
@@ -205,18 +204,18 @@ export default function DashboardPage() {
 
     const order = [...current, ...missing];
 
-    // Heatmap always follows KPIs, and Today's Movement always follows
-    // Heatmap (so they pack into the same row side by side on desktop),
-    // even in a layout saved before this order change or from manual drag
-    // reordering.
-    const withoutHeatmap = order.filter(id => id !== "heatmap");
-    const kpisIndex = withoutHeatmap.indexOf("kpis");
-    withoutHeatmap.splice(kpisIndex + 1, 0, "heatmap");
+    // Today's Movement always follows KPIs, and Heatmap & Market Sentiment
+    // always follows Today's Movement (so they pack into the same row side
+    // by side on desktop), even in a layout saved before this order change
+    // or from manual drag reordering.
+    const withoutTodaysMovement = order.filter(id => id !== "todaysMovement");
+    const kpisIndex = withoutTodaysMovement.indexOf("kpis");
+    withoutTodaysMovement.splice(kpisIndex + 1, 0, "todaysMovement");
 
-    const withoutTodaysMovement = withoutHeatmap.filter(id => id !== "todaysMovement");
-    const heatmapIndex = withoutTodaysMovement.indexOf("heatmap");
-    withoutTodaysMovement.splice(heatmapIndex + 1, 0, "todaysMovement");
-    return withoutTodaysMovement;
+    const withoutHeatmapSentiment = withoutTodaysMovement.filter(id => id !== "heatmapSentiment");
+    const todaysMovementIndex = withoutHeatmapSentiment.indexOf("todaysMovement");
+    withoutHeatmapSentiment.splice(todaysMovementIndex + 1, 0, "heatmapSentiment");
+    return withoutHeatmapSentiment;
   }, [state.dashboardLayout]);
 
   const [editing, setEditing] = useState(false);
@@ -380,23 +379,26 @@ export default function DashboardPage() {
           </div>
         );
 
-      case "heatmap":
+      case "heatmapSentiment":
         return (
-          <div className="panel">
-            <div className="panel-head"><DragHandle editing={editing} /><h2>Heatmap</h2></div>
-            <div className="panel-body" style={{ height: "100%" }}>
-              {heatmapItems.length > 0 ? (
-                <div style={{
-                  display: "grid",
-                  gridTemplateColumns: `repeat(${heatmapColumns(heatmapItems.length)}, 1fr)`,
-                  gridAutoRows: "1fr",
-                  gap: 2,
-                  height: "100%",
-                }}>
-                  {heatmapItems.map((item, i) => <HeatmapBlock key={i} sym={item.sym} value={item.value} pct={item.pct} pnl={item.pnl} color={item.color} livePrice={item.livePrice} />)}
-                </div>
-              ) : <div className="muted" style={{ padding: 20, textAlign: "center" }}>No positions to display.</div>}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <div className="panel">
+              <div className="panel-head"><DragHandle editing={editing} /><h2>Heatmap</h2></div>
+              <div className="panel-body" style={{ height: "100%" }}>
+                {heatmapItems.length > 0 ? (
+                  <div style={{
+                    display: "grid",
+                    gridTemplateColumns: `repeat(${heatmapColumns(heatmapItems.length)}, 1fr)`,
+                    gridAutoRows: "1fr",
+                    gap: 2,
+                    height: "100%",
+                  }}>
+                    {heatmapItems.map((item, i) => <HeatmapBlock key={i} sym={item.sym} value={item.value} pct={item.pct} pnl={item.pnl} color={item.color} livePrice={item.livePrice} />)}
+                  </div>
+                ) : <div className="muted" style={{ padding: 20, textAlign: "center" }}>No positions to display.</div>}
+              </div>
             </div>
+            <MarketSentiment />
           </div>
         );
 
@@ -410,7 +412,6 @@ export default function DashboardPage() {
           </div>
         );
 
-      case "marketSentiment": return <MarketSentiment />;
       case "liquidityWarning": return <LiquidityWarning compact />;
       case "orderBookDepth": return <OrderBookDepth compact />;
       case "sentimentTrends": return <SentimentTrends compact />;
