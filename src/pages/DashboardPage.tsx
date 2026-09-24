@@ -47,7 +47,7 @@ interface CardDef {
 const ALL_CARDS: CardDef[] = [
   { id: "kpis", label: "KPI Summary", colSpan: 2 },
   { id: "heatmap", label: "Heatmap" },
-  { id: "todaysMovement", label: "Today's Movement", colSpan: 2 },
+  { id: "todaysMovement", label: "Today's Movement" },
   { id: "allocation", label: "Coin Allocation" },
   { id: "marketSentiment", label: "Market Sentiment" },
   { id: "liquidityWarning", label: "Liquidity Monitor" },
@@ -205,12 +205,18 @@ export default function DashboardPage() {
 
     const order = [...current, ...missing];
 
-    // Heatmap always follows KPIs, even in a layout saved before this order
-    // change or from manual drag reordering.
+    // Heatmap always follows KPIs, and Today's Movement always follows
+    // Heatmap (so they pack into the same row side by side on desktop),
+    // even in a layout saved before this order change or from manual drag
+    // reordering.
     const withoutHeatmap = order.filter(id => id !== "heatmap");
     const kpisIndex = withoutHeatmap.indexOf("kpis");
     withoutHeatmap.splice(kpisIndex + 1, 0, "heatmap");
-    return withoutHeatmap;
+
+    const withoutTodaysMovement = withoutHeatmap.filter(id => id !== "todaysMovement");
+    const heatmapIndex = withoutTodaysMovement.indexOf("heatmap");
+    withoutTodaysMovement.splice(heatmapIndex + 1, 0, "todaysMovement");
+    return withoutTodaysMovement;
   }, [state.dashboardLayout]);
 
   const [editing, setEditing] = useState(false);
