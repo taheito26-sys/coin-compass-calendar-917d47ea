@@ -202,20 +202,7 @@ export default function DashboardPage() {
     // Append any newly added features that aren't in the saved layout
     const missing = ALL_CARDS.filter(c => !current.includes(c.id)).map(c => c.id);
 
-    const order = [...current, ...missing];
-
-    // Today's Movement always follows KPIs, and Heatmap & Market Sentiment
-    // always follows Today's Movement (so they pack into the same row side
-    // by side on desktop), even in a layout saved before this order change
-    // or from manual drag reordering.
-    const withoutTodaysMovement = order.filter(id => id !== "todaysMovement");
-    const kpisIndex = withoutTodaysMovement.indexOf("kpis");
-    withoutTodaysMovement.splice(kpisIndex + 1, 0, "todaysMovement");
-
-    const withoutHeatmapSentiment = withoutTodaysMovement.filter(id => id !== "heatmapSentiment");
-    const todaysMovementIndex = withoutHeatmapSentiment.indexOf("todaysMovement");
-    withoutHeatmapSentiment.splice(todaysMovementIndex + 1, 0, "heatmapSentiment");
-    return withoutHeatmapSentiment;
+    return [...current, ...missing];
   }, [state.dashboardLayout]);
 
   const [editing, setEditing] = useState(false);
