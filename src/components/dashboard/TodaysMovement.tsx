@@ -1,10 +1,9 @@
-import { useLivePrices } from "@/hooks/useLivePrices";
+import type { LiveCoin } from "@/hooks/useLivePrices";
 import { useIntradayHistory } from "@/hooks/useIntradayHistory";
 import { IntradayAreaChart } from "./IntradayAreaChart";
 import { fmtPx } from "@/lib/cryptoState";
 
-export default function TodaysMovement({ symbols }: { symbols: string[] }) {
-  const { getPrice } = useLivePrices();
+export default function TodaysMovement({ symbols, getPrice }: { symbols: string[]; getPrice: (sym: string) => LiveCoin | null }) {
   const history = useIntradayHistory(symbols);
 
   if (symbols.length === 0) {
