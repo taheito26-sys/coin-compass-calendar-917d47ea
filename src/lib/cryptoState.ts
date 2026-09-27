@@ -1,6 +1,9 @@
 // Crypto state management
-// localStorage stores UI preferences plus a local cache of business data as a
-// safety net; the backend remains the source of truth and is re-fetched on sign-in.
+// localStorage stores UI preferences ONLY. Business data (transactions, lots,
+// holdings, calendar entries, imported files) is never cached locally — it is
+// always fetched fresh from the backend, which is the single source of truth.
+// This avoids "split brain" where two devices (e.g. mobile and desktop) each
+// show a different, locally-cached snapshot of the same account's data.
 
 const SK = "crypto_tracker_v1";
 const BUSINESS_SK = "crypto_tracker_business_v1";
@@ -131,12 +134,10 @@ const UI_KEYS = new Set([
 ]);
 
 /**
- * Load state: UI prefs from localStorage, plus a locally cached copy of
- * business data (txs, lots, holdings, calendarEntries, importedFiles) so the
- * app shows the user's data instantly on load — and keeps showing it even if
- * the backend hydration fetch is slow, offline, or errors out. The backend
- * remains the source of truth: cryptoContext re-fetches on sign-in and
- * overwrites this cache with the canonical result once that succeeds.
+ * Load state: UI prefs from localStorage only. Business data (txs, lots,
+ * holdings, calendarEntries, importedFiles) always starts empty and is
+ * populated exclusively by cryptoContext's backend hydration — never from a
+ * local cache — so every device converges on the exact same server data.
  */
 export function loadState(): CryptoState {
   const base = defaultState();
@@ -167,32 +168,15 @@ export function loadState(): CryptoState {
     }
   } catch {}
 
-  try {
-    const rawBiz = localStorage.getItem(BUSINESS_SK);
-    if (rawBiz) {
-      const biz = JSON.parse(rawBiz);
-      if (biz && typeof biz === "object") {
-        next = {
-          ...next,
-          txs: Array.isArray(biz.txs) ? biz.txs : next.txs,
-          lots: Array.isArray(biz.lots) ? biz.lots : next.lots,
-          holdings: Array.isArray(biz.holdings) ? biz.holdings : next.holdings,
-          calendarEntries: Array.isArray(biz.calendarEntries) ? biz.calendarEntries : next.calendarEntries,
-          importedFiles: Array.isArray(biz.importedFiles) ? biz.importedFiles : next.importedFiles,
-        };
-      }
-    }
-  } catch {}
+  // Business data is intentionally never read from localStorage (see header
+  // comment). Drop any pre-existing cache from before this change so a
+  // device that still has one doesn't keep it around unused.
+  try { localStorage.removeItem(BUSINESS_SK); } catch {}
 
   return next;
 }
 
-/**
- * Save UI preferences to localStorage, and cache business data
- * (txs, lots, holdings, calendarEntries, importedFiles) separately so a
- * refresh — or a flaky/slow backend fetch — never wipes what's on screen.
- * The backend is still authoritative; this cache is a local safety net.
- */
+/** Save UI preferences to localStorage. Business data is never persisted here. */
 export function saveState(s: CryptoState) {
   try {
     const uiOnly: Record<string, any> = {};
@@ -201,22 +185,9 @@ export function saveState(s: CryptoState) {
     }
     localStorage.setItem(SK, JSON.stringify(uiOnly));
   } catch {}
-
-  try {
-    localStorage.setItem(BUSINESS_SK, JSON.stringify({
-      txs: s.txs,
-      lots: s.lots,
-      holdings: s.holdings,
-      calendarEntries: s.calendarEntries,
-      importedFiles: s.importedFiles,
-    }));
-  } catch {
-    // Quota exceeded or storage unavailable — the backend is still the
-    // source of truth, so this is a soft failure.
-  }
 }
 
-/** Clear the locally cached business data (called on sign-out). */
+/** No-op kept for callers from before business data caching was removed. */
 export function clearBusinessCache() {
   try { localStorage.removeItem(BUSINESS_SK); } catch {}
 }
