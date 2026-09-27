@@ -405,7 +405,7 @@ export default function DashboardPage() {
           <div className="panel">
             <div className="panel-head"><DragHandle editing={editing} /><h2>Today's Movement</h2></div>
             <div className="panel-body" style={{ height: "100%", overflowY: "auto" }}>
-              <TodaysMovement symbols={positions.map(p => p.sym)} />
+              <TodaysMovement symbols={positions.map(p => p.sym)} getPrice={getPrice} />
             </div>
           </div>
         );
