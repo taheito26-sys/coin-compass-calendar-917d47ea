@@ -1165,10 +1165,25 @@ tbody tr { transition: background var(--lt-tr); }
 .settings-inline-row > * { min-width: 0; }
 
 /* ── DASHBOARD GRIDS ── */
+.dashboard-page { display: flex; flex-direction: column; gap: 4px; }
+.dashboard-topbar { padding: 8px 12px; margin-bottom: 6px; }
 .dashboard-charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 4px; }
 .dashboard-charts-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; margin-top: 4px; }
 .kpis-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .kpis-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+
+/* Desktop-only: tighten the dashboard's own spacing (padding/margins/gaps)
+   without touching any other page or the mobile layout. */
+@media (min-width: 768px) {
+  .dashboard-page { gap: 2px; }
+  .dashboard-page .dashboard-topbar { padding: 4px 8px; margin-bottom: 2px; }
+  .dashboard-page .dashboard-charts-grid,
+  .dashboard-page .dashboard-charts-grid-3 { gap: 2px; margin-top: 0; }
+  .dashboard-page .panel-head { padding: 6px 10px 5px; }
+  .dashboard-page .panel-body { padding: 6px; }
+  .dashboard-page .kpis { gap: 2px; }
+  .dashboard-page .kpi-card { padding: 8px 10px; }
+}
 
 /* ── LEDGER GRID ── */
 .ledger-top-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
