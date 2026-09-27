@@ -203,18 +203,7 @@ export default function DashboardPage() {
     // Append any newly added features that aren't in the saved layout
     const missing = ALL_CARDS.filter(c => !current.includes(c.id)).map(c => c.id);
 
-    const order = [...current, ...missing];
-
-    // Heatmap, Coin Allocation, and Today's Movement are always grouped
-    // together in that sequence right after KPIs, so they land in the same
-    // row (desktop: side by side; mobile: stacked via the existing grid
-    // breakpoints) regardless of any previously saved layout or manual
-    // reordering.
-    const rest = order.filter(id => id !== "heatmap" && id !== "allocation" && id !== "todaysMovement");
-    const kpisIndex = rest.indexOf("kpis");
-    const insertAt = kpisIndex === -1 ? 0 : kpisIndex + 1;
-    rest.splice(insertAt, 0, "heatmap", "allocation", "todaysMovement");
-    return rest;
+    return [...current, ...missing];
   }, [state.dashboardLayout]);
 
   const [editing, setEditing] = useState(false);
@@ -380,16 +369,15 @@ export default function DashboardPage() {
 
       case "heatmap":
         return (
-          <div className="panel">
+          <div className="panel" style={{ height: "auto" }}>
             <div className="panel-head"><DragHandle editing={editing} /><h2>Heatmap</h2></div>
-            <div className="panel-body" style={{ height: "100%" }}>
+            <div className="panel-body">
               {heatmapItems.length > 0 ? (
                 <div style={{
                   display: "grid",
                   gridTemplateColumns: `repeat(${heatmapColumns(heatmapItems.length)}, 1fr)`,
-                  gridAutoRows: "1fr",
+                  gridAutoRows: "76px",
                   gap: 2,
-                  height: "100%",
                 }}>
                   {heatmapItems.map((item, i) => <HeatmapBlock key={i} sym={item.sym} value={item.value} pct={item.pct} pnl={item.pnl} color={item.color} livePrice={item.livePrice} />)}
                 </div>
@@ -425,15 +413,6 @@ export default function DashboardPage() {
       const id = cardOrder[i];
       const def = ALL_CARDS.find(c => c.id === id);
       if (!def) continue;
-
-      // Heatmap, Coin Allocation, and Today's Movement always render
-      // together as a dedicated 3-up row (cardOrder guarantees this order).
-      if (id === "heatmap" && cardOrder[i + 1] === "allocation" && cardOrder[i + 2] === "todaysMovement") {
-        if (currentRow.length > 0) { rows.push(currentRow); currentRow = []; currentSpan = 0; }
-        rows.push(["heatmap", "allocation", "todaysMovement"]);
-        i += 2;
-        continue;
-      }
 
       const span = def.colSpan || 1;
       if (span === 2) {
@@ -519,10 +498,10 @@ export default function DashboardPage() {
           );
         }
         return (
-          <div key={`row-${ri}`} className={row.length === 3 ? "dashboard-charts-grid-3" : "dashboard-charts-grid"}>
+          <div key={`row-${ri}`} className="dashboard-charts-grid">
             {row.map(id => (
               <div key={id} draggable={editing} onDragStart={() => handleDragStart(id)} onDragOver={e => handleDragOver(e, id)} onDrop={() => handleDrop(id)} onDragEnd={handleDragEnd}
-                style={{ opacity: draggedId === id ? 0.5 : 1, outline: dragOverId === id ? "2px dashed var(--brand)" : "none", outlineOffset: 2, borderRadius: 12, transition: "opacity .15s" }}>
+                style={{ opacity: draggedId === id ? 0.5 : 1, outline: dragOverId === id ? "2px dashed var(--brand)" : "none", outlineOffset: 2, borderRadius: 12, transition: "opacity .15s", alignSelf: id === "heatmap" ? "start" : undefined }}>
                 {renderCard(id)}
               </div>
             ))}
