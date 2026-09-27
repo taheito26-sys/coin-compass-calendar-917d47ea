@@ -452,8 +452,8 @@ export default function DashboardPage() {
   }, [cardOrder]);
 
   return (
-    <>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6, padding: "8px 12px", background: "var(--panel)", borderRadius: 12, border: "1px solid var(--line)" }}>
+    <div className="dashboard-page">
+      <div className="dashboard-topbar" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", background: "var(--panel)", borderRadius: 12, border: "1px solid var(--line)" }}>
         <span className="pill">{base}</span>
         <div style={{ flex: 1 }} />
         <LastUpdatedLabel ts={lastUpdated} />
@@ -529,6 +529,6 @@ export default function DashboardPage() {
           </div>
         );
       })}
-    </>
+    </div>
   );
 }
