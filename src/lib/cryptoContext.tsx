@@ -146,17 +146,15 @@ export const CryptoProvider = forwardRef<HTMLDivElement, { children: React.React
       }
 
       setStateRaw((prev) => {
-        // Guard against a "successful" read that comes back suspiciously
-        // empty (e.g. a transient RLS/consistency hiccup right after a
-        // write) blowing away data we already have cached locally.
-        const txs = canonicalTxs.length > 0 || prev.txs.length === 0 ? canonicalTxs : prev.txs;
-        const importedFilesNext = canonicalImported.length > 0 || prev.importedFiles.length === 0
-          ? canonicalImported : prev.importedFiles;
+        // The backend is the single source of truth — always take its
+        // result as-is, even if empty, so every device converges on
+        // exactly the same data instead of falling back to a stale local
+        // cache.
         const next = {
           ...prev,
           ...prefUpdates,
-          txs,
-          importedFiles: importedFilesNext,
+          txs: canonicalTxs,
+          importedFiles: canonicalImported,
           syncStatus: "synced" as const,
           syncError: undefined,
         };
@@ -244,18 +242,15 @@ export const CryptoProvider = forwardRef<HTMLDivElement, { children: React.React
 
         if (!cancelled) {
           setStateRaw((prev) => {
-            // Guard against a "successful" read that comes back suspiciously
-            // empty (e.g. a transient RLS/consistency hiccup right after a
-            // write, or right after sign-in) blowing away data we already
-            // have cached locally from this same account.
-            const txs = canonicalTxs.length > 0 || prev.txs.length === 0 ? canonicalTxs : prev.txs;
-            const importedFilesNext = canonicalImported.length > 0 || prev.importedFiles.length === 0
-              ? canonicalImported : prev.importedFiles;
+            // The backend is the single source of truth — always take its
+            // result as-is, even if empty, so every device converges on
+            // exactly the same data instead of falling back to a stale
+            // local cache.
             const next = {
               ...prev,
               ...prefUpdates,
-              txs,
-              importedFiles: importedFilesNext,
+              txs: canonicalTxs,
+              importedFiles: canonicalImported,
               syncStatus: "synced" as const,
               syncError: undefined,
             };
