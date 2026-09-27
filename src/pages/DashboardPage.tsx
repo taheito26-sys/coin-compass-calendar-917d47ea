@@ -177,7 +177,7 @@ function DragHandle({ editing, onDragStart, onDragEnd }: {
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const { state, setState } = useCrypto();
+  const { state, setState, rehydrateFromBackend } = useCrypto();
   const portfolio = useUnifiedPortfolio();
   const { getPrice, lastUpdated, refresh: refreshPrices } = useLivePrices();
   const [refreshing, setRefreshing] = useState(false);
@@ -464,7 +464,8 @@ export default function DashboardPage() {
             setRefreshing(true);
             try {
               refreshPrices();
-              toast.success("Prices refreshed");
+              await rehydrateFromBackend();
+              toast.success("Prices & holdings refreshed");
             } finally {
               setTimeout(() => setRefreshing(false), 600);
             }

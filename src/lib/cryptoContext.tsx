@@ -278,6 +278,28 @@ export const CryptoProvider = forwardRef<HTMLDivElement, { children: React.React
     return () => { cancelled = true; };
   }, [isSignedIn, userId]);
 
+  // Keep holdings/transactions in sync with the backend across devices —
+  // otherwise a tab left open on one device (desktop) can keep showing
+  // stale totals after a transaction is added on another (mobile), since
+  // the initial hydration effect above only runs once per sign-in.
+  const rehydrateFromBackendRef = useRef(rehydrateFromBackend);
+  rehydrateFromBackendRef.current = rehydrateFromBackend;
+  useEffect(() => {
+    if (!isSignedIn) return;
+
+    const interval = setInterval(() => { void rehydrateFromBackendRef.current(); }, 2 * 60 * 1000);
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void rehydrateFromBackendRef.current();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [isSignedIn]);
+
   // Sync preferences to backend when they change
   const prevPrefsRef = useRef<string>("");
   useEffect(() => {
