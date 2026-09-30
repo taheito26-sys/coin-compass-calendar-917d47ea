@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, forwardRef } from "react";
 import { useAuth } from "@/lib/supabaseAuth";
-import { CryptoState, loadState, saveState, defaultState, refreshPrices, clearBusinessCache } from "./cryptoState";
+import { CryptoState, loadState, saveState, defaultState, refreshPrices, clearBusinessCache, cleanupLegacyData } from "./cryptoState";
 import {
   fetchImportedFiles,
   fetchTransactions,
@@ -74,8 +74,18 @@ export const CryptoProvider = forwardRef<HTMLDivElement, { children: React.React
   const [state, setStateRaw] = useState<CryptoState>(loadState);
   const [toastMsg, setToast] = useState<{ msg: string; type: string } | null>(null);
   const lastHydratedUserRef = useRef<string | null>(null);
+  const cleanupDoneRef = useRef(false);
 
   const { isSignedIn, userId } = useAuth();
+
+  // Clean up legacy business data from localStorage on mount (one-time)
+  // to prevent split-brain sync issues across devices
+  useEffect(() => {
+    if (!cleanupDoneRef.current) {
+      cleanupDoneRef.current = true;
+      cleanupLegacyData();
+    }
+  }, []);
 
   const setState = (arg: CryptoState | ((prev: CryptoState) => CryptoState)) => {
     setStateRaw((prev) => {
@@ -146,17 +156,17 @@ export const CryptoProvider = forwardRef<HTMLDivElement, { children: React.React
       }
 
       setStateRaw((prev) => {
-        // Guard against a "successful" read that comes back suspiciously
-        // empty (e.g. a transient RLS/consistency hiccup right after a
-        // write) blowing away data we already have cached locally.
-        const txs = canonicalTxs.length > 0 || prev.txs.length === 0 ? canonicalTxs : prev.txs;
-        const importedFilesNext = canonicalImported.length > 0 || prev.importedFiles.length === 0
-          ? canonicalImported : prev.importedFiles;
+        // Always use backend data as authoritative. Since we no longer cache
+        // business data locally, we trust the backend fetch completely.
+        // If backend returns empty, that's the canonical state (user has no data yet).
         const next = {
           ...prev,
           ...prefUpdates,
-          txs,
-          importedFiles: importedFilesNext,
+          txs: canonicalTxs,
+          importedFiles: canonicalImported,
+          lots: [], // Backend provides derived lots via transactions
+          holdings: [], // Backend provides derived holdings via transactions
+          calendarEntries: [], // Derived from transactions
           syncStatus: "synced" as const,
           syncError: undefined,
         };
@@ -172,6 +182,19 @@ export const CryptoProvider = forwardRef<HTMLDivElement, { children: React.React
       }));
     }
   }, [isSignedIn]);
+
+  // Automatic periodic sync to catch divergence across devices
+  useEffect(() => {
+    if (!isSignedIn || state.syncStatus !== "synced") return;
+
+    const interval = setInterval(() => {
+      rehydrateFromBackend().catch(err => {
+        console.warn("[crypto-context] Background sync failed:", err);
+      });
+    }, 120000); // Sync every 2 minutes
+
+    return () => clearInterval(interval);
+  }, [isSignedIn, state.syncStatus, rehydrateFromBackend]);
 
   // Hydration effect — runs on auth identity change
   useEffect(() => {
@@ -244,18 +267,17 @@ export const CryptoProvider = forwardRef<HTMLDivElement, { children: React.React
 
         if (!cancelled) {
           setStateRaw((prev) => {
-            // Guard against a "successful" read that comes back suspiciously
-            // empty (e.g. a transient RLS/consistency hiccup right after a
-            // write, or right after sign-in) blowing away data we already
-            // have cached locally from this same account.
-            const txs = canonicalTxs.length > 0 || prev.txs.length === 0 ? canonicalTxs : prev.txs;
-            const importedFilesNext = canonicalImported.length > 0 || prev.importedFiles.length === 0
-              ? canonicalImported : prev.importedFiles;
+            // Always use backend data as authoritative. Since we no longer cache
+            // business data locally, we trust the backend fetch completely.
+            // If backend returns empty, that's the canonical state (user has no data yet).
             const next = {
               ...prev,
               ...prefUpdates,
-              txs,
-              importedFiles: importedFilesNext,
+              txs: canonicalTxs,
+              importedFiles: canonicalImported,
+              lots: [], // Backend provides derived lots via transactions
+              holdings: [], // Backend provides derived holdings via transactions
+              calendarEntries: [], // Derived from transactions
               syncStatus: "synced" as const,
               syncError: undefined,
             };

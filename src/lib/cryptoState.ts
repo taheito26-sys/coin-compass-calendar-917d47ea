@@ -131,12 +131,10 @@ const UI_KEYS = new Set([
 ]);
 
 /**
- * Load state: UI prefs from localStorage, plus a locally cached copy of
- * business data (txs, lots, holdings, calendarEntries, importedFiles) so the
- * app shows the user's data instantly on load — and keeps showing it even if
- * the backend hydration fetch is slow, offline, or errors out. The backend
- * remains the source of truth: cryptoContext re-fetches on sign-in and
- * overwrites this cache with the canonical result once that succeeds.
+ * Load state: UI prefs from localStorage ONLY. Business data (txs, lots, holdings,
+ * calendarEntries, importedFiles) is NOT cached locally to prevent device split-brain
+ * where desktop and mobile have different data. All business data comes from backend
+ * on auth/refresh. This ensures a single source of truth across all devices.
  */
 export function loadState(): CryptoState {
   const base = defaultState();
@@ -167,31 +165,14 @@ export function loadState(): CryptoState {
     }
   } catch {}
 
-  try {
-    const rawBiz = localStorage.getItem(BUSINESS_SK);
-    if (rawBiz) {
-      const biz = JSON.parse(rawBiz);
-      if (biz && typeof biz === "object") {
-        next = {
-          ...next,
-          txs: Array.isArray(biz.txs) ? biz.txs : next.txs,
-          lots: Array.isArray(biz.lots) ? biz.lots : next.lots,
-          holdings: Array.isArray(biz.holdings) ? biz.holdings : next.holdings,
-          calendarEntries: Array.isArray(biz.calendarEntries) ? biz.calendarEntries : next.calendarEntries,
-          importedFiles: Array.isArray(biz.importedFiles) ? biz.importedFiles : next.importedFiles,
-        };
-      }
-    }
-  } catch {}
-
   return next;
 }
 
 /**
- * Save UI preferences to localStorage, and cache business data
- * (txs, lots, holdings, calendarEntries, importedFiles) separately so a
- * refresh — or a flaky/slow backend fetch — never wipes what's on screen.
- * The backend is still authoritative; this cache is a local safety net.
+ * Save UI preferences to localStorage ONLY. Business data (txs, lots, holdings,
+ * calendarEntries, importedFiles) is NOT persisted locally to prevent split-brain
+ * sync issues across devices. All business data flows from the backend on each
+ * auth/refresh cycle, ensuring all devices stay in sync.
  */
 export function saveState(s: CryptoState) {
   try {
@@ -201,24 +182,14 @@ export function saveState(s: CryptoState) {
     }
     localStorage.setItem(SK, JSON.stringify(uiOnly));
   } catch {}
-
-  try {
-    localStorage.setItem(BUSINESS_SK, JSON.stringify({
-      txs: s.txs,
-      lots: s.lots,
-      holdings: s.holdings,
-      calendarEntries: s.calendarEntries,
-      importedFiles: s.importedFiles,
-    }));
-  } catch {
-    // Quota exceeded or storage unavailable — the backend is still the
-    // source of truth, so this is a soft failure.
-  }
+  // Note: Business data (txs, lots, holdings, etc.) is intentionally NOT cached
+  // locally. All such data comes from the backend on sign-in/refresh.
 }
 
 /** Clear the locally cached business data (called on sign-out). */
 export function clearBusinessCache() {
-  try { localStorage.removeItem(BUSINESS_SK); } catch {}
+  // No-op: business data is no longer cached in localStorage to prevent split-brain
+  // sync issues across devices. All business data comes from backend on auth/refresh.
 }
 
 /**
@@ -266,6 +237,44 @@ export function markMigrationComplete() {
       }
     }
   } catch {}
+}
+
+/**
+ * Clean up any lingering business data from localStorage to prevent split-brain
+ * sync issues. This ensures all business data flows only from the backend.
+ */
+export function cleanupLegacyData() {
+  try {
+    // Remove the old business data cache key entirely
+    localStorage.removeItem(BUSINESS_SK);
+
+    // Clean up business data from the main key
+    const raw = localStorage.getItem(SK);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        const hadBusinessData = !!(parsed.txs || parsed.lots || parsed.holdings ||
+                                   parsed.calendarEntries || parsed.importedFiles ||
+                                   parsed.prices || parsed.pricesTs);
+
+        delete parsed.txs;
+        delete parsed.lots;
+        delete parsed.holdings;
+        delete parsed.calendarEntries;
+        delete parsed.importedFiles;
+        delete parsed.prices;
+        delete parsed.pricesTs;
+
+        localStorage.setItem(SK, JSON.stringify(parsed));
+
+        if (hadBusinessData) {
+          console.log("[crypto-state] Cleaned up legacy business data from localStorage");
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[crypto-state] Failed to cleanup legacy data:", err);
+  }
 }
 
 export function uid(): string {

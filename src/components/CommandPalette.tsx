@@ -32,8 +32,9 @@ export default function CommandPalette({ onNav }: { onNav: (page: string) => voi
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState(0);
   const [mode, setMode] = useState<"search" | "actions">("search");
+  const [syncing, setSyncing] = useState(false);
   const { coins } = useLivePrices();
-  const { state, setState } = useCrypto();
+  const { state, setState, rehydrateFromBackend } = useCrypto();
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -64,6 +65,11 @@ export default function CommandPalette({ onNav }: { onNav: (page: string) => voi
 
   // Quick actions
   const quickActions: CmdItem[] = useMemo(() => [
+    { type: "action", id: "sync-now", label: "Sync Data", sub: syncing ? "Syncing..." : "Fetch latest data from backend", icon: "🔄",
+      action: () => {
+        setSyncing(true);
+        rehydrateFromBackend().finally(() => setSyncing(false));
+      }},
     { type: "action", id: "new-tx", label: "Log Transaction", sub: "Open Ledger to add a new entry", icon: "➕",
       action: () => onNav("ledger") },
     { type: "action", id: "toggle-theme", label: "Toggle Dark/Light", sub: `Current: ${state.theme || "t1"}`, icon: "🌓",
@@ -78,7 +84,7 @@ export default function CommandPalette({ onNav }: { onNav: (page: string) => voi
       action: () => onNav("settings") },
     { type: "action", id: "import-csv", label: "Import CSV", sub: "Upload exchange trade history", icon: "📁",
       action: () => onNav("ledger") },
-  ], [state.theme, onNav, setState]);
+  ], [state.theme, onNav, setState, syncing, rehydrateFromBackend]);
 
   const results = useMemo(() => {
     if (!query.trim() && mode === "search") return [...quickActions.slice(0, 4), ...PAGES];
