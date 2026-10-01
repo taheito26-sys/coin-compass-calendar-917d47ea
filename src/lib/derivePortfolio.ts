@@ -188,11 +188,14 @@ export function derivePortfolio(
   }
 
   for (const [sym, lots] of lotsMap) {
-    const openLots = lots.filter((l) => l.qtyRem > 1e-10);
+    // Use consistent precision: round to 8 decimals to prevent floating-point divergence
+    const DUST_THRESHOLD = 1e-8; // More generous than 1e-10 to catch rounding errors
+    const openLots = lots.filter((l) => Math.round(l.qtyRem * 1e8) / 1e8 > DUST_THRESHOLD);
     const totalQty = openLots.reduce((s, l) => s + l.qtyRem, 0);
+    const normalizedQty = Math.round(totalQty * 1e8) / 1e8; // Normalize for consistent comparison
     const totalCost = openLots.reduce((s, l) => s + l.qtyRem * l.unitCost, 0);
 
-    if (totalQty > 1e-10) {
+    if (normalizedQty > DUST_THRESHOLD) {
       const price = getPrice(sym);
       const mv = price !== null ? price * totalQty : null;
       
@@ -203,12 +206,12 @@ export function derivePortfolio(
       positions.push({
         sym,
         assetId: assetIdMap.get(sym) || "",
-        qty: totalQty,
+        qty: normalizedQty,
         cost: totalCost,
         price,
-        mv,
-        unreal: mv !== null ? mv - totalCost : null,
-        avg: totalQty > 0 ? totalCost / totalQty : 0,
+        mv: mv !== null && normalizedQty > 0 ? price * normalizedQty : null,
+        unreal: mv !== null && normalizedQty > 0 ? (price * normalizedQty) - totalCost : null,
+        avg: normalizedQty > 0 ? totalCost / normalizedQty : 0,
         lots: openLots,
         realizedPnl: realizedByAsset.get(sym) || 0,
         txCount: txCountByAsset.get(sym) || 0,

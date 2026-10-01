@@ -134,6 +134,14 @@ export const CryptoProvider = forwardRef<HTMLDivElement, { children: React.React
         fetchUserPreferences().catch(() => ({} as Record<string, string>)),
       ]);
 
+      // Trigger backend lot recalculation to ensure consistency across devices
+      // This ensures that lot remaining quantities are up-to-date and synced
+      import("@/lib/api").then(api => {
+        api.recalculateAllLots().catch(err => {
+          console.warn("[crypto-context] Background lot recalculation failed:", err);
+        });
+      });
+
       const assetById = new Map(assets.map((a) => [a.id, a]));
       const canonicalTxs = mapTransactions(transactions, assetById);
 
