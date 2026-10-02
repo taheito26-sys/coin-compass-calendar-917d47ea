@@ -6,6 +6,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useLivePrices } from "@/hooks/useLivePrices";
 import { useCrypto } from "@/lib/cryptoContext";
+import { useWatchlist } from "@/hooks/useWatchlist";
 
 type CmdType = "action" | "page" | "position" | "coin";
 
@@ -16,6 +17,7 @@ interface CmdItem {
   sub: string;
   icon?: string;
   action?: () => void;
+  sym?: string;
 }
 
 const PAGES: CmdItem[] = [
@@ -34,6 +36,7 @@ export default function CommandPalette({ onNav }: { onNav: (page: string) => voi
   const [mode, setMode] = useState<"search" | "actions">("search");
   const { coins } = useLivePrices();
   const { state, setState } = useCrypto();
+  const { isWatched, toggleWatch } = useWatchlist();
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -100,7 +103,7 @@ export default function CommandPalette({ onNav }: { onNav: (page: string) => voi
     const txSyms = new Set(state.txs.map(t => t.asset.toUpperCase()));
     for (const sym of txSyms) {
       if (sym.toLowerCase().includes(q)) {
-        out.push({ type: "position", id: sym, label: sym, sub: "Your position", icon: "📌" });
+        out.push({ type: "position", id: sym, label: sym, sub: "Your position", icon: "📌", sym });
       }
     }
 
@@ -115,6 +118,7 @@ export default function CommandPalette({ onNav }: { onNav: (page: string) => voi
           label: `${c.symbol.toUpperCase()} · ${c.name}`,
           sub: `$${c.current_price?.toLocaleString()} · #${c.market_cap_rank}`,
           icon: "🪙",
+          sym: c.symbol.toUpperCase(),
         });
       }
     }
@@ -217,6 +221,20 @@ export default function CommandPalette({ onNav }: { onNav: (page: string) => voi
               }}>
                 {typeLabel(r.type)}
               </span>
+              {r.sym && (
+                <button
+                  type="button"
+                  title={isWatched(r.sym) ? "Remove from watchlist" : "Add to watchlist"}
+                  onClick={e => { e.stopPropagation(); toggleWatch(r.sym!); }}
+                  style={{
+                    background: "transparent", border: "none", cursor: "pointer",
+                    fontSize: 15, flexShrink: 0, lineHeight: 1, padding: 2,
+                    color: isWatched(r.sym) ? "var(--warn, #eab308)" : "var(--muted2)",
+                  }}
+                >
+                  {isWatched(r.sym) ? "★" : "☆"}
+                </button>
+              )}
             </div>
           ))}
         </div>
