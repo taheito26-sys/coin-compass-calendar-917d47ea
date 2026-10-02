@@ -185,9 +185,9 @@ export default function CommandPalette({ onNav }: { onNav: (page: string) => voi
           position: "absolute", top: "100%", left: 0, right: 0,
           background: "var(--panel)", border: "1px solid var(--line)",
           borderRadius: "var(--lt-radius-sm, 8px)", zIndex: 999,
-          maxHeight: 420, overflowY: "auto",
+          maxHeight: 420, overflowY: "auto", overflowX: "hidden",
           boxShadow: "0 12px 40px rgba(0,0,0,.3)",
-          marginTop: 4, minWidth: 320,
+          marginTop: 4, width: "max(320px, 100%)", maxWidth: "calc(100vw - 16px)",
         }}>
           {/* Hint */}
           <div style={{
