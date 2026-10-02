@@ -5,6 +5,7 @@ import HeatmapGrid from "@/components/markets/HeatmapGrid";
 import MarketMovers from "@/components/markets/MarketMovers";
 import MarketOverview from "@/components/markets/MarketOverview";
 import MarketCategories from "@/components/markets/MarketCategories";
+import WatchlistView from "@/components/markets/WatchlistView";
 
 const TIME_RANGES = [
   { key: "1h", label: "1 H" },
@@ -14,9 +15,10 @@ const TIME_RANGES = [
 
 const COIN_COUNTS = [50, 100, 200];
 
-type ViewMode = "heatmap" | "movers" | "overview" | "categories";
+type ViewMode = "heatmap" | "movers" | "overview" | "categories" | "watchlist";
 
 const VIEWS: { key: ViewMode; icon: string; label: string }[] = [
+  { key: "watchlist", icon: "⭐", label: "Watchlist" },
   { key: "heatmap", icon: "▦", label: "Heatmap" },
   { key: "movers", icon: "⇅", label: "Movers" },
   { key: "overview", icon: "◫", label: "Overview" },
@@ -32,7 +34,7 @@ function formatCompact(n: number): string {
 
 export default function MarketsPage() {
   const { state } = useCrypto();
-  const { coins: allCoins, loading } = useLivePrices();
+  const { coins: allCoins, loading, getPrice } = useLivePrices();
   const [view, setView] = useState<ViewMode>("heatmap");
   const [timeRange, setTimeRange] = useState("24h");
   const [coinCount, setCoinCount] = useState(100);
@@ -131,7 +133,7 @@ export default function MarketsPage() {
               </button>
             ))}
           </div>
-          {view !== "categories" && (
+          {view !== "categories" && view !== "watchlist" && (
             <div className="seg">
               {COIN_COUNTS.map(n => (
                 <button
@@ -167,6 +169,9 @@ export default function MarketsPage() {
       )}
       {!loading && view === "categories" && (
         <MarketCategories coins={allCoins} timeRange={timeRange} />
+      )}
+      {!loading && view === "watchlist" && (
+        <WatchlistView coins={allCoins} getPrice={getPrice} timeRange={timeRange} />
       )}
     </div>
   );
