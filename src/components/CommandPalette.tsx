@@ -6,6 +6,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useLivePrices } from "@/hooks/useLivePrices";
 import { useCrypto } from "@/lib/cryptoContext";
+import { useWatchlist } from "@/hooks/useWatchlist";
 
 type CmdType = "action" | "page" | "position" | "coin";
 
@@ -16,6 +17,7 @@ interface CmdItem {
   sub: string;
   icon?: string;
   action?: () => void;
+  sym?: string;
 }
 
 const PAGES: CmdItem[] = [
@@ -35,6 +37,7 @@ export default function CommandPalette({ onNav }: { onNav: (page: string) => voi
   const [syncing, setSyncing] = useState(false);
   const { coins } = useLivePrices();
   const { state, setState, rehydrateFromBackend } = useCrypto();
+  const { isWatched, toggleWatch } = useWatchlist();
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -106,7 +109,7 @@ export default function CommandPalette({ onNav }: { onNav: (page: string) => voi
     const txSyms = new Set(state.txs.map(t => t.asset.toUpperCase()));
     for (const sym of txSyms) {
       if (sym.toLowerCase().includes(q)) {
-        out.push({ type: "position", id: sym, label: sym, sub: "Your position", icon: "📌" });
+        out.push({ type: "position", id: sym, label: sym, sub: "Your position", icon: "📌", sym });
       }
     }
 
@@ -121,6 +124,7 @@ export default function CommandPalette({ onNav }: { onNav: (page: string) => voi
           label: `${c.symbol.toUpperCase()} · ${c.name}`,
           sub: `$${c.current_price?.toLocaleString()} · #${c.market_cap_rank}`,
           icon: "🪙",
+          sym: c.symbol.toUpperCase(),
         });
       }
     }
@@ -181,9 +185,9 @@ export default function CommandPalette({ onNav }: { onNav: (page: string) => voi
           position: "absolute", top: "100%", left: 0, right: 0,
           background: "var(--panel)", border: "1px solid var(--line)",
           borderRadius: "var(--lt-radius-sm, 8px)", zIndex: 999,
-          maxHeight: 420, overflowY: "auto",
+          maxHeight: 420, overflowY: "auto", overflowX: "hidden",
           boxShadow: "0 12px 40px rgba(0,0,0,.3)",
-          marginTop: 4, minWidth: 320,
+          marginTop: 4, width: "max(320px, 100%)", maxWidth: "calc(100vw - 16px)",
         }}>
           {/* Hint */}
           <div style={{
@@ -223,6 +227,20 @@ export default function CommandPalette({ onNav }: { onNav: (page: string) => voi
               }}>
                 {typeLabel(r.type)}
               </span>
+              {r.sym && (
+                <button
+                  type="button"
+                  title={isWatched(r.sym) ? "Remove from watchlist" : "Add to watchlist"}
+                  onClick={e => { e.stopPropagation(); toggleWatch(r.sym!); }}
+                  style={{
+                    background: "transparent", border: "none", cursor: "pointer",
+                    fontSize: 15, flexShrink: 0, lineHeight: 1, padding: 2,
+                    color: isWatched(r.sym) ? "var(--warn, #eab308)" : "var(--muted2)",
+                  }}
+                >
+                  {isWatched(r.sym) ? "★" : "☆"}
+                </button>
+              )}
             </div>
           ))}
         </div>
