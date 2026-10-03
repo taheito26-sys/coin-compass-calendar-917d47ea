@@ -5,6 +5,7 @@ import { fmtFiat, fmtQty, fmtPx, fmtTotal } from "@/lib/cryptoState";
 import { useLivePrices } from "@/hooks/useLivePrices";
 import { useUnifiedPortfolio } from "@/hooks/useUnifiedPortfolio";
 import { useMemo, useState, useEffect } from "react";
+import ghofranePhoto from "@/assets/ghofrane.png";
 import MarketSentiment from "@/components/dashboard/MarketSentiment";
 import PerAssetRiskBreakdown from "@/components/dashboard/PerAssetRiskBreakdown";
 import BenchmarkChart from "@/components/dashboard/BenchmarkChart";
@@ -155,12 +156,24 @@ function HeatmapBlock({ sym, value, pct, pnl, color, livePrice }: { sym: string;
 
 const DANCE_COLORS = ["#f97316", "#ec4899", "#8b5cf6", "#3b82f6", "#22c55e", "#eab308", "#ef4444", "#06b6d4"];
 
-function DancingLove({ text }: { text: string }) {
+function DancingLove({ text, photoSrc }: { text: string; photoSrc?: string }) {
   return (
-    <div style={{
-      display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center",
-      gap: 2, padding: "24px 12px", minHeight: 90,
-    }}>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "20px 12px" }}>
+      {photoSrc && (
+        <img
+          src={photoSrc}
+          alt={text}
+          style={{
+            width: 72, height: 72, borderRadius: "50%", objectFit: "cover",
+            border: "3px solid #ec4899", boxShadow: "0 4px 16px rgba(236,72,153,.4)",
+            animation: "ghofrane-dance 1.1s ease-in-out infinite",
+          }}
+        />
+      )}
+      <div style={{
+        display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center",
+        gap: 2, minHeight: 40,
+      }}>
       <span style={{ fontSize: 22, display: "inline-block", animation: "ghofrane-dance 1.1s ease-in-out infinite", animationDelay: "0ms" }}>💖</span>
       {text.split("").map((ch, i) => (
         <span
@@ -177,11 +190,12 @@ function DancingLove({ text }: { text: string }) {
         </span>
       ))}
       <span style={{ fontSize: 22, display: "inline-block", animation: "ghofrane-dance 1.1s ease-in-out infinite", animationDelay: `${text.length * 90}ms` }}>💖</span>
+      </div>
     </div>
   );
 }
 
-function DragHandle({ editing, onDragStart, onDragEnd }: { 
+function DragHandle({ editing, onDragStart, onDragEnd }: {
   editing: boolean; 
   onDragStart?: () => void;
   onDragEnd?: () => void;
@@ -394,7 +408,7 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
           <div className="panel">
             <div className="panel-head"><DragHandle editing={editing} /><h2>💖 Ghofrane</h2></div>
             <div className="panel-body">
-              <DancingLove text="Ghofrane" />
+              <DancingLove text="Ghofrane" photoSrc={ghofranePhoto} />
             </div>
           </div>
         );
