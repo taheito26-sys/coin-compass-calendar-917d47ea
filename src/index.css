@@ -1216,13 +1216,6 @@ table { table-layout: auto; }
 
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
 
-@keyframes ghofrane-dance {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  25% { transform: translateY(-10px) rotate(-8deg); }
-  50% { transform: translateY(0) rotate(0deg); }
-  75% { transform: translateY(-6px) rotate(8deg); }
-}
-
 /* â”€â”€ IMPORT PAGE â”€â”€ */
 .import-drop {
   border: 2px dashed var(--line);
