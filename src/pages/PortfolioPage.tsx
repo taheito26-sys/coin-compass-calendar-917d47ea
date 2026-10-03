@@ -1,6 +1,7 @@
 import { useCrypto } from "@/lib/cryptoContext";
 import { fmtFiat, fmtQty, fmtPx, fmtTotal } from "@/lib/cryptoState";
 import { useLivePrices } from "@/hooks/useLivePrices";
+import { refreshMarketData } from "@/lib/marketData";
 import { useSparklineData } from "@/hooks/useSparklineData";
 import { useIsMobile } from "@/hooks/use-mobile";
 import AssetDrilldown from "@/components/AssetDrilldown";
@@ -331,7 +332,7 @@ function SellDialog({ pos, base, onClose }: { pos: DisplayRow; base: string; onC
 // ── Main ───────────────────────────────────────────────────────────────────
 
 export default function PortfolioPage() {
-  const { state } = useCrypto();
+  const { state, refresh: refreshPrices } = useCrypto();
   const portfolio = useUnifiedPortfolio();
   const { getPrice } = useLivePrices();
   const isMobile = useIsMobile();
@@ -399,7 +400,7 @@ export default function PortfolioPage() {
     });
   };
 
-  const handleRefresh = () => window.location.reload();
+  const handleRefresh = () => { void refreshMarketData(true); void refreshPrices(true); };
 
   const isLotView = viewMode === "lot";
 
