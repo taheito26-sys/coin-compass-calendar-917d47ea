@@ -31,12 +31,39 @@ let _cache: MarketCoin[] = [];
 let _ts = 0;
 let _fetching = false;
 let _listeners = new Set<() => void>();
+let _pollTimer: ReturnType<typeof setInterval> | null = null;
 
 const STALE_MS = 300_000; // 5 minutes
+const POLL_MS = 45_000; // keep market list live without manual refresh
 
 export function getMarketCache() { return _cache; }
-export function addMarketListener(cb: () => void) { _listeners.add(cb); }
-export function removeMarketListener(cb: () => void) { _listeners.delete(cb); }
+export function getMarketTs() { return _ts; }
+
+export function addMarketListener(cb: () => void) {
+  _listeners.add(cb);
+  if (!_pollTimer) {
+    _pollTimer = setInterval(() => { void refreshMarketData(); }, POLL_MS);
+  }
+}
+
+export function removeMarketListener(cb: () => void) {
+  _listeners.delete(cb);
+  if (_listeners.size === 0 && _pollTimer) {
+    clearInterval(_pollTimer);
+    _pollTimer = null;
+  }
+}
+
+// Mobile browsers throttle/suspend timers while the tab/app is backgrounded.
+// Pull fresh data the instant the app comes back to the foreground instead
+// of waiting for the next poll tick.
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && _listeners.size > 0) {
+      void refreshMarketData(true);
+    }
+  });
+}
 
 function notify() { _listeners.forEach(cb => cb()); }
 
