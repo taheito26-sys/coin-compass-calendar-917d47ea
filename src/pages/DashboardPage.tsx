@@ -5,7 +5,6 @@ import { fmtFiat, fmtQty, fmtPx, fmtTotal } from "@/lib/cryptoState";
 import { useLivePrices } from "@/hooks/useLivePrices";
 import { useUnifiedPortfolio } from "@/hooks/useUnifiedPortfolio";
 import { useMemo, useState, useEffect } from "react";
-import ghofranePhoto from "@/assets/ghofrane.png";
 import MarketSentiment from "@/components/dashboard/MarketSentiment";
 import PerAssetRiskBreakdown from "@/components/dashboard/PerAssetRiskBreakdown";
 import BenchmarkChart from "@/components/dashboard/BenchmarkChart";
@@ -54,7 +53,6 @@ const ALL_CARDS: CardDef[] = [
   { id: "survivability", label: "Survivability Score" },
   { id: "sentimentTrends", label: "Sentiment Trends" },
   { id: "rebalanceSummary", label: "Rebalance Status" },
-  { id: "ghofraneLove", label: "💖 Ghofrane" },
 ];
 
 interface DonutSlice {
@@ -150,47 +148,6 @@ function HeatmapBlock({ sym, value, pct, pnl, color, livePrice }: { sym: string;
       {livePrice && <div style={{ fontSize: 8, fontWeight: 600, color: "rgba(255,255,255,.85)" }}>{livePrice}</div>}
       <div style={{ fontSize: 8, color: "rgba(255,255,255,.9)", fontWeight: 700 }}>{pnl}</div>
       <div style={{ fontSize: 8, color: "rgba(255,255,255,.65)" }}>{pct}</div>
-    </div>
-  );
-}
-
-const DANCE_COLORS = ["#f97316", "#ec4899", "#8b5cf6", "#3b82f6", "#22c55e", "#eab308", "#ef4444", "#06b6d4"];
-
-function DancingLove({ text, photoSrc }: { text: string; photoSrc?: string }) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "20px 12px" }}>
-      {photoSrc && (
-        <img
-          src={photoSrc}
-          alt={text}
-          style={{
-            width: 72, height: 72, borderRadius: "50%", objectFit: "cover",
-            border: "3px solid #ec4899", boxShadow: "0 4px 16px rgba(236,72,153,.4)",
-            animation: "ghofrane-dance 1.1s ease-in-out infinite",
-          }}
-        />
-      )}
-      <div style={{
-        display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center",
-        gap: 2, minHeight: 40,
-      }}>
-      <span style={{ fontSize: 22, display: "inline-block", animation: "ghofrane-dance 1.1s ease-in-out infinite", animationDelay: "0ms" }}>💖</span>
-      {text.split("").map((ch, i) => (
-        <span
-          key={i}
-          style={{
-            fontSize: 28, fontWeight: 900, display: "inline-block",
-            color: DANCE_COLORS[i % DANCE_COLORS.length],
-            animation: "ghofrane-dance 1.1s ease-in-out infinite",
-            animationDelay: `${i * 90}ms`,
-            textShadow: "0 2px 6px rgba(0,0,0,.25)",
-          }}
-        >
-          {ch === " " ? " " : ch}
-        </span>
-      ))}
-      <span style={{ fontSize: 22, display: "inline-block", animation: "ghofrane-dance 1.1s ease-in-out infinite", animationDelay: `${text.length * 90}ms` }}>💖</span>
-      </div>
     </div>
   );
 }
@@ -399,16 +356,6 @@ export default function DashboardPage({ onNav }: { onNav?: (p: string) => void }
               <div className="kpi-lbl">TOTAL P&amp;L</div>
               <div className={`kpi-val ${totalPnlCombined >= 0 ? "good" : "bad"}`}>{(totalPnlCombined >= 0 ? "+" : "") + fmtTotal(totalPnlCombined)}</div>
               <div className="kpi-sub">Realized + Unrealized</div>
-            </div>
-          </div>
-        );
-
-      case "ghofraneLove":
-        return (
-          <div className="panel">
-            <div className="panel-head"><DragHandle editing={editing} /><h2>💖 Ghofrane</h2></div>
-            <div className="panel-body">
-              <DancingLove text="Ghofrane" photoSrc={ghofranePhoto} />
             </div>
           </div>
         );
