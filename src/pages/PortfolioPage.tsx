@@ -625,8 +625,8 @@ export default function PortfolioPage() {
         </div>
 
         {historyView === "closed" ? (
-          <div className="tableWrap">
-            <table>
+          <div className="tableWrap cardTableWrap">
+            <table className="cardTable">
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--line)" }}>
                   <th style={{ color: "var(--brand)", fontSize: 10, fontWeight: 900, textTransform: "uppercase" }}>Asset</th>
@@ -644,16 +644,16 @@ export default function PortfolioPage() {
                   const ret = cp.totalCost > 0 ? ((cp.totalProceeds - cp.totalCost) / cp.totalCost) * 100 : 0;
                   return (
                     <tr key={cp.sym}>
-                      <td><span className="mono" style={{ fontWeight: 900 }}>{cp.sym}</span></td>
-                      <td className="mono">{fmtQty(cp.totalBought)}</td>
-                      <td className="mono">${fmtPx(cp.avgBuy)}</td>
-                      <td className="mono">${fmtPx(cp.avgSell)}</td>
-                      <td className="mono">${fmtFiat(cp.totalCost)}</td>
-                      <td className="mono">${fmtFiat(cp.totalProceeds)}</td>
-                      <td className={`mono ${cp.realizedPnl >= 0 ? "good" : "bad"}`} style={{ fontWeight: 800 }}>
+                      <td data-label="Asset"><span className="mono" style={{ fontWeight: 900 }}>{cp.sym}</span></td>
+                      <td data-label="Qty" className="mono">{fmtQty(cp.totalBought)}</td>
+                      <td data-label="Avg Buy" className="mono">${fmtPx(cp.avgBuy)}</td>
+                      <td data-label="Avg Sell" className="mono">${fmtPx(cp.avgSell)}</td>
+                      <td data-label="Cost" className="mono">${fmtFiat(cp.totalCost)}</td>
+                      <td data-label="Proceeds" className="mono">${fmtFiat(cp.totalProceeds)}</td>
+                      <td data-label="P&L" className={`mono ${cp.realizedPnl >= 0 ? "good" : "bad"}`} style={{ fontWeight: 800 }}>
                         {(cp.realizedPnl >= 0 ? "+" : "") + "$" + fmtFiat(Math.abs(cp.realizedPnl))}
                       </td>
-                      <td className={`mono ${ret >= 0 ? "good" : "bad"}`} style={{ fontSize: 11 }}>{ret >= 0 ? "▲" : "▼"}{Math.abs(ret).toFixed(1)}%</td>
+                      <td data-label="Return" className={`mono ${ret >= 0 ? "good" : "bad"}`} style={{ fontSize: 11 }}>{ret >= 0 ? "▲" : "▼"}{Math.abs(ret).toFixed(1)}%</td>
                     </tr>
                   );
                 })}
@@ -661,8 +661,8 @@ export default function PortfolioPage() {
             </table>
           </div>
         ) : (
-          <div className="tableWrap">
-            <table>
+          <div className="tableWrap cardTableWrap">
+            <table className="cardTable">
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--line)" }}>
                   <th style={{ color: "var(--brand)", fontSize: 10, fontWeight: 900, textTransform: "uppercase" }}>Date</th>
@@ -676,12 +676,12 @@ export default function PortfolioPage() {
               <tbody>
                 {sellEvents.map(ev => (
                   <tr key={ev.id}>
-                    <td className="mono muted" style={{ fontSize: 10 }}>{new Date(ev.ts).toLocaleDateString()}</td>
-                    <td><span className="mono" style={{ fontWeight: 900 }}>{ev.sym}</span></td>
-                    <td className="mono">{fmtQty(ev.qty)}</td>
-                    <td className="mono">${fmtPx(ev.price)}</td>
-                    <td className="mono">${fmtFiat(ev.proceeds)}</td>
-                    <td className={`mono ${ev.realizedPnl >= 0 ? "good" : "bad"}`} style={{ fontWeight: 800 }}>
+                    <td data-label="Date" className="mono muted" style={{ fontSize: 10 }}>{new Date(ev.ts).toLocaleDateString()}</td>
+                    <td data-label="Asset"><span className="mono" style={{ fontWeight: 900 }}>{ev.sym}</span></td>
+                    <td data-label="Qty" className="mono">{fmtQty(ev.qty)}</td>
+                    <td data-label="Price" className="mono">${fmtPx(ev.price)}</td>
+                    <td data-label="Proceeds" className="mono">${fmtFiat(ev.proceeds)}</td>
+                    <td data-label="Realized P&L" className={`mono ${ev.realizedPnl >= 0 ? "good" : "bad"}`} style={{ fontWeight: 800 }}>
                       {(ev.realizedPnl >= 0 ? "+" : "") + "$" + fmtFiat(Math.abs(ev.realizedPnl))}
                     </td>
                   </tr>
