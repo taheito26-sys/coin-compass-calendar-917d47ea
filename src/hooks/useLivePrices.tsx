@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from "react";
 import {
   getSpotPrices,
   subscribeLivePrices,
@@ -11,7 +11,42 @@ import { normalizeSymbol } from "@/lib/symbolAliases";
 
 export type LiveCoin = MarketCoin;
 
-export function useLivePrices() {
+interface LivePricesValue {
+  coins: LiveCoin[];
+  loading: boolean;
+  getPrice: (sym: string) => LiveCoin | null;
+  priceMap: null;
+  spotPrices: Record<string, SpotPrice>;
+  lastUpdated: number;
+  refresh: () => void;
+}
+
+const fallback: LivePricesValue = {
+  coins: [],
+  loading: true,
+  getPrice: () => null,
+  priceMap: null,
+  spotPrices: {},
+  lastUpdated: 0,
+  refresh: () => {},
+};
+
+const LivePricesCtx = createContext<LivePricesValue>(fallback);
+
+/**
+ * Single app-wide subscription to market data/spot prices/WebSocket ticks.
+ * Every page previously called the underlying hook body directly, which
+ * meant a dozen+ independent bootstrap fetches, polling timers, and
+ * WebSocket subscriptions running in parallel on the same page (e.g. every
+ * dashboard widget). Beyond the wasted requests, each instance's own React
+ * state updated on its own schedule, so different parts of the UI (notably
+ * portfolio totals, which go through a separate useLivePrices() call inside
+ * usePortfolioPriceGetter) could visibly lag behind each other — looking
+ * like the page "needs a refresh" even though fresher data already existed
+ * in another instance. Mounting the hook body once here and having
+ * useLivePrices() just read the shared context fixes both.
+ */
+export function LivePricesProvider({ children }: { children: ReactNode }) {
   const { state } = useCrypto();
 
   const [marketCoins, setMarketCoins] = useState<LiveCoin[]>(getMarketCache());
@@ -111,7 +146,7 @@ export function useLivePrices() {
 
   const getPrice = useCallback((sym: string): LiveCoin | null => {
     const key = sym.toUpperCase();
-    
+
     // Use the smart resolver to find the coin regardless of alias/name/symbol
     const resolved = resolveCoin(key);
     const binance = mergedPrices[key] || (resolved ? mergedPrices[resolved.symbol.toUpperCase()] : null);
@@ -144,7 +179,7 @@ export function useLivePrices() {
     return null;
   }, [mergedPrices, marketCoins]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return {
+  const value = useMemo<LivePricesValue>(() => ({
     coins: marketCoins,
     loading: marketLoading,
     getPrice,
@@ -152,5 +187,11 @@ export function useLivePrices() {
     spotPrices: mergedPrices,
     lastUpdated,
     refresh,
-  };
+  }), [marketCoins, marketLoading, getPrice, mergedPrices, lastUpdated, refresh]);
+
+  return <LivePricesCtx.Provider value={value}>{children}</LivePricesCtx.Provider>;
+}
+
+export function useLivePrices(): LivePricesValue {
+  return useContext(LivePricesCtx);
 }

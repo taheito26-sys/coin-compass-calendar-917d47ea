@@ -30,6 +30,7 @@ const SYMBOL_ID_OVERRIDES: Record<string, string> = {
 let _cache: MarketCoin[] = [];
 let _ts = 0;
 let _fetching = false;
+let _pendingForce = false;
 let _listeners = new Set<() => void>();
 let _pollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -142,7 +143,14 @@ async function fetchBinance() {
 }
 
 export async function refreshMarketData(force = false) {
-  if (_fetching) return;
+  if (_fetching) {
+    // A forced refresh (e.g. the app just came back to the foreground)
+    // must not be silently dropped just because a background poll happens
+    // to be in flight. Remember it and re-run once the current fetch
+    // settles, instead of leaving the cache stale until the next timer tick.
+    if (force) _pendingForce = true;
+    return;
+  }
   if (!force && Date.now() - _ts < STALE_MS && _cache.length > 0) return;
 
   _fetching = true;
@@ -180,5 +188,9 @@ export async function refreshMarketData(force = false) {
     }
   } finally {
     _fetching = false;
+    if (_pendingForce) {
+      _pendingForce = false;
+      void refreshMarketData(true);
+    }
   }
 }

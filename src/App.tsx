@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { AuthProvider, useAuth } from "@/lib/supabaseAuth";
 import { CryptoProvider, useCrypto } from "@/lib/cryptoContext";
+import { LivePricesProvider } from "@/hooks/useLivePrices";
 import AuthScreen from "@/components/AuthScreen";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
@@ -138,7 +139,9 @@ export default function App() {
   return (
     <AuthProvider>
       <CryptoProvider>
-        <AuthGate />
+        <LivePricesProvider>
+          <AuthGate />
+        </LivePricesProvider>
       </CryptoProvider>
     </AuthProvider>
   );
