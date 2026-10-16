@@ -1,16 +1,30 @@
 /**
- * AuthScreen — Google-only sign-in via Supabase Auth
+ * AuthScreen — Google OAuth sign-in, with an email/password fallback.
+ *
+ * The Google button depends on a successful redirect round-trip through
+ * Google's own consent screen, which can be unreliable in some mobile
+ * browser/webview setups (popup blocking, third-party cookie restrictions,
+ * in-app browsers). Email/password goes straight to Supabase with no
+ * third-party hop, so it's a reliable way in when Google isn't cooperating.
  */
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
+type Mode = "signin" | "signup";
+
 export default function AuthScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [showEmailForm, setShowEmailForm] = useState(false);
+  const [mode, setMode] = useState<Mode>("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   const handleGoogleSignIn = async () => {
     setLoading(true);
     setError(null);
+    setInfo(null);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
@@ -18,6 +32,26 @@ export default function AuthScreen() {
       },
     });
     if (error) setError(error.message);
+    setLoading(false);
+  };
+
+  const handleEmailSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    setInfo(null);
+    if (mode === "signin") {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) setError(error.message);
+    } else {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: window.location.origin },
+      });
+      if (error) setError(error.message);
+      else setInfo("Account created. Check your email to confirm, then sign in.");
+    }
     setLoading(false);
   };
 
@@ -108,6 +142,11 @@ export default function AuthScreen() {
               {error}
             </div>
           )}
+          {info && (
+            <div style={{ padding: 12, borderRadius: 8, background: "rgba(34,197,94,0.15)", color: "#4ade80", fontSize: 13, width: "100%" }}>
+              {info}
+            </div>
+          )}
 
           <button
             onClick={handleGoogleSignIn}
@@ -139,6 +178,86 @@ export default function AuthScreen() {
             </svg>
             {loading ? "Signing in..." : "Sign in with Google"}
           </button>
+
+          {!showEmailForm ? (
+            <button
+              onClick={() => { setShowEmailForm(true); setError(null); setInfo(null); }}
+              style={{
+                width: "100%",
+                padding: "10px 16px",
+                borderRadius: 12,
+                border: "1px solid rgba(255,255,255,0.12)",
+                background: "transparent",
+                color: "rgba(255,255,255,0.7)",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              Use email and password instead
+            </button>
+          ) : (
+            <form onSubmit={handleEmailSubmit} style={{ width: "100%", display: "flex", flexDirection: "column", gap: 12 }}>
+              <input
+                type="email"
+                required
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "12px 14px",
+                  borderRadius: 10,
+                  border: "1px solid rgba(255,255,255,0.15)",
+                  background: "rgba(255,255,255,0.05)",
+                  color: "#fff",
+                  fontSize: 14,
+                }}
+              />
+              <input
+                type="password"
+                required
+                minLength={6}
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "12px 14px",
+                  borderRadius: 10,
+                  border: "1px solid rgba(255,255,255,0.15)",
+                  background: "rgba(255,255,255,0.05)",
+                  color: "#fff",
+                  fontSize: 14,
+                }}
+              />
+              <button
+                type="submit"
+                disabled={loading}
+                style={{
+                  width: "100%",
+                  padding: "12px 16px",
+                  borderRadius: 10,
+                  border: "none",
+                  background: "var(--brand, #8D1B3D)",
+                  color: "#fff",
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: loading ? "wait" : "pointer",
+                  opacity: loading ? 0.7 : 1,
+                }}
+              >
+                {loading ? "Please wait..." : mode === "signin" ? "Sign in" : "Create account"}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setError(null); setInfo(null); }}
+                style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", fontSize: 12, cursor: "pointer", textDecoration: "underline" }}
+              >
+                {mode === "signin" ? "Need an account? Sign up" : "Already have an account? Sign in"}
+              </button>
+            </form>
+          )}
         </div>
       </div>
     </div>
