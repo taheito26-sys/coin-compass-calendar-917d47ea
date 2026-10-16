@@ -60,16 +60,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // state callback (e.g. a stuck cross-tab lock, a network request that
     // never resolves after the tab was backgrounded) which would otherwise
     // leave the app stuck on the "Authenticating..." spinner indefinitely.
-    // Give it a few seconds, then fall back to reading whatever is already
-    // in local storage so the UI never gets permanently stuck.
+    // Give it a few seconds, then unblock the UI unconditionally rather
+    // than issuing another getSession() call - that call would wait on the
+    // exact same stuck lock and could hang forever too. If the original
+    // call (or onAuthStateChange) does eventually resolve, `settle` still
+    // runs and updates the UI from this fallback state.
     const timeout = setTimeout(() => {
       if (settled) return;
-      console.warn("[AuthProvider] Auth check timed out, falling back to local session");
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (!settled) settle(session);
-      }).catch(() => {
-        if (!settled) settle(null);
-      });
+      console.warn("[AuthProvider] Auth check timed out, unblocking UI");
+      settle(null);
     }, 6000);
 
     return () => {
