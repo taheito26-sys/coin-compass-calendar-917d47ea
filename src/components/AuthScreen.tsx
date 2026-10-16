@@ -10,7 +10,7 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
-type Mode = "signin" | "signup";
+type Mode = "signin" | "signup" | "forgot";
 
 export default function AuthScreen() {
   const [loading, setLoading] = useState(false);
@@ -43,6 +43,12 @@ export default function AuthScreen() {
     if (mode === "signin") {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) setError(error.message);
+    } else if (mode === "forgot") {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin,
+      });
+      if (error) setError(error.message);
+      else setInfo("If an account exists for that email, a reset link was sent. This also works for an account that only ever used Google sign-in - it lets you set a password for it.");
     } else {
       const { error } = await supabase.auth.signUp({
         email,
@@ -50,7 +56,7 @@ export default function AuthScreen() {
         options: { emailRedirectTo: window.location.origin },
       });
       if (error) setError(error.message);
-      else setInfo("Account created. Check your email to confirm, then sign in.");
+      else setInfo("If this is a brand-new email, check it to confirm your account. If you already had a Google account with this email, this won't have set a password for it - use \"Forgot password\" instead to set one.");
     }
     setLoading(false);
   };
@@ -214,23 +220,25 @@ export default function AuthScreen() {
                   fontSize: 14,
                 }}
               />
-              <input
-                type="password"
-                required
-                minLength={6}
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "12px 14px",
-                  borderRadius: 10,
-                  border: "1px solid rgba(255,255,255,0.15)",
-                  background: "rgba(255,255,255,0.05)",
-                  color: "#fff",
-                  fontSize: 14,
-                }}
-              />
+              {mode !== "forgot" && (
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "12px 14px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(255,255,255,0.15)",
+                    background: "rgba(255,255,255,0.05)",
+                    color: "#fff",
+                    fontSize: 14,
+                  }}
+                />
+              )}
               <button
                 type="submit"
                 disabled={loading}
@@ -247,15 +255,34 @@ export default function AuthScreen() {
                   opacity: loading ? 0.7 : 1,
                 }}
               >
-                {loading ? "Please wait..." : mode === "signin" ? "Sign in" : "Create account"}
+                {loading ? "Please wait..." : mode === "signin" ? "Sign in" : mode === "forgot" ? "Send reset link" : "Create account"}
               </button>
-              <button
-                type="button"
-                onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setError(null); setInfo(null); }}
-                style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", fontSize: 12, cursor: "pointer", textDecoration: "underline" }}
-              >
-                {mode === "signin" ? "Need an account? Sign up" : "Already have an account? Sign in"}
-              </button>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                <button
+                  type="button"
+                  onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setError(null); setInfo(null); }}
+                  style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", fontSize: 12, cursor: "pointer", textDecoration: "underline" }}
+                >
+                  {mode === "signup" ? "Already have an account? Sign in" : "Need an account? Sign up"}
+                </button>
+                {mode !== "forgot" ? (
+                  <button
+                    type="button"
+                    onClick={() => { setMode("forgot"); setError(null); setInfo(null); }}
+                    style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", fontSize: 12, cursor: "pointer", textDecoration: "underline" }}
+                  >
+                    Forgot password?
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { setMode("signin"); setError(null); setInfo(null); }}
+                    style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", fontSize: 12, cursor: "pointer", textDecoration: "underline" }}
+                  >
+                    Back to sign in
+                  </button>
+                )}
+              </div>
             </form>
           )}
         </div>

@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from "@/lib/supabaseAuth";
 import { CryptoProvider, useCrypto } from "@/lib/cryptoContext";
 import { LivePricesProvider } from "@/hooks/useLivePrices";
 import AuthScreen from "@/components/AuthScreen";
+import SetPasswordScreen from "@/components/SetPasswordScreen";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import DashboardPage from "@/pages/DashboardPage";
@@ -123,6 +124,7 @@ function AuthGate() {
   console.log("[AuthGate] Render", auth);
   if (!auth?.isLoaded) return <LoadingScreen />;
   if (!auth?.isSignedIn) return <AuthScreen />;
+  if (auth.isPasswordRecovery) return <SetPasswordScreen />;
 
   const gate = evaluateInstallGate({
     deviceKind: detectDeviceKind(navigator.userAgent),

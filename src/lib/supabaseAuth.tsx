@@ -14,6 +14,12 @@ interface AuthCtx {
   userId: string | null;
   userEmail: string | null;
   signOut: () => Promise<void>;
+  /** True after the user opens a "reset your password" email link. The
+   *  session is real at that point, but they haven't set a password yet -
+   *  the app should show a "set new password" screen instead of the
+   *  normal dashboard until they do. */
+  isPasswordRecovery: boolean;
+  clearPasswordRecovery: () => void;
 }
 
 const AuthContext = createContext<AuthCtx>({
@@ -24,6 +30,8 @@ const AuthContext = createContext<AuthCtx>({
   userId: null,
   userEmail: null,
   signOut: async () => {},
+  isPasswordRecovery: false,
+  clearPasswordRecovery: () => {},
 });
 
 export function useAuth() {
@@ -34,6 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
   useEffect(() => {
     let settled = false;
@@ -46,7 +55,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Set up auth listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (event, session) => {
+        if (event === "PASSWORD_RECOVERY") setIsPasswordRecovery(true);
         settle(session);
       }
     );
@@ -97,6 +107,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
   }, []);
 
+  const clearPasswordRecovery = useCallback(() => setIsPasswordRecovery(false), []);
+
   const value: AuthCtx = {
     user,
     session,
@@ -105,6 +117,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     userId: user?.id ?? null,
     userEmail: user?.email ?? null,
     signOut,
+    isPasswordRecovery,
+    clearPasswordRecovery,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
