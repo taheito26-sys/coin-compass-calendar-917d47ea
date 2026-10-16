@@ -66,7 +66,13 @@ function reloadOnServiceWorkerSwap() {
   navigator.serviceWorker.addEventListener("controllerchange", () => {
     if (reloaded) return;
     const lastReloadAt = Number(sessionStorage.getItem(SW_RELOAD_GUARD_KEY) || 0);
-    if (Date.now() - lastReloadAt < SW_RELOAD_DEBOUNCE_MS) return;
+    const elapsed = Date.now() - lastReloadAt;
+    // A negative elapsed value (device clock corrected backward after the
+    // last reload) must never be treated as "still within the debounce
+    // window" - that would suppress every future reload until the wall
+    // clock catches back up, possibly for hours, which is the exact stale-JS
+    // failure mode this debounce exists to prevent.
+    if (elapsed >= 0 && elapsed < SW_RELOAD_DEBOUNCE_MS) return;
     const isOAuthCallback = /[?#].*(code=|access_token=)/.test(window.location.href);
     if (isOAuthCallback) return;
     reloaded = true;
